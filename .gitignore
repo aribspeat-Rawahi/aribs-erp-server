@@ -1,0 +1,26 @@
+# Dependencies and build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Secrets - NEVER commit. Production values live only in Hostinger's
+# Environment Variables panel.
+.env
+.env.local
+.env.*.local
+*.keystore
+*.jks
+CREDENTIALS*.txt
+
+# Runtime data (uploads, invoice PDFs, backups) - lives in DATA_DIR on the
+# server, never in Git.
+uploads/
+backup-*/
+*.sql
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/

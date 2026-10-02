@@ -1,0 +1,16 @@
+{
+  "name": "aribs-erp-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ARIBS ERP - NestJS backend + React frontend, deployed together as one Node.js app (backend serves the built frontend).",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "cd frontend && npm ci --include=dev && npm run build",
+    "build:backend": "cd backend && npm ci --include=dev && npm run build && npm prune --omit=dev",
+    "check": "cd backend && npx tsc --noEmit -p tsconfig.json && cd ../frontend && npx tsc -b",
+    "start": "node backend/dist/main.js"
+  }
+}

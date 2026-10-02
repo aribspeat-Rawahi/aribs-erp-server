@@ -1,0 +1,37 @@
+# Safety net for every push: if the code doesn't type-check or build, this
+# fails with a red X on GitHub - BEFORE you promote it to production.
+# (Hostinger deploys on its own from the connected branch; this workflow
+# only checks, it never deploys anything.)
+name: Build check
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Make sure no secret files were committed
+        run: |
+          found=$(git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.local$|\.keystore$|\.jks$|CREDENTIALS.*\.txt$|\.sql$' || true)
+          if [ -n "$found" ]; then
+            echo "::error::Secret/data files must never be committed:"
+            echo "$found"
+            exit 1
+          fi
+
+      - name: Build frontend + backend (same command Hostinger runs)
+        run: npm run build
+
+      - name: Confirm build output exists
+        run: |
+          test -f frontend/dist/index.html
+          test -f backend/dist/main.js
