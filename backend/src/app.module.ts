@@ -1,0 +1,94 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { InventoryModule } from './inventory/inventory.module';
+import { ManufacturingModule } from './manufacturing/manufacturing.module';
+import { SupplierModule } from './supplier/supplier.module';
+import { CustomerModule } from './customer/customer.module';
+import { SalesModule } from './sales/sales.module';
+import { InvoiceModule } from './invoice/invoice.module';
+import { QuotationModule } from './quotation/quotation.module';
+import { AuthModule } from './auth/auth.module';
+import { SettingsModule } from './settings/settings.module';
+import { ActivityLogModule } from './activity-log/activity-log.module';
+import { HrModule } from './hr/hr.module';
+import { AccountingModule } from './accounting/accounting.module';
+import { ReportingModule } from './reporting/reporting.module';
+import { DeliveryNoteModule } from './delivery-note/delivery-note.module';
+import { BankAccountModule } from './bank-account/bank-account.module';
+import { ApprovalModule } from './approval/approval.module';
+import { RecurringInvoiceModule } from './recurring-invoice/recurring-invoice.module';
+import { ReimbursementModule } from './reimbursement/reimbursement.module';
+import { JournalModule } from './journal/journal.module';
+import { TaxModule } from './tax/tax.module';
+import { FixedAssetModule } from './fixed-asset/fixed-asset.module';
+import { AccrualModule } from './accrual/accrual.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { PaymentModule } from './payment/payment.module';
+import { BackupModule } from './backup/backup.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    // Basic rate limiting — 10 requests per 60s per IP by default.
+    // Registered here so ThrottlerGuard is available to inject; applied
+    // per-route with @UseGuards(ThrottlerGuard) on AuthController's
+    // login/register (see auth.controller.ts).
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 10 }]),
+    // Powers PaymentReminderService's daily @Cron job (Step 5 — Payment
+    // Reminder Automation). No config needed here; each job declares its
+    // own schedule.
+    ScheduleModule.forRoot(),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'mysql',
+        host: config.get('DB_HOST'),
+        port: parseInt(config.get('DB_PORT') || '3306', 10),
+        username: config.get('DB_USERNAME'),
+        password: config.get('DB_PASSWORD'),
+        database: config.get('DB_DATABASE'),
+        autoLoadEntities: true,
+        // NOTE: synchronize:true auto-creates/updates tables from entities —
+        // great while building, but should be turned OFF once the production
+        // schema is confirmed fully up to date (this project has no migration
+        // system, so several recently-added tables such as approval_requests,
+        // recurring_invoices, customer_interactions and
+        // supplier_interactions may not exist yet in a real deploy — leave
+        // this on until you've verified the production DB has them). Once
+        // confirmed, set DB_SYNCHRONIZE=false in .env to stop schema
+        // auto-sync in production.
+        synchronize: (config.get('DB_SYNCHRONIZE') ?? 'true') !== 'false',
+      }),
+    }),
+    InventoryModule,
+    ManufacturingModule,
+    SupplierModule,
+    CustomerModule,
+    SalesModule,
+    InvoiceModule,
+    QuotationModule,
+    AuthModule,
+    SettingsModule,
+    ActivityLogModule,
+    HrModule,
+    AccountingModule,
+    ReportingModule,
+    DeliveryNoteModule,
+    BankAccountModule,
+    ApprovalModule,
+    RecurringInvoiceModule,
+    ReimbursementModule,
+    JournalModule,
+    TaxModule,
+    FixedAssetModule,
+    AccrualModule,
+    AnalyticsModule,
+    PaymentModule,
+    BackupModule,
+  ],
+})
+export class AppModule {}

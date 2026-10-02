@@ -1,0 +1,1438 @@
+import { ReactNode, useEffect, useState } from 'react';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
+import { ArrowLeft, Printer, Landmark, Receipt, Users, Tags } from 'lucide-react';
+import api from '../api/client';
+import { PageHeader, Card, EmptyState, inputClass } from '../components/ui';
+
+function monthRange() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return { startDate: iso(start), endDate: iso(end) };
+}
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+const REPORT_TITLES: Record<string, string> = {
+  'trial-balance': 'Trial Balance',
+  'ledger-report': 'Ledger Report',
+  'income-statement': 'Income Statement',
+  'sales-tax': 'Sales Tax',
+  'balance-sheet': 'Balance Sheet',
+  'purchase-vat': 'Purchase VAT',
+  'purchase-return': 'Purchase Return',
+  'sales-return': 'Sales Return',
+  'product-sales': 'Product Sales',
+  'product-purchase': 'Product Purchase',
+  'inventory-report': 'Inventory Report',
+  'reimbursements': 'Reimbursements',
+};
+
+const BUILT_REPORTS = new Set([
+  'trial-balance',
+  'income-statement',
+  'balance-sheet',
+  'sales-tax',
+  'purchase-vat',
+  'reimbursements',
+  'ledger-report',
+  'purchase-return',
+  'sales-return',
+  'product-sales',
+  'product-purchase',
+  'inventory-report',
+]);
+
+// One route (/accounting/reports/:reportKey) handles every Reports Hub
+// card — the reportKey decides which section below renders.
+export default function ReportDetail() {
+  const { reportKey = '' } = useParams();
+  const title = REPORT_TITLES[reportKey] || 'Report';
+
+  return (
+    <div>
+      <PageHeader
+        title={title}
+        subtitle="Accounting Reports"
+        action={
+          <div className="print:hidden flex items-center gap-2">
+            <Link
+              to="/accounting?tab=reports"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-ink/70 hover:text-ink border border-black/10 rounded-lg px-3 py-1.5"
+            >
+              <ArrowLeft size={15} />
+              Back to Report
+            </Link>
+            <Link
+              to="/accounting"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-ink/70 hover:text-ink border border-black/10 rounded-lg px-3 py-1.5"
+            >
+              <ArrowLeft size={15} />
+              Back to Accounting
+            </Link>
+          </div>
+        }
+      />
+      {reportKey === 'trial-balance' && <TrialBalanceReport />}
+      {reportKey === 'income-statement' && <IncomeStatementReport />}
+      {reportKey === 'balance-sheet' && <BalanceSheetReport />}
+      {reportKey === 'sales-tax' && <SalesTaxHub />}
+      {reportKey === 'purchase-vat' && <PurchaseVatReport />}
+      {reportKey === 'reimbursements' && <ReimbursementsReport />}
+      {reportKey === 'ledger-report' && <LedgerReport />}
+      {reportKey === 'purchase-return' && <PurchaseReturnReport />}
+      {reportKey === 'sales-return' && <SalesReturnReport />}
+      {reportKey === 'product-sales' && <ProductSalesReport />}
+      {reportKey === 'product-purchase' && <ProductPurchaseReport />}
+      {reportKey === 'inventory-report' && <InventoryReport />}
+      {!BUILT_REPORTS.has(reportKey) && (
+        <EmptyState>This report is coming soon.</EmptyState>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Shared building blocks — every report below is built from these three
+// pieces so the whole Reports Hub reads as one consistent accounting
+// system: a toolbar (filters + Print), a formal Account/Amount table
+// with a "No items found" empty row and a bold Total row, and a Print
+// button that triggers the browser's real print dialog (print:hidden
+// hides the toolbar/nav/buttons so only the report table is printed).
+// ---------------------------------------------------------------------
+
+function PrintButton() {
+  return (
+    <button
+      onClick={() => window.print()}
+      className="print:hidden inline-flex items-center gap-1.5 text-sm font-medium text-ink/70 hover:text-ink border border-black/10 rounded-lg px-3 py-1.5"
+    >
+      <Printer size={15} />
+      Print
+    </button>
+  );
+}
+
+interface Column {
+  label: string;
+  align?: 'left' | 'right';
+}
+
+function ReportTable({
+  columns,
+  isEmpty,
+  emptyMessage,
+  footer,
+  children,
+}: {
+  columns: Column[];
+  isEmpty: boolean;
+  emptyMessage?: string;
+  footer?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs text-muted border-b border-black/10 bg-black/[0.02]">
+            {columns.map((c, i) => (
+              <th
+                key={i}
+                className={`py-2 ${i === 0 ? 'pl-3' : ''} px-3 font-medium ${c.align === 'right' ? 'text-right' : 'text-left'}`}
+              >
+                {c.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-black/5">
+          {isEmpty ? (
+            <tr>
+              <td colSpan={columns.length} className="py-6 text-center text-muted">
+                {emptyMessage || 'No items found.'}
+              </td>
+            </tr>
+          ) : (
+            children
+          )}
+        </tbody>
+        {footer && !isEmpty && <tfoot>{footer}</tfoot>}
+      </table>
+    </div>
+  );
+}
+
+function SectionTitle({ children }: { children: ReactNode }) {
+  return <div className="text-xs font-semibold uppercase tracking-wide text-muted px-1 mb-1.5">{children}</div>;
+}
+
+function DateRangePicker({
+  startDate,
+  endDate,
+  onChange,
+  right,
+}: {
+  startDate: string;
+  endDate: string;
+  onChange: (range: { startDate: string; endDate: string }) => void;
+  right?: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+      <div className="flex items-center gap-2">
+        <input type="date" className={inputClass} value={startDate} onChange={(e) => onChange({ startDate: e.target.value, endDate })} />
+        <span className="text-muted text-sm">to</span>
+        <input type="date" className={inputClass} value={endDate} onChange={(e) => onChange({ startDate, endDate: e.target.value })} />
+      </div>
+      <div className="flex items-center gap-2">
+        {right}
+        <PrintButton />
+      </div>
+    </div>
+  );
+}
+
+function PeriodLine({ startDate, endDate }: { startDate: string; endDate: string }) {
+  return <p className="text-xs text-muted mb-3">For the period of (Transaction date): {startDate} to {endDate}</p>;
+}
+
+const money = (n: number) => n.toFixed(3);
+
+// ---------------------------------------------------------------------
+
+interface TrialBalanceRow {
+  accountId: string;
+  code: string;
+  name: string;
+  type?: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+
+function TrialBalanceReport() {
+  const [data, setData] = useState<{ rows: TrialBalanceRow[]; totalDebit: number; totalCredit: number; balanced: boolean } | null>(null);
+
+  useEffect(() => {
+    api.get('/journal-entries/trial-balance').then((res) => setData(res.data));
+  }, []);
+
+  if (!data) return <div className="text-sm text-muted">Loading…</div>;
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm text-muted">All-time balance per account, across every journal entry.</div>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs px-2 py-1 rounded-full font-medium ${data.balanced ? 'bg-brand-50 text-brand-700' : 'bg-red-50 text-red-600'}`}>
+            {data.balanced ? 'Balanced' : 'Not balanced'}
+          </span>
+          <PrintButton />
+        </div>
+      </div>
+      <ReportTable
+        columns={[
+          { label: 'Code' },
+          { label: 'Account Name' },
+          { label: 'Debit Total', align: 'right' },
+          { label: 'Credit Total', align: 'right' },
+          { label: 'Balance', align: 'right' },
+        ]}
+        isEmpty={data.rows.length === 0}
+        emptyMessage="No journal activity yet."
+        footer={
+          <tr className="border-t border-black/10 font-semibold text-blue-700">
+            <td colSpan={2} className="py-2 pl-3">Total</td>
+            <td className="py-2 px-3 text-right">{money(data.totalDebit)}</td>
+            <td className="py-2 px-3 text-right">{money(data.totalCredit)}</td>
+            <td className="py-2 px-3 text-right">OMR</td>
+          </tr>
+        }
+      >
+        {data.rows.map((r) => (
+          <tr key={r.accountId}>
+            <td className="py-2 pl-3 text-muted">{r.code}</td>
+            <td className="py-2 px-3 text-ink">{r.name}</td>
+            <td className="py-2 px-3 text-right">{r.debit > 0 ? money(r.debit) : '-'}</td>
+            <td className="py-2 px-3 text-right">{r.credit > 0 ? money(r.credit) : '-'}</td>
+            <td className="py-2 px-3 text-right font-medium">{money(r.balance)}</td>
+          </tr>
+        ))}
+      </ReportTable>
+    </Card>
+  );
+}
+
+interface IncomeStatementRow {
+  accountId: string;
+  code: string;
+  name: string;
+  amount: number;
+}
+
+function IncomeStatementReport() {
+  const [range, setRange] = useState(monthRange());
+  const [data, setData] = useState<{
+    revenues: IncomeStatementRow[];
+    totalRevenue: number;
+    expenses: IncomeStatementRow[];
+    totalExpense: number;
+    netProfit: number;
+  } | null>(null);
+
+  useEffect(() => {
+    api.get('/reports/income-statement', { params: range }).then((res) => setData(res.data));
+  }, [range]);
+
+  return (
+    <>
+      <DateRangePicker startDate={range.startDate} endDate={range.endDate} onChange={setRange} />
+      {!data ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <Card className="p-4">
+          <PeriodLine startDate={range.startDate} endDate={range.endDate} />
+
+          <SectionTitle>Income</SectionTitle>
+          <ReportTable
+            columns={[{ label: 'Account Name' }, { label: 'Amount', align: 'right' }]}
+            isEmpty={data.revenues.length === 0}
+            emptyMessage="No items found."
+            footer={
+              <tr className="border-t border-black/10 font-semibold text-blue-700">
+                <td className="py-2 pl-3">Total Income</td>
+                <td className="py-2 px-3 text-right">{money(data.totalRevenue)}</td>
+              </tr>
+            }
+          >
+            {data.revenues.map((r) => (
+              <tr key={r.accountId}>
+                <td className="py-2 pl-3 text-ink">{r.name}</td>
+                <td className="py-2 px-3 text-right">{money(r.amount)}</td>
+              </tr>
+            ))}
+          </ReportTable>
+
+          <div className="mt-5">
+            <SectionTitle>Expense</SectionTitle>
+            <ReportTable
+              columns={[{ label: 'Account Name' }, { label: 'Amount', align: 'right' }]}
+              isEmpty={data.expenses.length === 0}
+              emptyMessage="No items found."
+              footer={
+                <tr className="border-t border-black/10 font-semibold text-blue-700">
+                  <td className="py-2 pl-3">Total Expense</td>
+                  <td className="py-2 px-3 text-right">{money(data.totalExpense)}</td>
+                </tr>
+              }
+            >
+              {data.expenses.map((r) => (
+                <tr key={r.accountId}>
+                  <td className="py-2 pl-3 text-ink">{r.name}</td>
+                  <td className="py-2 px-3 text-right">{money(r.amount)}</td>
+                </tr>
+              ))}
+            </ReportTable>
+          </div>
+
+          <div className={`flex items-center justify-between mt-4 pt-3 border-t-2 border-black/10 px-1 text-base font-semibold ${data.netProfit >= 0 ? 'text-brand-700' : 'text-red-600'}`}>
+            <span>Profit</span>
+            <span>{money(data.netProfit)} OMR</span>
+          </div>
+          <p className="text-xs text-muted mt-3">
+            Based on Journal Entry postings (manual + auto-posted from Invoice/Expense/Reimbursement) whose date falls in this range.
+          </p>
+        </Card>
+      )}
+    </>
+  );
+}
+
+function BalanceSheetReport() {
+  const [asOfDate, setAsOfDate] = useState(todayStr());
+  const [data, setData] = useState<{
+    assets: IncomeStatementRow[];
+    totalAssets: number;
+    liabilities: IncomeStatementRow[];
+    totalLiabilities: number;
+    equity: IncomeStatementRow[];
+    retainedEarnings: number;
+    totalEquity: number;
+    totalLiabilitiesAndEquity: number;
+    balanced: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    api.get('/reports/balance-sheet', { params: { asOfDate } }).then((res) => setData(res.data));
+  }, [asOfDate]);
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted">As of</span>
+          <input type="date" className={inputClass} value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} />
+        </div>
+        <PrintButton />
+      </div>
+      {!data ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-muted">For the period of (Transaction date): as of {asOfDate}</p>
+            <span className={`text-xs px-2 py-1 rounded-full font-medium ${data.balanced ? 'bg-brand-50 text-brand-700' : 'bg-red-50 text-red-600'}`}>
+              {data.balanced ? 'Balanced' : 'Not balanced'}
+            </span>
+          </div>
+
+          <SectionTitle>Assets</SectionTitle>
+          <ReportTable
+            columns={[{ label: 'Account Name' }, { label: 'Amount', align: 'right' }]}
+            isEmpty={data.assets.length === 0}
+            emptyMessage="No items found."
+            footer={
+              <tr className="border-t border-black/10 font-semibold text-blue-700">
+                <td className="py-2 pl-3">Total Asset</td>
+                <td className="py-2 px-3 text-right">{money(data.totalAssets)}</td>
+              </tr>
+            }
+          >
+            {data.assets.map((r) => (
+              <tr key={r.accountId}>
+                <td className="py-2 pl-3 text-ink">{r.name}</td>
+                <td className="py-2 px-3 text-right">{money(r.amount)}</td>
+              </tr>
+            ))}
+          </ReportTable>
+
+          <div className="mt-5">
+            <SectionTitle>Liability</SectionTitle>
+            <ReportTable
+              columns={[{ label: 'Account Name' }, { label: 'Amount', align: 'right' }]}
+              isEmpty={data.liabilities.length === 0}
+              emptyMessage="No items found."
+              footer={
+                <tr className="border-t border-black/10 font-semibold text-blue-700">
+                  <td className="py-2 pl-3">Total Liability</td>
+                  <td className="py-2 px-3 text-right">{money(data.totalLiabilities)}</td>
+                </tr>
+              }
+            >
+              {data.liabilities.map((r) => (
+                <tr key={r.accountId}>
+                  <td className="py-2 pl-3 text-ink">{r.name}</td>
+                  <td className="py-2 px-3 text-right">{money(r.amount)}</td>
+                </tr>
+              ))}
+            </ReportTable>
+          </div>
+
+          <div className="mt-5">
+            <SectionTitle>Equity</SectionTitle>
+            <ReportTable
+              columns={[{ label: 'Account Name' }, { label: 'Amount', align: 'right' }]}
+              isEmpty={data.equity.length === 0 && data.retainedEarnings === 0}
+              emptyMessage="No items found."
+              footer={
+                <tr className="border-t border-black/10 font-semibold text-blue-700">
+                  <td className="py-2 pl-3">Total Equity</td>
+                  <td className="py-2 px-3 text-right">{money(data.totalEquity)}</td>
+                </tr>
+              }
+            >
+              {data.equity.map((r) => (
+                <tr key={r.accountId}>
+                  <td className="py-2 pl-3 text-ink">{r.name}</td>
+                  <td className="py-2 px-3 text-right">{money(r.amount)}</td>
+                </tr>
+              ))}
+              <tr>
+                <td className="py-2 pl-3 text-ink">Retained Earnings (Net Income to Date)</td>
+                <td className="py-2 px-3 text-right">{money(data.retainedEarnings)}</td>
+              </tr>
+            </ReportTable>
+          </div>
+
+          <div className="mt-5 pt-3 border-t border-black/10 space-y-1.5">
+            <div className="flex items-center justify-between px-1 text-sm font-semibold text-brand-700">
+              <span>Assets =</span>
+              <span>{money(data.totalAssets)}</span>
+            </div>
+            <div className={`flex items-center justify-between px-1 text-sm font-semibold ${data.balanced ? 'text-brand-700' : 'text-red-600'}`}>
+              <span>Liability + Equity =</span>
+              <span>{money(data.totalLiabilitiesAndEquity)}</span>
+            </div>
+          </div>
+          <p className="text-xs text-muted mt-3">
+            This system has no year-end closing step, so accumulated Net Income since inception is shown as "Retained Earnings" to keep Assets = Liabilities + Equity. Balance Sheet is a point-in-time statement, so it is filtered by a single "as of" date rather than a range.
+          </p>
+        </Card>
+      )}
+    </>
+  );
+}
+
+// -------------------------- Sales Tax --------------------------------
+
+interface SalesTaxRow {
+  id: string;
+  invoiceNumber: string;
+  customerId: string;
+  customerName: string;
+  issueDate: string;
+  subtotal: number;
+  vatAmount: number;
+  total: number;
+}
+
+const SALES_TAX_CARDS = [
+  { key: 'agency', icon: Landmark, title: 'Agency Based', description: 'VAT payable to the Oman Tax Authority (OTA) for the period.' },
+  { key: 'transaction', icon: Receipt, title: 'Transaction Based', description: 'Sales tax report broken down by individual invoice.' },
+  { key: 'customer', icon: Users, title: 'Customer Based', description: 'Sales tax report grouped by customer.' },
+  { key: 'category', icon: Tags, title: 'Category Based', description: 'Sales tax report grouped by VAT rate (Standard / Zero-rated).' },
+];
+
+function SalesTaxHub() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view = searchParams.get('view');
+
+  if (!view) {
+    return (
+      <div>
+        <p className="text-sm text-muted mb-4">It generates sales tax reports for Oman VAT filing (OTA), grouped a few different ways.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {SALES_TAX_CARDS.map((c) => (
+            <Card key={c.key} className="p-4 flex flex-col">
+              <div className="flex items-center gap-2 mb-1.5">
+                <c.icon size={17} className="text-brand-600" />
+                <div className="font-semibold text-ink">{c.title}</div>
+              </div>
+              <p className="text-sm text-muted flex-1 mb-3">{c.description}</p>
+              <button
+                onClick={() => setSearchParams({ view: c.key })}
+                className="self-start inline-flex items-center gap-1.5 text-sm font-medium text-ink bg-brand-500 hover:bg-brand-600 rounded-lg px-3 py-1.5"
+              >
+                View Report
+              </button>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3 print:hidden">
+        <div className="text-base font-semibold text-ink">
+          {SALES_TAX_CARDS.find((c) => c.key === view)?.title} Sales Tax Report
+        </div>
+        <button
+          onClick={() => setSearchParams({})}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-ink/70 hover:text-ink border border-black/10 rounded-lg px-3 py-1.5"
+        >
+          <ArrowLeft size={15} />
+          Back
+        </button>
+      </div>
+      {view === 'agency' && <SalesTaxAgencyView />}
+      {view === 'transaction' && <SalesTaxTransactionView />}
+      {view === 'customer' && <SalesTaxCustomerView />}
+      {view === 'category' && <SalesTaxCategoryView />}
+    </div>
+  );
+}
+
+function SalesTaxAgencyView() {
+  const [range, setRange] = useState(monthRange());
+  const [data, setData] = useState<{ totalTaxableSales: number; totalVat: number } | null>(null);
+
+  useEffect(() => {
+    api.get('/reports/sales-tax', { params: range }).then((res) => setData(res.data));
+  }, [range]);
+
+  return (
+    <>
+      <DateRangePicker startDate={range.startDate} endDate={range.endDate} onChange={setRange} />
+      {!data ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <Card className="p-4">
+          <PeriodLine startDate={range.startDate} endDate={range.endDate} />
+          <p className="text-xs text-muted mb-3">
+            Oman has a single national VAT authority, so this shows one agency's totals rather than a multi-jurisdiction split.
+          </p>
+          <ReportTable
+            columns={[{ label: 'Agency' }, { label: 'Taxable Sales', align: 'right' }, { label: 'VAT Collected', align: 'right' }]}
+            isEmpty={false}
+          >
+            <tr>
+              <td className="py-2 pl-3 text-ink font-medium">Oman Tax Authority (OTA)</td>
+              <td className="py-2 px-3 text-right">{money(data.totalTaxableSales)}</td>
+              <td className="py-2 px-3 text-right font-semibold">{money(data.totalVat)}</td>
+            </tr>
+          </ReportTable>
+        </Card>
+      )}
+    </>
+  );
+}
+
+function SalesTaxTransactionView() {
+  const [range, setRange] = useState(monthRange());
+  const [data, setData] = useState<{ rows: SalesTaxRow[]; totalTaxableSales: number; totalVat: number; invoiceCount: number } | null>(null);
+
+  useEffect(() => {
+    api.get('/reports/sales-tax', { params: range }).then((res) => setData(res.data));
+  }, [range]);
+
+  return (
+    <>
+      <DateRangePicker startDate={range.startDate} endDate={range.endDate} onChange={setRange} />
+      {!data ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <Card className="p-4">
+          <PeriodLine startDate={range.startDate} endDate={range.endDate} />
+          <ReportTable
+            columns={[
+              { label: 'Invoice' },
+              { label: 'Customer' },
+              { label: 'Date' },
+              { label: 'Taxable', align: 'right' },
+              { label: 'VAT', align: 'right' },
+              { label: 'Total', align: 'right' },
+            ]}
+            isEmpty={data.rows.length === 0}
+            emptyMessage="No invoices in this range."
+            footer={
+              <tr className="border-t border-black/10 font-semibold text-blue-700">
+                <td colSpan={3} className="py-2 pl-3">Total ({data.invoiceCount} invoices)</td>
+                <td className="py-2 px-3 text-right">{money(data.totalTaxableSales)}</td>
+                <td className="py-2 px-3 text-right">{money(data.totalVat)}</td>
+                <td className="py-2 px-3 text-right"></td>
+              </tr>
+            }
+          >
+            {data.rows.map((r) => (
+              <tr key={r.id}>
+                <td className="py-2 pl-3 text-ink">{r.invoiceNumber}</td>
+                <td className="py-2 px-3 text-ink">{r.customerName}</td>
+                <td className="py-2 px-3 text-muted">{r.issueDate}</td>
+                <td className="py-2 px-3 text-right">{money(r.subtotal)}</td>
+                <td className="py-2 px-3 text-right">{money(r.vatAmount)}</td>
+                <td className="py-2 px-3 text-right font-medium">{money(r.total)}</td>
+              </tr>
+            ))}
+          </ReportTable>
+        </Card>
+      )}
+    </>
+  );
+}
+
+function SalesTaxCustomerView() {
+  const [range, setRange] = useState(monthRange());
+  const [rows, setRows] = useState<SalesTaxRow[] | null>(null);
+
+  useEffect(() => {
+    api.get('/reports/sales-tax', { params: range }).then((res) => setRows(res.data.rows));
+  }, [range]);
+
+  const grouped = (rows || []).reduce((acc, r) => {
+    const g = acc.get(r.customerId) || { customerName: r.customerName, taxable: 0, vat: 0, total: 0, invoices: 0 };
+    g.taxable += r.subtotal;
+    g.vat += r.vatAmount;
+    g.total += r.total;
+    g.invoices += 1;
+    acc.set(r.customerId, g);
+    return acc;
+  }, new Map<string, { customerName: string; taxable: number; vat: number; total: number; invoices: number }>());
+  const customerRows = Array.from(grouped.values()).sort((a, b) => b.total - a.total);
+  const totals = customerRows.reduce(
+    (s, r) => ({ taxable: s.taxable + r.taxable, vat: s.vat + r.vat, total: s.total + r.total }),
+    { taxable: 0, vat: 0, total: 0 },
+  );
+
+  return (
+    <>
+      <DateRangePicker startDate={range.startDate} endDate={range.endDate} onChange={setRange} />
+      {!rows ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <Card className="p-4">
+          <PeriodLine startDate={range.startDate} endDate={range.endDate} />
+          <ReportTable
+            columns={[
+              { label: 'Customer' },
+              { label: 'Invoices', align: 'right' },
+              { label: 'Taxable', align: 'right' },
+              { label: 'VAT', align: 'right' },
+              { label: 'Total', align: 'right' },
+            ]}
+            isEmpty={customerRows.length === 0}
+            emptyMessage="No invoices in this range."
+            footer={
+              <tr className="border-t border-black/10 font-semibold text-blue-700">
+                <td className="py-2 pl-3">Total</td>
+                <td className="py-2 px-3 text-right">{customerRows.reduce((s, r) => s + r.invoices, 0)}</td>
+                <td className="py-2 px-3 text-right">{money(totals.taxable)}</td>
+                <td className="py-2 px-3 text-right">{money(totals.vat)}</td>
+                <td className="py-2 px-3 text-right">{money(totals.total)}</td>
+              </tr>
+            }
+          >
+            {customerRows.map((r, i) => (
+              <tr key={i}>
+                <td className="py-2 pl-3 text-ink">{r.customerName}</td>
+                <td className="py-2 px-3 text-right">{r.invoices}</td>
+                <td className="py-2 px-3 text-right">{money(r.taxable)}</td>
+                <td className="py-2 px-3 text-right">{money(r.vat)}</td>
+                <td className="py-2 px-3 text-right font-medium">{money(r.total)}</td>
+              </tr>
+            ))}
+          </ReportTable>
+        </Card>
+      )}
+    </>
+  );
+}
+
+interface VatRateRow {
+  vatRate: number;
+  label: string;
+  taxableAmount: number;
+  vatAmount: number;
+}
+
+function SalesTaxCategoryView() {
+  const [range, setRange] = useState(monthRange());
+  const [data, setData] = useState<{ rows: VatRateRow[]; totalTaxableSales: number; totalVat: number } | null>(null);
+
+  useEffect(() => {
+    api.get('/reports/sales-tax/by-rate', { params: range }).then((res) => setData(res.data));
+  }, [range]);
+
+  return (
+    <>
+      <DateRangePicker startDate={range.startDate} endDate={range.endDate} onChange={setRange} />
+      {!data ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <Card className="p-4">
+          <PeriodLine startDate={range.startDate} endDate={range.endDate} />
+          <p className="text-xs text-muted mb-3">
+            Grouped by VAT rate (Standard 5% / Zero-rated / Exempt) — the accounting-relevant "category" for an Oman VAT return, since this system has a single product line rather than product categories.
+          </p>
+          <ReportTable
+            columns={[{ label: 'Category (VAT Rate)' }, { label: 'Taxable Amount', align: 'right' }, { label: 'VAT Amount', align: 'right' }]}
+            isEmpty={data.rows.length === 0}
+            emptyMessage="No invoices in this range."
+            footer={
+              <tr className="border-t border-black/10 font-semibold text-blue-700">
+                <td className="py-2 pl-3">Total</td>
+                <td className="py-2 px-3 text-right">{money(data.totalTaxableSales)}</td>
+                <td className="py-2 px-3 text-right">{money(data.totalVat)}</td>
+              </tr>
+            }
+          >
+            {data.rows.map((r) => (
+              <tr key={r.vatRate}>
+                <td className="py-2 pl-3 text-ink">{r.label}</td>
+                <td className="py-2 px-3 text-right">{money(r.taxableAmount)}</td>
+                <td className="py-2 px-3 text-right font-medium">{money(r.vatAmount)}</td>
+              </tr>
+            ))}
+          </ReportTable>
+        </Card>
+      )}
+    </>
+  );
+}
+
+// ------------------------- Purchase VAT -------------------------------
+
+interface PurchaseVatRow {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  receivedAt: string;
+  subtotal: number;
+  vatAmount: number;
+  total: number;
+}
+
+function PurchaseVatReport() {
+  const [range, setRange] = useState(monthRange());
+  const [data, setData] = useState<{ rows: PurchaseVatRow[]; totalTaxablePurchases: number; totalVat: number; orderCount: number } | null>(null);
+
+  useEffect(() => {
+    api.get('/reports/purchase-vat', { params: range }).then((res) => setData(res.data));
+  }, [range]);
+
+  return (
+    <>
+      <DateRangePicker startDate={range.startDate} endDate={range.endDate} onChange={setRange} />
+      {!data ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <Card className="p-4">
+          <PeriodLine startDate={range.startDate} endDate={range.endDate} />
+          <ReportTable
+            columns={[
+              { label: 'Supplier' },
+              { label: 'Received' },
+              { label: 'Taxable', align: 'right' },
+              { label: 'VAT', align: 'right' },
+              { label: 'Total', align: 'right' },
+            ]}
+            isEmpty={data.rows.length === 0}
+            emptyMessage="No received purchase orders in this range."
+            footer={
+              <tr className="border-t border-black/10 font-semibold text-blue-700">
+                <td colSpan={2} className="py-2 pl-3">Total ({data.orderCount} orders)</td>
+                <td className="py-2 px-3 text-right">{money(data.totalTaxablePurchases)}</td>
+                <td className="py-2 px-3 text-right">{money(data.totalVat)}</td>
+                <td className="py-2 px-3 text-right"></td>
+              </tr>
+            }
+          >
+            {data.rows.map((r) => (
+              <tr key={r.id}>
+                <td className="py-2 pl-3 text-ink">{r.supplierName}</td>
+                <td className="py-2 px-3 text-muted">{new Date(r.receivedAt).toLocaleDateString()}</td>
+                <td className="py-2 px-3 text-right">{money(r.subtotal)}</td>
+                <td className="py-2 px-3 text-right">{money(r.vatAmount)}</td>
+                <td className="py-2 px-3 text-right font-medium">{money(r.total)}</td>
+              </tr>
+            ))}
+          </ReportTable>
+        </Card>
+      )}
+    </>
+  );
+}
+
+// ------------------------ Reimbursements -------------------------------
+
+interface ReimbursementRow {
+  id: string;
+  claimNumber: string;
+  employeeId: string;
+  category: string;
+  amount: number | string;
+  date: string;
+  status: 'pending' | 'approved' | 'rejected' | 'paid';
+}
+
+const reimbursementStatusTone: Record<string, string> = {
+  pending: 'bg-amber-50 text-amber-700',
+  approved: 'bg-brand-50 text-brand-700',
+  paid: 'bg-brand-50 text-brand-700',
+  rejected: 'bg-red-50 text-red-600',
+};
+
+// Reuses the existing /reimbursements endpoint (already has everything
+// this report needs) and filters/breaks it down client-side, rather than
+// duplicating that data on the backend.
+function ReimbursementsReport() {
+  const [range, setRange] = useState(monthRange());
+  const [all, setAll] = useState<ReimbursementRow[] | null>(null);
+
+  useEffect(() => {
+    api.get('/reimbursements').then((res) => setAll(res.data));
+  }, []);
+
+  const rows = (all || []).filter((r) => r.date >= range.startDate && r.date <= range.endDate);
+  const totalsByStatus = rows.reduce(
+    (acc, r) => {
+      acc[r.status] = (acc[r.status] || 0) + Number(r.amount);
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
+  const totalPaid = totalsByStatus['paid'] || 0;
+  const grandTotal = rows.reduce((s, r) => s + Number(r.amount), 0);
+
+  return (
+    <>
+      <DateRangePicker startDate={range.startDate} endDate={range.endDate} onChange={setRange} />
+      {!all ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-4 gap-4 mb-4">
+            <Card className="p-4">
+              <div className="text-xs text-muted">Claims in Range</div>
+              <div className="text-lg font-semibold text-ink">{rows.length}</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-xs text-muted">Paid</div>
+              <div className="text-lg font-semibold text-brand-700">{money(totalPaid)} OMR</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-xs text-muted">Pending</div>
+              <div className="text-lg font-semibold text-amber-700">{money(totalsByStatus['pending'] || 0)} OMR</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-xs text-muted">Approved (unpaid)</div>
+              <div className="text-lg font-semibold text-ink">{money(totalsByStatus['approved'] || 0)} OMR</div>
+            </Card>
+          </div>
+          <Card className="p-4">
+            <PeriodLine startDate={range.startDate} endDate={range.endDate} />
+            <ReportTable
+              columns={[
+                { label: 'Claim #' },
+                { label: 'Date' },
+                { label: 'Category' },
+                { label: 'Amount', align: 'right' },
+                { label: 'Status', align: 'right' },
+              ]}
+              isEmpty={rows.length === 0}
+              emptyMessage="No reimbursement claims in this range."
+              footer={
+                <tr className="border-t border-black/10 font-semibold text-blue-700">
+                  <td colSpan={3} className="py-2 pl-3">Total</td>
+                  <td className="py-2 px-3 text-right">{money(grandTotal)}</td>
+                  <td className="py-2 px-3 text-right"></td>
+                </tr>
+              }
+            >
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="py-2 pl-3 text-ink font-medium">{r.claimNumber}</td>
+                  <td className="py-2 px-3 text-muted">{r.date}</td>
+                  <td className="py-2 px-3 text-ink capitalize">{r.category.replace('_', ' ')}</td>
+                  <td className="py-2 px-3 text-right font-medium">{money(Number(r.amount))}</td>
+                  <td className="py-2 px-3 text-right">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${reimbursementStatusTone[r.status]}`}>{r.status}</span>
+                  </td>
+                </tr>
+              ))}
+            </ReportTable>
+          </Card>
+        </>
+      )}
+    </>
+  );
+}
+
+// -------------------------- Ledger Report -------------------------------
+
+interface AccountOption {
+  id: string;
+  code: string;
+  name: string;
+  type?: string;
+}
+interface LedgerRow {
+  date: string;
+  createdAt: string;
+  entryNumber: string;
+  memo: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+
+function LedgerReport() {
+  const [accounts, setAccounts] = useState<AccountOption[]>([]);
+  const [accountId, setAccountId] = useState('');
+  const [range, setRange] = useState(monthRange());
+  const [data, setData] = useState<{ account: AccountOption; openingBalance: number; rows: LedgerRow[]; closingBalance: number } | null>(null);
+
+  useEffect(() => {
+    api.get('/accounts').then((res) => {
+      setAccounts(res.data);
+      if (res.data.length > 0) setAccountId((prev) => prev || res.data[0].id);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!accountId) return;
+    setData(null);
+    api.get(`/journal-entries/ledger/${accountId}`, { params: range }).then((res) => setData(res.data));
+  }, [accountId, range]);
+
+  const totalDebit = (data?.rows || []).reduce((s, r) => s + r.debit, 0);
+  const totalCredit = (data?.rows || []).reduce((s, r) => s + r.credit, 0);
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <select className={inputClass} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.code} — {a.name}
+              </option>
+            ))}
+          </select>
+          <input type="date" className={inputClass} value={range.startDate} onChange={(e) => setRange((r) => ({ ...r, startDate: e.target.value }))} />
+          <span className="text-muted text-sm">to</span>
+          <input type="date" className={inputClass} value={range.endDate} onChange={(e) => setRange((r) => ({ ...r, endDate: e.target.value }))} />
+        </div>
+        <PrintButton />
+      </div>
+      {!data ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <Card className="p-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm mb-4">
+            <div><span className="text-muted">Account No:</span> <span className="font-medium text-ink">{data.account.code}</span></div>
+            <div><span className="text-muted">Account Name:</span> <span className="font-medium text-ink">{data.account.name}</span></div>
+            <div><span className="text-muted">Currency:</span> <span className="font-medium text-ink">OMR</span></div>
+            <div><span className="text-muted">Period:</span> <span className="font-medium text-ink">{range.startDate} to {range.endDate}</span></div>
+          </div>
+          <ReportTable
+            columns={[
+              { label: 'Trns Date' },
+              { label: 'Created At' },
+              { label: 'Trns No' },
+              { label: 'Particulars' },
+              { label: 'Debit', align: 'right' },
+              { label: 'Credit', align: 'right' },
+              { label: 'Balance', align: 'right' },
+            ]}
+            isEmpty={false}
+            footer={
+              <tr className="border-t border-black/10 font-semibold text-blue-700">
+                <td colSpan={4} className="py-2 pl-3">Total</td>
+                <td className="py-2 px-3 text-right">{money(totalDebit)}</td>
+                <td className="py-2 px-3 text-right">{money(totalCredit)}</td>
+                <td className="py-2 px-3 text-right">{money(data.closingBalance)}</td>
+              </tr>
+            }
+          >
+            <tr>
+              <td className="py-2 pl-3 text-muted">{range.startDate}</td>
+              <td className="py-2 px-3 text-muted">-</td>
+              <td className="py-2 px-3 text-muted">-</td>
+              <td className="py-2 px-3 text-ink italic">Opening Balance =</td>
+              <td className="py-2 px-3 text-right">{money(0)}</td>
+              <td className="py-2 px-3 text-right">{money(0)}</td>
+              <td className="py-2 px-3 text-right font-medium">{money(data.openingBalance)}</td>
+            </tr>
+            {data.rows.map((r, i) => (
+              <tr key={i}>
+                <td className="py-2 pl-3 text-muted">{r.date}</td>
+                <td className="py-2 px-3 text-muted">{new Date(r.createdAt).toLocaleString()}</td>
+                <td className="py-2 px-3 text-ink">{r.entryNumber}</td>
+                <td className="py-2 px-3 text-ink">{r.memo}</td>
+                <td className="py-2 px-3 text-right">{r.debit > 0 ? money(r.debit) : '-'}</td>
+                <td className="py-2 px-3 text-right">{r.credit > 0 ? money(r.credit) : '-'}</td>
+                <td className="py-2 px-3 text-right font-medium">{money(r.balance)}</td>
+              </tr>
+            ))}
+          </ReportTable>
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-black/10 px-1 text-sm font-semibold text-ink">
+            <span>Closing Balance</span>
+            <span>{money(data.closingBalance)} OMR</span>
+          </div>
+        </Card>
+      )}
+    </>
+  );
+}
+
+// --------------------- Purchase / Sales Return --------------------------
+
+interface ReturnRow {
+  id: string;
+  returnNumber: string;
+  status: 'pending' | 'approved' | 'rejected';
+  date: string;
+  total: number | string;
+  reason?: string;
+}
+
+const returnStatusTone: Record<string, string> = {
+  pending: 'bg-amber-50 text-amber-700',
+  approved: 'bg-brand-50 text-brand-700',
+  rejected: 'bg-red-50 text-red-600',
+};
+
+// Reuses the existing /purchase-returns endpoint and filters client-side
+// by date range — same pattern as the Reimbursements report.
+function PurchaseReturnReport() {
+  const [range, setRange] = useState(monthRange());
+  const [all, setAll] = useState<(ReturnRow & { supplierId: string })[] | null>(null);
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    api.get('/purchase-returns').then((res) => setAll(res.data));
+    api.get('/suppliers').then((res) => setSuppliers(res.data));
+  }, []);
+
+  function supplierName(id: string) {
+    return suppliers.find((s) => s.id === id)?.name || id;
+  }
+
+  const rows = (all || []).filter((r) => r.date >= range.startDate && r.date <= range.endDate);
+  const totalsByStatus = rows.reduce((acc, r) => {
+    acc[r.status] = (acc[r.status] || 0) + Number(r.total);
+    return acc;
+  }, {} as Record<string, number>);
+  const grandTotal = rows.reduce((s, r) => s + Number(r.total), 0);
+
+  return (
+    <>
+      <DateRangePicker startDate={range.startDate} endDate={range.endDate} onChange={setRange} />
+      {!all ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <Card className="p-4">
+              <div className="text-xs text-muted">Returns in Range</div>
+              <div className="text-lg font-semibold text-ink">{rows.length}</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-xs text-muted">Approved</div>
+              <div className="text-lg font-semibold text-brand-700">{money(totalsByStatus['approved'] || 0)} OMR</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-xs text-muted">Pending</div>
+              <div className="text-lg font-semibold text-amber-700">{money(totalsByStatus['pending'] || 0)} OMR</div>
+            </Card>
+          </div>
+          <Card className="p-4">
+            <PeriodLine startDate={range.startDate} endDate={range.endDate} />
+            <ReportTable
+              columns={[
+                { label: 'Supplier' },
+                { label: 'Return #' },
+                { label: 'Date' },
+                { label: 'Reason' },
+                { label: 'Amount', align: 'right' },
+                { label: 'Status', align: 'right' },
+              ]}
+              isEmpty={rows.length === 0}
+              emptyMessage="No purchase returns in this range."
+              footer={
+                <tr className="border-t border-black/10 font-semibold text-blue-700">
+                  <td colSpan={4} className="py-2 pl-3">Total</td>
+                  <td className="py-2 px-3 text-right">{money(grandTotal)}</td>
+                  <td className="py-2 px-3 text-right"></td>
+                </tr>
+              }
+            >
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="py-2 pl-3 text-ink font-medium">{supplierName(r.supplierId)}</td>
+                  <td className="py-2 px-3 text-ink">{r.returnNumber}</td>
+                  <td className="py-2 px-3 text-muted">{r.date}</td>
+                  <td className="py-2 px-3 text-muted">{r.reason || '-'}</td>
+                  <td className="py-2 px-3 text-right font-medium">{money(Number(r.total))}</td>
+                  <td className="py-2 px-3 text-right">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${returnStatusTone[r.status]}`}>{r.status}</span>
+                  </td>
+                </tr>
+              ))}
+            </ReportTable>
+          </Card>
+        </>
+      )}
+    </>
+  );
+}
+
+// Same idea as PurchaseReturnReport, against /sales-returns + /customers.
+function SalesReturnReport() {
+  const [range, setRange] = useState(monthRange());
+  const [all, setAll] = useState<(ReturnRow & { customerId: string })[] | null>(null);
+  const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    api.get('/sales-returns').then((res) => setAll(res.data));
+    api.get('/customers').then((res) => setCustomers(res.data));
+  }, []);
+
+  function customerName(id: string) {
+    return customers.find((c) => c.id === id)?.name || id;
+  }
+
+  const rows = (all || []).filter((r) => r.date >= range.startDate && r.date <= range.endDate);
+  const totalsByStatus = rows.reduce((acc, r) => {
+    acc[r.status] = (acc[r.status] || 0) + Number(r.total);
+    return acc;
+  }, {} as Record<string, number>);
+  const grandTotal = rows.reduce((s, r) => s + Number(r.total), 0);
+
+  return (
+    <>
+      <DateRangePicker startDate={range.startDate} endDate={range.endDate} onChange={setRange} />
+      {!all ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <Card className="p-4">
+              <div className="text-xs text-muted">Returns in Range</div>
+              <div className="text-lg font-semibold text-ink">{rows.length}</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-xs text-muted">Approved</div>
+              <div className="text-lg font-semibold text-brand-700">{money(totalsByStatus['approved'] || 0)} OMR</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-xs text-muted">Pending</div>
+              <div className="text-lg font-semibold text-amber-700">{money(totalsByStatus['pending'] || 0)} OMR</div>
+            </Card>
+          </div>
+          <Card className="p-4">
+            <PeriodLine startDate={range.startDate} endDate={range.endDate} />
+            <ReportTable
+              columns={[
+                { label: 'Customer' },
+                { label: 'Return #' },
+                { label: 'Date' },
+                { label: 'Reason' },
+                { label: 'Amount', align: 'right' },
+                { label: 'Status', align: 'right' },
+              ]}
+              isEmpty={rows.length === 0}
+              emptyMessage="No sales returns in this range."
+              footer={
+                <tr className="border-t border-black/10 font-semibold text-blue-700">
+                  <td colSpan={4} className="py-2 pl-3">Total</td>
+                  <td className="py-2 px-3 text-right">{money(grandTotal)}</td>
+                  <td className="py-2 px-3 text-right"></td>
+                </tr>
+              }
+            >
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="py-2 pl-3 text-ink font-medium">{customerName(r.customerId)}</td>
+                  <td className="py-2 px-3 text-ink">{r.returnNumber}</td>
+                  <td className="py-2 px-3 text-muted">{r.date}</td>
+                  <td className="py-2 px-3 text-muted">{r.reason || '-'}</td>
+                  <td className="py-2 px-3 text-right font-medium">{money(Number(r.total))}</td>
+                  <td className="py-2 px-3 text-right">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${returnStatusTone[r.status]}`}>{r.status}</span>
+                  </td>
+                </tr>
+              ))}
+            </ReportTable>
+          </Card>
+        </>
+      )}
+    </>
+  );
+}
+
+// ----------------------- Product Sales / Purchase ------------------------
+
+interface ProductSalesRow {
+  finishedGoodId: string | null;
+  description: string;
+  productName: string;
+  quantity: number;
+  total: number;
+}
+
+function ProductSalesReport() {
+  const [range, setRange] = useState(monthRange());
+  const [rows, setRows] = useState<ProductSalesRow[] | null>(null);
+
+  useEffect(() => {
+    api.get('/reports/product-sales', { params: range }).then((res) => setRows(res.data));
+  }, [range]);
+
+  const total = (rows || []).reduce((sum, r) => sum + Number(r.total), 0);
+
+  return (
+    <>
+      <DateRangePicker startDate={range.startDate} endDate={range.endDate} onChange={setRange} />
+      {!rows ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <Card className="p-4">
+          <PeriodLine startDate={range.startDate} endDate={range.endDate} />
+          <ReportTable
+            columns={[{ label: 'Product' }, { label: 'Qty Sold', align: 'right' }, { label: 'Amount', align: 'right' }]}
+            isEmpty={rows.length === 0}
+            emptyMessage="No sales in this range."
+            footer={
+              <tr className="border-t border-black/10 font-semibold text-blue-700">
+                <td colSpan={2} className="py-2 pl-3">Total</td>
+                <td className="py-2 px-3 text-right">{money(total)}</td>
+              </tr>
+            }
+          >
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td className="py-2 pl-3 text-ink">{r.productName}</td>
+                <td className="py-2 px-3 text-right">{money(Number(r.quantity))}</td>
+                <td className="py-2 px-3 text-right font-medium">{money(Number(r.total))}</td>
+              </tr>
+            ))}
+          </ReportTable>
+        </Card>
+      )}
+    </>
+  );
+}
+
+interface ProductPurchaseRow {
+  rawMaterialId: string;
+  materialName: string;
+  unit?: string;
+  quantity: number;
+  total: number;
+}
+
+function ProductPurchaseReport() {
+  const [range, setRange] = useState(monthRange());
+  const [rows, setRows] = useState<ProductPurchaseRow[] | null>(null);
+
+  useEffect(() => {
+    api.get('/reports/product-purchase', { params: range }).then((res) => setRows(res.data));
+  }, [range]);
+
+  const total = (rows || []).reduce((sum, r) => sum + Number(r.total), 0);
+
+  return (
+    <>
+      <DateRangePicker startDate={range.startDate} endDate={range.endDate} onChange={setRange} />
+      {!rows ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <Card className="p-4">
+          <PeriodLine startDate={range.startDate} endDate={range.endDate} />
+          <ReportTable
+            columns={[{ label: 'Material' }, { label: 'Qty Purchased', align: 'right' }, { label: 'Amount', align: 'right' }]}
+            isEmpty={rows.length === 0}
+            emptyMessage="No received purchase orders in this range."
+            footer={
+              <tr className="border-t border-black/10 font-semibold text-blue-700">
+                <td colSpan={2} className="py-2 pl-3">Total</td>
+                <td className="py-2 px-3 text-right">{money(total)}</td>
+              </tr>
+            }
+          >
+            {rows.map((r) => (
+              <tr key={r.rawMaterialId}>
+                <td className="py-2 pl-3 text-ink">{r.materialName}</td>
+                <td className="py-2 px-3 text-right">
+                  {money(Number(r.quantity))} {r.unit || ''}
+                </td>
+                <td className="py-2 px-3 text-right font-medium">{money(Number(r.total))}</td>
+              </tr>
+            ))}
+          </ReportTable>
+        </Card>
+      )}
+    </>
+  );
+}
+
+// --------------------------- Inventory Report -----------------------------
+
+interface InventoryItemRow {
+  id: string;
+  name: string;
+  unit: string;
+  quantityInStock: number;
+  value: number;
+  lowStock: boolean;
+}
+
+function InventoryReport() {
+  const [data, setData] = useState<{
+    rawMaterials: InventoryItemRow[];
+    finishedGoods: InventoryItemRow[];
+    totalRawValue: number;
+    totalFinishedValue: number;
+    totalValue: number;
+  } | null>(null);
+
+  useEffect(() => {
+    api.get('/reports/inventory-detail').then((res) => setData(res.data));
+  }, []);
+
+  if (!data) return <div className="text-sm text-muted">Loading…</div>;
+
+  return (
+    <>
+      <div className="flex justify-end mb-2">
+        <PrintButton />
+      </div>
+      <div className="grid grid-cols-3 gap-4 mb-4">
+        <Card className="p-4">
+          <div className="text-xs text-muted">Raw Materials Value</div>
+          <div className="text-lg font-semibold text-ink">{money(data.totalRawValue)} OMR</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-xs text-muted">Finished Goods Value</div>
+          <div className="text-lg font-semibold text-ink">{money(data.totalFinishedValue)} OMR</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-xs text-muted">Total Stock Value</div>
+          <div className="text-lg font-semibold text-ink">{money(data.totalValue)} OMR</div>
+        </Card>
+      </div>
+
+      <SectionTitle>Raw Materials</SectionTitle>
+      <Card className="p-4 mb-4">
+        <ReportTable
+          columns={[{ label: 'Name' }, { label: 'Qty in Stock', align: 'right' }, { label: 'Value', align: 'right' }]}
+          isEmpty={data.rawMaterials.length === 0}
+          emptyMessage="No raw materials."
+          footer={
+            <tr className="border-t border-black/10 font-semibold text-blue-700">
+              <td colSpan={2} className="py-2 pl-3">Total</td>
+              <td className="py-2 px-3 text-right">{money(data.totalRawValue)}</td>
+            </tr>
+          }
+        >
+          {data.rawMaterials.map((m) => (
+            <tr key={m.id}>
+              <td className={`py-2 pl-3 font-medium ${m.lowStock ? 'text-amber-700' : 'text-ink'}`}>
+                {m.name}
+                {m.lowStock ? <span className="ml-1.5 text-xs font-normal">(Low stock)</span> : null}
+              </td>
+              <td className="py-2 px-3 text-right">
+                {money(Number(m.quantityInStock))} {m.unit}
+              </td>
+              <td className="py-2 px-3 text-right font-medium">{money(Number(m.value))}</td>
+            </tr>
+          ))}
+        </ReportTable>
+      </Card>
+
+      <SectionTitle>Finished Goods</SectionTitle>
+      <Card className="p-4">
+        <ReportTable
+          columns={[{ label: 'Name' }, { label: 'Qty in Stock', align: 'right' }, { label: 'Value', align: 'right' }]}
+          isEmpty={data.finishedGoods.length === 0}
+          emptyMessage="No finished goods."
+          footer={
+            <tr className="border-t border-black/10 font-semibold text-blue-700">
+              <td colSpan={2} className="py-2 pl-3">Total</td>
+              <td className="py-2 px-3 text-right">{money(data.totalFinishedValue)}</td>
+            </tr>
+          }
+        >
+          {data.finishedGoods.map((g) => (
+            <tr key={g.id}>
+              <td className={`py-2 pl-3 font-medium ${g.lowStock ? 'text-amber-700' : 'text-ink'}`}>
+                {g.name}
+                {g.lowStock ? <span className="ml-1.5 text-xs font-normal">(Low stock)</span> : null}
+              </td>
+              <td className="py-2 px-3 text-right">
+                {money(Number(g.quantityInStock))} {g.unit}
+              </td>
+              <td className="py-2 px-3 text-right font-medium">{money(Number(g.value))}</td>
+            </tr>
+          ))}
+        </ReportTable>
+      </Card>
+    </>
+  );
+}
