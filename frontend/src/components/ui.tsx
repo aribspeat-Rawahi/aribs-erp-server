@@ -156,12 +156,12 @@ export function StatCard({
   tone?: 'default' | 'warn';
 }) {
   return (
-    <Card className={`p-4 ${tone === 'warn' ? 'border-amber-300/70 bg-amber-50/40' : ''}`}>
-      <div className={`flex items-center gap-1.5 text-xs font-medium mb-2 ${tone === 'warn' ? 'text-amber-700' : 'text-muted'}`}>
-        <Icon size={14} />
-        {label}
+    <Card className={`p-3 sm:p-4 min-w-0 ${tone === 'warn' ? 'border-amber-300/70 bg-amber-50/40' : ''}`}>
+      <div className={`flex items-start gap-1.5 text-xs font-medium mb-2 leading-snug ${tone === 'warn' ? 'text-amber-700' : 'text-muted'}`}>
+        <Icon size={14} className="shrink-0 mt-px" />
+        <span className="min-w-0">{label}</span>
       </div>
-      <div className="text-2xl font-semibold text-ink">{value}</div>
+      <div className="text-lg sm:text-2xl font-semibold text-ink leading-tight break-words">{value}</div>
       {sub && <div className="text-xs text-muted mt-1">{sub}</div>}
     </Card>
   );

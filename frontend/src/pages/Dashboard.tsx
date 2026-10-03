@@ -298,10 +298,10 @@ export default function Dashboard() {
   const periodSubtitle =
     periodMode === 'this_month' ? 'This month at a glance' : periodMode === 'life_time' ? 'Life time — all-time overview' : `${monthYearLabel(customMonth)} at a glance`;
 
-  const periodBtnBase = 'w-32 shrink-0 h-9 px-3 rounded-lg text-sm font-medium whitespace-nowrap transition-colors';
+  const periodBtnBase = 'w-full sm:w-32 shrink-0 h-9 px-2 sm:px-3 rounded-lg text-sm font-medium whitespace-nowrap transition-colors';
 
   const periodSelector = (
-    <div className="flex items-center gap-2">
+    <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:items-center sm:w-auto">
       <button
         type="button"
         onClick={() => setPeriodMode('this_month')}
@@ -323,7 +323,7 @@ export default function Dashboard() {
           setCustomMonth(e.target.value);
           setPeriodMode('custom');
         }}
-        className={`w-32 shrink-0 h-9 px-3 rounded-lg text-sm border border-black/15 bg-white focus:outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 ${
+        className={`col-span-2 w-full sm:w-40 min-w-0 shrink-0 h-9 px-2 sm:px-3 rounded-lg text-sm border border-black/15 bg-white focus:outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 ${
           periodMode === 'custom' ? 'ring-2 ring-brand-400/40 border-brand-500' : ''
         }`}
       />
@@ -334,7 +334,7 @@ export default function Dashboard() {
     <div>
       <PageHeader title="Dashboard" subtitle={periodSubtitle} action={periodSelector} />
 
-      <div className="grid grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-4">
         <StatCard icon={Receipt} label={`Revenue (${periodLabel})`} value={`${Number(revenue).toFixed(3)} OMR`} sub={`${invoiceCount} invoices`} />
         <StatCard icon={TrendingUp} label="Net Profit" value={`${Number(netProfit).toFixed(3)} OMR`} sub={`Expenses: ${Number(expenses).toFixed(3)} OMR`} />
         <StatCard icon={PackageCheck} label="Completed Sales Orders" value={String(completedOrders)} sub={periodLabel} />
@@ -350,7 +350,7 @@ export default function Dashboard() {
       {extra && (
         <>
           {/* My Wallets / Invoice / Sales */}
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4 mb-4">
             <Card className="p-4">
               <div className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-3">
                 <Wallet size={15} className="text-brand-600" />
@@ -422,7 +422,7 @@ export default function Dashboard() {
           </div>
 
           {/* Expense Breakdown / Product Summary */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 mb-4">
             <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-1.5 text-sm font-semibold text-ink">
@@ -497,7 +497,7 @@ export default function Dashboard() {
           </div>
 
           {/* Customer / Vendor / Product counts */}
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4 mb-4">
             <Card className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <Users size={17} className="text-brand-600" />
@@ -537,7 +537,7 @@ export default function Dashboard() {
           </div>
 
           {/* Overdue Invoices / Payable Bills */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 mb-4">
             <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="text-sm font-semibold text-ink">Overdue Invoices</div>
@@ -671,7 +671,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="grid grid-cols-5 gap-3 mb-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
             <Link
               to="/reports"
               className="rounded-lg border border-black/10 hover:border-brand-300 px-3 py-2.5 flex items-center gap-2.5"
@@ -725,7 +725,7 @@ export default function Dashboard() {
           </div>
 
           {(alerts.overdueInvoices.worst.length > 0 || alerts.creditLimitBreaches.length > 0 || alerts.stuckRecurringInvoices.length > 0) && (
-            <div className="grid grid-cols-3 gap-3 pt-3 border-t border-black/5">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 pt-3 border-t border-black/5">
               {alerts.overdueInvoices.worst.length > 0 && (
                 <div>
                   <div className="text-[11px] font-medium text-muted mb-1.5">Most overdue</div>
@@ -785,27 +785,29 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-4">
-        <Card className="p-4 col-span-2">
-          <div className="flex items-center justify-between mb-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4 mb-4">
+        <Card className="p-4 lg:col-span-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
             <div>
               <h3 className="text-sm font-semibold text-ink">Sales & Expenses Overview</h3>
               <p className="text-xs text-muted">Daily trend for the selected range</p>
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={rangeStart}
-                onChange={(e) => setRangeStart(e.target.value)}
-                className="text-xs border border-black/15 rounded-lg px-2 py-1.5"
-              />
-              <span className="text-xs text-muted">to</span>
-              <input
-                type="date"
-                value={rangeEnd}
-                onChange={(e) => setRangeEnd(e.target.value)}
-                className="text-xs border border-black/15 rounded-lg px-2 py-1.5"
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <input
+                  type="date"
+                  value={rangeStart}
+                  onChange={(e) => setRangeStart(e.target.value)}
+                  className="min-w-0 flex-1 sm:flex-none text-xs border border-black/15 rounded-lg px-2 py-1.5"
+                />
+                <span className="text-xs text-muted">to</span>
+                <input
+                  type="date"
+                  value={rangeEnd}
+                  onChange={(e) => setRangeEnd(e.target.value)}
+                  className="min-w-0 flex-1 sm:flex-none text-xs border border-black/15 rounded-lg px-2 py-1.5"
+                />
+              </div>
               <Pill
                 options={[
                   { value: 'line', label: 'Line' },
