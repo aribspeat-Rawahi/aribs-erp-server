@@ -91,6 +91,15 @@ export class AuthService {
     return user;
   }
 
+  // The signed-in user's current profile and permissions (what the
+  // frontend shows in the menu). Read fresh from the database, so changes
+  // an admin makes apply without logging out and in again.
+  async me(userId: string) {
+    const user = await this.findActiveForToken(userId);
+    if (!user) throw new UnauthorizedException();
+    return { id: user.id, name: user.name, email: user.email, role: user.role, modulePermissions: user.modulePermissions || null };
+  }
+
   async login(dto: LoginDto) {
     const user = await this.userRepo.findOne({ where: { email: dto.email } });
     if (!user || !user.active || user.deletedAt) throw new UnauthorizedException('Invalid credentials');

@@ -2,11 +2,13 @@ import { Body, Controller, Delete, Get, Param, Post, Req } from '@nestjs/common'
 import type { Request } from 'express';
 import { CustomerInteractionService } from './customer-interaction.service';
 import { CreateCustomerInteractionDto } from './dto/customer.dto';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
 }
 
+@ModuleAccess('customers')
 @Controller('customers/:customerId/interactions')
 export class CustomerInteractionController {
   constructor(private service: CustomerInteractionService) {}

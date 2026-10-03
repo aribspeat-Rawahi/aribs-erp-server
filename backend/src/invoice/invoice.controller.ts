@@ -5,11 +5,13 @@ import { PaymentReminderService } from './payment-reminder.service';
 import { CreateInvoiceDto, UpdateInvoiceDto } from './dto/invoice.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
 }
 
+@ModuleAccess('invoices')
 @Controller('invoices')
 export class InvoiceController {
   constructor(
@@ -29,6 +31,7 @@ export class InvoiceController {
 
   // Feeds the "Available Credit" line on the Customer detail screen —
   // separate from :id above since a customerId isn't an invoice id.
+  @ModuleAccess('invoices', { readAlso: ['customers'] })
   @Get('customer/:customerId/outstanding-balance')
   async getOutstandingBalance(@Param('customerId') customerId: string) {
     return { outstanding: await this.service.getOutstandingBalance(customerId) };
@@ -36,6 +39,7 @@ export class InvoiceController {
 
   // Streams a fresh "Statement of Account" PDF for the given date range —
   // not persisted to disk, since it's regenerated per request.
+  @ModuleAccess('invoices', { readAlso: ['customers'] })
   @Get('customer/:customerId/statement')
   async getCustomerStatement(
     @Param('customerId') customerId: string,
@@ -70,12 +74,14 @@ export class InvoiceController {
   // ApprovalRequest (credit limit / large discount / VAT exclude),
   // replaying the exact payload that was originally submitted.
   @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD, UserRole.ACCOUNTANT)
+  @ModuleAccess('approvals')
   @Post('approval-requests/:id/approve')
   approveRequest(@Param('id') id: string, @Req() req: AuthedRequest) {
     return this.service.applyApprovedInvoiceRequest(id, { userId: req.user?.userId, email: req.user?.email });
   }
 
   @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD, UserRole.ACCOUNTANT)
+  @ModuleAccess('approvals')
   @Post('approval-requests/:id/reject')
   rejectRequest(@Param('id') id: string, @Req() req: AuthedRequest) {
     return this.service.rejectInvoiceApprovalRequest(id, { userId: req.user?.userId, email: req.user?.email });

@@ -1,7 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { CreateProjectDto, UpdateProjectDto } from './dto/project.dto';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('hr')
 @Controller('projects')
 export class ProjectController {
   constructor(private service: ProjectService) {}

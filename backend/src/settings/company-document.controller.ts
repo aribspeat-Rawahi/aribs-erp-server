@@ -5,12 +5,14 @@ import { CompanyDocumentService } from './company-document.service';
 import { UploadCompanyDocumentDto, UpdateCompanyDocumentDto } from './dto/settings.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 const ALLOWED_DOCUMENT_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
 
 // Company-level document library (trade license, VAT certificate, etc.) —
 // same restricted role set as SettingsController's update(), since these
 // are official company papers, not something every user should manage.
+@ModuleAccess('settings')
 @Controller('settings/documents')
 @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD)
 export class CompanyDocumentController {

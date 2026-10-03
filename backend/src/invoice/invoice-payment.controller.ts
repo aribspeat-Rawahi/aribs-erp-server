@@ -4,6 +4,7 @@ import { InvoicePaymentService } from './invoice-payment.service';
 import { CreateInvoicePaymentDto } from './dto/invoice.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
@@ -11,6 +12,7 @@ interface AuthedRequest extends Request {
 
 // Protected by the default JWT guard — recording/removing payments is
 // an accounting action, not something to expose without login.
+@ModuleAccess('invoices')
 @Controller('invoices/:invoiceId/payments')
 export class InvoicePaymentController {
   constructor(private service: InvoicePaymentService) {}

@@ -2,7 +2,9 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ActivityLogService } from './activity-log.service';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('activity_log')
 @Controller('activity-logs')
 export class ActivityLogController {
   constructor(private service: ActivityLogService) {}

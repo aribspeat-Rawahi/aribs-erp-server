@@ -6,7 +6,9 @@ import { UpdateSettingsDto } from './dto/settings.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
 import { Public } from '../auth/public.decorator';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('settings')
 @Controller('settings')
 export class SettingsController {
   constructor(private service: SettingsService) {}

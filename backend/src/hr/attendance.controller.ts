@@ -2,7 +2,9 @@ import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Query 
 import { AttendanceService } from './attendance.service';
 import { MarkAttendanceDto, DevicePunchDto } from './dto/hr.dto';
 import { Public } from '../auth/public.decorator';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('hr')
 @Controller('attendance')
 export class AttendanceController {
   constructor(private service: AttendanceService) {}

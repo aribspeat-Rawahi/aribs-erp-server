@@ -3,9 +3,11 @@ import { TaxRateService } from './tax-rate.service';
 import { CreateTaxRateDto, UpdateTaxRateDto } from './dto/tax-rate.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 const MANAGE_ROLES = [UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.CEO, UserRole.MD];
 
+@ModuleAccess('accounting')
 @Controller('tax-rates')
 export class TaxRateController {
   constructor(private service: TaxRateService) {}

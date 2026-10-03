@@ -3,7 +3,9 @@ import { NoticeService } from './notice.service';
 import { CreateNoticeDto, UpdateNoticeDto } from './dto/notice.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('hr')
 @Controller('notices')
 export class NoticeController {
   constructor(private service: NoticeService) {}

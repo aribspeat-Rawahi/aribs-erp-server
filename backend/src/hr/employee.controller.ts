@@ -17,12 +17,16 @@ import { EmployeeService } from './employee.service';
 import { ArchiveEmployeeDto, CreateEmployeeDto, UpdateEmployeeDto } from './dto/hr.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 const ALLOWED_PHOTO_MIME_TYPES = ['image/png', 'image/jpeg'];
 
+@ModuleAccess('hr')
 @Controller('employees')
 export class EmployeeController {
   constructor(private service: EmployeeService) {}
+
+  @ModuleAccess('hr', { readAlso: ['accounting'] })
 
   @Get()
   findAll() {

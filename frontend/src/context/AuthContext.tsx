@@ -29,6 +29,10 @@ interface AuthContextValue {
   // if their role normally wouldn't); with no override for that module,
   // today's existing role-based default applies unchanged.
   canAccessModule: (moduleKey: string) => boolean;
+  // The user's level for a module ('none' | 'view' | 'edit' | 'full'),
+  // same rules as the backend: Admin/CEO/MD -> full; an explicit setting
+  // wins; otherwise the role default.
+  moduleLevel: (moduleKey: string) => ModuleAccessLevel;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -47,6 +51,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     setLoading(false);
+  }, []);
+
+  // Re-read the user's role and module permissions from the server when
+  // the app opens and whenever the user comes back to the tab/app, so
+  // changes an admin makes on the Team page apply without logging out.
+  // (A deactivated/deleted account gets 401 here and is signed out by the
+  // api client.)
+  useEffect(() => {
+    let lastRefresh = 0;
+    function refresh() {
+      if (!localStorage.getItem('erp_token')) return;
+      if (Date.now() - lastRefresh < 30_000) return;
+      lastRefresh = Date.now();
+      api
+        .get<AuthUser>('/auth/me')
+        .then((res) => {
+          if (!localStorage.getItem('erp_token')) return; // logged out meanwhile
+          localStorage.setItem('erp_user', JSON.stringify(res.data));
+          setUser(res.data);
+        })
+        .catch(() => {
+          // Offline or server busy: keep using the saved copy.
+        });
+    }
+    function onVisible() {
+      if (document.visibilityState === 'visible') refresh();
+    }
+    refresh();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
   async function login(email: string, password: string) {
@@ -75,21 +109,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return roles.includes(user.role);
   }
 
-  function canAccessModule(moduleKey: string) {
-    if (!user) return false;
-    if (['admin', 'ceo', 'md'].includes(user.role)) return true;
+  function moduleLevel(moduleKey: string): ModuleAccessLevel {
+    if (!user) return 'none';
+    if (['admin', 'ceo', 'md'].includes(user.role)) return 'full';
 
     const override = user.modulePermissions?.[moduleKey];
-    if (override) return override !== 'none';
+    if (override) return override;
 
     const defaultRoles = DEFAULT_MODULE_ROLES[moduleKey];
-    if (defaultRoles === undefined) return true; // unknown module key — fail open, not closed
-    if (defaultRoles === null) return true; // any authenticated user
-    return defaultRoles.includes(user.role);
+    if (defaultRoles === undefined) return 'full'; // unknown module key — fail open, not closed
+    if (defaultRoles === null) return 'full'; // any authenticated user
+    return defaultRoles.includes(user.role) ? 'full' : 'none';
+  }
+
+  function canAccessModule(moduleKey: string) {
+    return moduleLevel(moduleKey) !== 'none';
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, setupFirstAdmin, logout, hasAnyRole, canAccessModule }}>
+    <AuthContext.Provider value={{ user, loading, login, setupFirstAdmin, logout, hasAnyRole, canAccessModule, moduleLevel }}>
       {children}
     </AuthContext.Provider>
   );

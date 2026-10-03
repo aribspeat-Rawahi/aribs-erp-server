@@ -3,7 +3,9 @@ import { ShiftService } from './shift.service';
 import { CreateShiftDto, UpdateShiftDto } from './dto/shift.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('hr')
 @Controller('shifts')
 export class ShiftController {
   constructor(private service: ShiftService) {}

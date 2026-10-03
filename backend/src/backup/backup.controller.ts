@@ -5,6 +5,7 @@ import { BackupService } from './backup.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
@@ -12,6 +13,7 @@ interface AuthedRequest extends Request {
 
 const MAX_RESTORE_FILE_BYTES = 100 * 1024 * 1024; // 100 MB — generous for a .sql text dump
 
+@ModuleAccess('settings', { strictRoles: true })
 @Controller('backup')
 export class BackupController {
   constructor(

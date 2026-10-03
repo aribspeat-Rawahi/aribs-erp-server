@@ -14,11 +14,13 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { CustomerDocumentService } from './customer-document.service';
 import { UploadCustomerDocumentDto } from './dto/customer.dto';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 const ALLOWED_DOCUMENT_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
 
 // All routes here are protected by the default JWT guard — these are
 // sensitive registration documents, not something to expose without login.
+@ModuleAccess('customers')
 @Controller('customers/:customerId/documents')
 export class CustomerDocumentController {
   constructor(private service: CustomerDocumentService) {}

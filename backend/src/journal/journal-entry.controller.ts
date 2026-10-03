@@ -4,6 +4,7 @@ import { JournalEntryService } from './journal-entry.service';
 import { CreateJournalEntryDto } from './dto/journal-entry.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 const ACCOUNTING_ROLES = [UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.CEO, UserRole.MD];
 
@@ -14,6 +15,7 @@ interface AuthedRequest extends Request {
 // Manual double-entry bookkeeping — restricted to accounting-facing roles
 // end-to-end (unlike Reimbursement/Expense, which any staff member can
 // submit), since a Journal Entry directly adjusts the books.
+@ModuleAccess('accounting')
 @Controller('journal-entries')
 @Roles(...ACCOUNTING_ROLES)
 export class JournalEntryController {

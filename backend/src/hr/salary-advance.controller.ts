@@ -4,6 +4,7 @@ import { SalaryAdvanceService } from './salary-advance.service';
 import { CreateSalaryAdvanceDto, DisburseSalaryAdvanceDto } from './dto/salary-advance.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
@@ -13,6 +14,7 @@ interface AuthedRequest extends Request {
 // to approve/reject and to actually disburse money.
 const APPROVAL_ROLES = [UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.CEO, UserRole.MD];
 
+@ModuleAccess('hr')
 @Controller('salary-advances')
 export class SalaryAdvanceController {
   constructor(private service: SalaryAdvanceService) {}
@@ -33,12 +35,14 @@ export class SalaryAdvanceController {
   // Called from the Approvals dashboard — mirrors Invoice/Quotation's
   // own approval-requests/:id/approve|reject pattern exactly.
   @Roles(...APPROVAL_ROLES)
+  @ModuleAccess('approvals')
   @Post('approval-requests/:id/approve')
   approveRequest(@Param('id') id: string, @Req() req: AuthedRequest) {
     return this.service.applyApprovedRequest(id, { userId: req.user?.userId, email: req.user?.email });
   }
 
   @Roles(...APPROVAL_ROLES)
+  @ModuleAccess('approvals')
   @Post('approval-requests/:id/reject')
   rejectRequest(@Param('id') id: string, @Req() req: AuthedRequest) {
     return this.service.rejectRequest(id, { userId: req.user?.userId, email: req.user?.email });
@@ -46,6 +50,7 @@ export class SalaryAdvanceController {
 
   // The actual payout, once approved.
   @Roles(...APPROVAL_ROLES)
+  @ModuleAccess('approvals')
   @Post(':id/disburse')
   disburse(@Param('id') id: string, @Body() dto: DisburseSalaryAdvanceDto, @Req() req: AuthedRequest) {
     return this.service.disburse(id, dto, { userId: req.user?.userId, email: req.user?.email });

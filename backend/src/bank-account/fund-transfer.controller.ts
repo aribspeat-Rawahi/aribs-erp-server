@@ -18,6 +18,7 @@ import { FundTransferService } from './fund-transfer.service';
 import { CreateFundTransferDto, UpdateFundTransferDto } from './dto/fund-transfer.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
@@ -29,6 +30,7 @@ const MANAGE_ROLES = [UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.CEO, UserRol
 // Cash/Bank fund transfers — reads open to any authenticated user (same
 // convention as BankAccountController), writes restricted to
 // accounting-facing roles since this moves real money between accounts.
+@ModuleAccess('accounting')
 @Controller('fund-transfers')
 export class FundTransferController {
   constructor(private service: FundTransferService) {}

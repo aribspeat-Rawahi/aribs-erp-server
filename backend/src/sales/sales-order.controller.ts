@@ -2,14 +2,18 @@ import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { SalesOrderService } from './sales-order.service';
 import { CreateSalesOrderDto } from './dto/sales-order.dto';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
 }
 
+@ModuleAccess('sales_orders')
 @Controller('sales-orders')
 export class SalesOrderController {
   constructor(private service: SalesOrderService) {}
+
+  @ModuleAccess('sales_orders', { readAlso: ['inventory'] })
 
   @Get()
   findAll() {

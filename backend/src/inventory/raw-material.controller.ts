@@ -3,10 +3,14 @@ import { RawMaterialService } from './raw-material.service';
 import { CreateRawMaterialDto, AddStockDto } from './dto/raw-material.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('inventory')
 @Controller('raw-materials')
 export class RawMaterialController {
   constructor(private service: RawMaterialService) {}
+
+  @ModuleAccess('inventory', { readAlso: ['suppliers', 'accounting'] })
 
   @Get()
   findAll() {
@@ -21,6 +25,7 @@ export class RawMaterialController {
   // Inventory Reorder Automation — low-stock materials grouped by
   // supplier with a suggested reorder quantity each, for the Suppliers
   // page's "Reorder Suggestions" tab.
+  @ModuleAccess('inventory', { readAlso: ['suppliers'] })
   @Get('reorder-suggestions')
   getReorderSuggestions() {
     return this.service.getReorderSuggestions();

@@ -4,14 +4,18 @@ import { CustomerService } from './customer.service';
 import { CreateCustomerDto } from './dto/customer.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
 }
 
+@ModuleAccess('customers')
 @Controller('customers')
 export class CustomerController {
   constructor(private service: CustomerService) {}
+
+  @ModuleAccess('customers', { readAlso: ['sales_orders', 'quotations', 'delivery_notes', 'invoices', 'recurring_invoices', 'inventory', 'accounting', 'payments', 'pending'] })
 
   @Get()
   findAll() {

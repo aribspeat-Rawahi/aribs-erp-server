@@ -15,6 +15,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { ExpenseService } from './expense.service';
 import { CreateExpenseDto, UpdateExpenseDto } from './dto/accounting.dto';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
@@ -22,6 +23,7 @@ interface AuthedRequest extends Request {
 
 const ALLOWED_INVOICE_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
 
+@ModuleAccess('accounting')
 @Controller('expenses')
 export class ExpenseController {
   constructor(private service: ExpenseService) {}

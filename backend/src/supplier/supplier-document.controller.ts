@@ -14,9 +14,11 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { SupplierDocumentService } from './supplier-document.service';
 import { UploadSupplierDocumentDto } from './dto/supplier.dto';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 const ALLOWED_DOCUMENT_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
 
+@ModuleAccess('suppliers')
 @Controller('suppliers/:supplierId/documents')
 export class SupplierDocumentController {
   constructor(private service: SupplierDocumentService) {}

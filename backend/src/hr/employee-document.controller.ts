@@ -14,12 +14,14 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { EmployeeDocumentService } from './employee-document.service';
 import { UploadEmployeeDocumentDto } from './dto/hr.dto';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 const ALLOWED_DOCUMENT_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
 
 // All routes here are protected by the default JWT guard (nothing is
 // @Public()) — these are sensitive personal documents (Residence ID,
 // Passport, Visa, ...), not something to expose without login.
+@ModuleAccess('hr')
 @Controller('employees/:employeeId/documents')
 export class EmployeeDocumentController {
   constructor(private service: EmployeeDocumentService) {}

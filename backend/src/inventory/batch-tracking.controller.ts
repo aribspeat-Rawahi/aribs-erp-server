@@ -1,11 +1,13 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { BatchTrackingService } from './batch-tracking.service';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 // Read-only endpoints backing the frontend's "Traceability" page. Batch
 // rows themselves are only ever created/consumed as a side effect of
 // Purchase Order receive(), Production Order complete(), Sales Order
 // complete(), and Finished Good stock-in/out — never directly via this
 // controller.
+@ModuleAccess('inventory')
 @Controller()
 export class BatchTrackingController {
   constructor(private service: BatchTrackingService) {}

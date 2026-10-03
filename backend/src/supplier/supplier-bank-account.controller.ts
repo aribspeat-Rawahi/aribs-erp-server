@@ -17,9 +17,11 @@ import { SupplierBankAccountService } from './supplier-bank-account.service';
 import { UpsertSupplierBankAccountDto } from './dto/supplier.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 const ALLOWED_STATEMENT_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
 
+@ModuleAccess('suppliers')
 @Controller('suppliers/:supplierId/bank-accounts')
 export class SupplierBankAccountController {
   constructor(private service: SupplierBankAccountService) {}

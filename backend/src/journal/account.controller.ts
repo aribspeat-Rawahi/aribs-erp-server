@@ -3,12 +3,14 @@ import { AccountService } from './account.service';
 import { CreateAccountDto, UpdateAccountDto } from './dto/account.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 const ACCOUNTING_ROLES = [UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.CEO, UserRole.MD];
 
 // Chart of Accounts — any authenticated user can view it (needed to
 // populate the New Journal Entry form's account dropdown), but only
 // accounting-facing roles can add/edit/deactivate accounts.
+@ModuleAccess('accounting')
 @Controller('accounts')
 export class AccountController {
   constructor(private service: AccountService) {}

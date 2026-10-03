@@ -17,11 +17,13 @@ import { CustomerBankAccountService } from './customer-bank-account.service';
 import { UpsertCustomerBankAccountDto } from './dto/customer.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 const ALLOWED_STATEMENT_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
 
 // All routes here are protected by the default JWT guard — bank details
 // are sensitive, not something to expose without login.
+@ModuleAccess('customers')
 @Controller('customers/:customerId/bank-accounts')
 export class CustomerBankAccountController {
   constructor(private service: CustomerBankAccountService) {}

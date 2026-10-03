@@ -4,6 +4,7 @@ import api from '../api/client';
 import { PageHeader, Card, PrimaryButton, SecondaryButton, IconButton, Modal, EmptyState, Field, inputClass } from '../components/ui';
 import { TEMPLATE_OPTIONS } from '../constants';
 import { viewFile, downloadFile } from '../api/docActions';
+import { useAuth } from '../context/AuthContext';
 
 interface CompanyDocument {
   id: string;
@@ -47,6 +48,10 @@ export function logoUrl(updatedAt?: string) {
 }
 
 export default function Settings() {
+  // Database backup/restore is Admin-only on the server (CEO/MD can open
+  // Settings but not the backup tools), so only Admin sees that card.
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -101,7 +106,9 @@ export default function Settings() {
       .finally(() => setScheduledLoading(false));
   }
 
-  useEffect(loadScheduledBackups, []);
+  useEffect(() => {
+    if (isAdmin) loadScheduledBackups();
+  }, [isAdmin]);
 
   async function onDownloadScheduled(filename: string) {
     setScheduledDownloading(filename);
@@ -538,6 +545,7 @@ export default function Settings() {
         )}
       </Card>
 
+      {isAdmin && (
       <Card className="mt-5">
         <div className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-1">
           <DatabaseBackup size={16} />
@@ -598,6 +606,7 @@ export default function Settings() {
           {restoreNotice && <p className="text-xs text-brand-700 mt-2">{restoreNotice}</p>}
         </div>
       </Card>
+      )}
 
       {confirmingRestore && restoreFile && (
         <Modal title="Confirm database restore" onClose={closeRestoreModal}>

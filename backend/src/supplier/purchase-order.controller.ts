@@ -3,7 +3,9 @@ import { PurchaseOrderService } from './purchase-order.service';
 import { CreatePurchaseOrderDto } from './dto/supplier.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('suppliers')
 @Controller('purchase-orders')
 export class PurchaseOrderController {
   constructor(private service: PurchaseOrderService) {}

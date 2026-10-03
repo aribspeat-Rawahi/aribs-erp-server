@@ -17,11 +17,13 @@ import { PayrollDocumentService } from './payroll-document.service';
 import { UploadPayrollDocumentDto, UpdatePayrollDocumentDto } from './dto/payroll.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 const ALLOWED_DOCUMENT_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
 
 // Payment-proof documents for a payroll row (bank transfer receipt, cash
 // voucher, ...) — same role set as Payroll's own generate/update/mark-paid.
+@ModuleAccess('hr')
 @Controller('payroll/:payrollId/documents')
 @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)
 export class PayrollDocumentController {

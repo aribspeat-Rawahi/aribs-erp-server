@@ -4,14 +4,18 @@ import { BankAccountService } from './bank-account.service';
 import { CreateBankAccountDto, CreateBankTransactionDto, UpdateBankAccountDto } from './dto/bank-account.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
 }
 
+@ModuleAccess('accounting')
 @Controller('bank-accounts')
 export class BankAccountController {
   constructor(private service: BankAccountService) {}
+
+  @ModuleAccess('accounting', { readAlso: ['invoices', 'suppliers', 'hr'] })
 
   @Get()
   findAll() {

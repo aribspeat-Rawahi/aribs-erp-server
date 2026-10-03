@@ -4,14 +4,18 @@ import { SupplierService } from './supplier.service';
 import { CreateSupplierDto } from './dto/supplier.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
 }
 
+@ModuleAccess('suppliers')
 @Controller('suppliers')
 export class SupplierController {
   constructor(private service: SupplierService) {}
+
+  @ModuleAccess('suppliers', { readAlso: ['inventory', 'accounting'] })
 
   @Get()
   findAll() {

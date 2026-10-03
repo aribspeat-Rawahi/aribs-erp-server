@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { showNotice } from './notice';
 
 // Production uses the relative "/api" (from .env.production), so the same
 // build works on any domain (production, staging) and inside the desktop
@@ -22,6 +23,12 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
+    // A page couldn't load something this user isn't allowed to see:
+    // say so instead of silently showing an empty page. (Actions like
+    // Save/Delete already show the server's message themselves.)
+    if (err?.response?.status === 403 && (err.config?.method || 'get').toLowerCase() === 'get') {
+      showNotice(err.response.data?.message || "You don't have permission to view this.");
+    }
     if (err?.response?.status === 401) {
       localStorage.removeItem('erp_token');
       localStorage.removeItem('erp_user');

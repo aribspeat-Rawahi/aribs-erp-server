@@ -3,7 +3,9 @@ import { DepartmentService } from './department.service';
 import { CreateDepartmentDto, UpdateDepartmentDto } from './dto/department.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('hr')
 @Controller('departments')
 export class DepartmentController {
   constructor(private service: DepartmentService) {}

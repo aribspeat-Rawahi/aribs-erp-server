@@ -3,7 +3,9 @@ import { BomService } from './bom.service';
 import { AddBomLineDto } from './dto/manufacturing.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('inventory')
 @Controller('bom')
 export class BomController {
   constructor(private service: BomService) {}

@@ -1,6 +1,8 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('accounting', { readAlso: ['dashboard'] })
 @Controller('analytics')
 export class AnalyticsController {
   constructor(private service: AnalyticsService) {}

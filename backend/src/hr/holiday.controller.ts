@@ -3,7 +3,9 @@ import { HolidayService } from './holiday.service';
 import { CreateHolidayDto, UpdateHolidayDto } from './dto/holiday.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('hr')
 @Controller('holidays')
 export class HolidayController {
   constructor(private service: HolidayService) {}

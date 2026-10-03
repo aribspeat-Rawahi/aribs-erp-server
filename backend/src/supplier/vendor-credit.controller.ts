@@ -4,6 +4,7 @@ import { VendorCreditService } from './vendor-credit.service';
 import { CreateVendorCreditDto, ApplyVendorCreditDto, RefundVendorCreditDto } from './dto/vendor-credit.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
@@ -11,6 +12,7 @@ interface AuthedRequest extends Request {
 
 const MANAGE_ROLES = [UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.CEO, UserRole.MD];
 
+@ModuleAccess('suppliers')
 @Controller('vendor-credits')
 export class VendorCreditController {
   constructor(private service: VendorCreditService) {}

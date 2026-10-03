@@ -4,11 +4,13 @@ import { PayrollService } from './payroll.service';
 import { GeneratePayrollDto, UpdatePayrollDto, MarkPayrollPaidDto } from './dto/payroll.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
 }
 
+@ModuleAccess('hr')
 @Controller('payroll')
 export class PayrollController {
   constructor(private service: PayrollService) {}

@@ -1,7 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { LeaveRequestService } from './leave-request.service';
 import { CreateLeaveRequestDto, UpdateLeaveRequestDto } from './dto/leave-request.dto';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('hr')
 @Controller('leave-requests')
 export class LeaveRequestController {
   constructor(private service: LeaveRequestService) {}

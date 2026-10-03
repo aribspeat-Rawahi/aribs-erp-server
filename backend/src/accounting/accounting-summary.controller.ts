@@ -1,6 +1,8 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { AccountingSummaryService } from './accounting-summary.service';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('accounting')
 @Controller('accounting')
 export class AccountingSummaryController {
   constructor(private service: AccountingSummaryService) {}

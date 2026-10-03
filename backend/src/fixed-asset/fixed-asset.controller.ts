@@ -4,6 +4,7 @@ import { FixedAssetService } from './fixed-asset.service';
 import { CreateFixedAssetDto, UpdateFixedAssetDto, DisposeFixedAssetDto } from './dto/fixed-asset.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
@@ -15,6 +16,7 @@ const MANAGE_ROLES = [UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.CEO, UserRol
 // convention as FundTransferController), writes restricted to
 // accounting-facing roles since this posts real Journal Entries and can
 // move bank/cash balances.
+@ModuleAccess('accounting')
 @Controller('fixed-assets')
 export class FixedAssetController {
   constructor(private service: FixedAssetService) {}

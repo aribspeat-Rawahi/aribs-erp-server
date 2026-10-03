@@ -3,7 +3,9 @@ import { DesignationService } from './designation.service';
 import { CreateDesignationDto, UpdateDesignationDto } from './dto/designation.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('hr')
 @Controller('designations')
 export class DesignationController {
   constructor(private service: DesignationService) {}

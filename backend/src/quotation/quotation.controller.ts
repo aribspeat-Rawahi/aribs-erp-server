@@ -4,11 +4,13 @@ import { QuotationService } from './quotation.service';
 import { CreateQuotationDto, UpdateQuotationDto } from './dto/quotation.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
 }
 
+@ModuleAccess('quotations')
 @Controller('quotations')
 export class QuotationController {
   constructor(private service: QuotationService) {}
@@ -22,6 +24,7 @@ export class QuotationController {
   // waiting on them. Placed before ':id' so it doesn't get swallowed by
   // that route.
   @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD, UserRole.ACCOUNTANT)
+  @ModuleAccess('approvals')
   @Get('edit-requests')
   listPendingEdits() {
     return this.service.listPendingEdits();
@@ -54,12 +57,14 @@ export class QuotationController {
   // submitted. Separate from the edit-requests endpoints below, which
   // handle the pre-existing different-day price-edit flow.
   @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD, UserRole.ACCOUNTANT)
+  @ModuleAccess('approvals')
   @Post('approval-requests/:id/approve')
   approveRequest(@Param('id') id: string, @Req() req: AuthedRequest) {
     return this.service.applyApprovedQuotationRequest(id, { userId: req.user?.userId, email: req.user?.email });
   }
 
   @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD, UserRole.ACCOUNTANT)
+  @ModuleAccess('approvals')
   @Post('approval-requests/:id/reject')
   rejectRequest(@Param('id') id: string, @Req() req: AuthedRequest) {
     return this.service.rejectQuotationApprovalRequest(id, { userId: req.user?.userId, email: req.user?.email });
@@ -74,12 +79,14 @@ export class QuotationController {
   }
 
   @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD, UserRole.ACCOUNTANT)
+  @ModuleAccess('approvals')
   @Post('edit-requests/:id/approve')
   approveEdit(@Param('id') id: string, @Req() req: AuthedRequest) {
     return this.service.approveEdit(id, { userId: req.user?.userId, email: req.user?.email });
   }
 
   @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD, UserRole.ACCOUNTANT)
+  @ModuleAccess('approvals')
   @Post('edit-requests/:id/reject')
   rejectEdit(@Param('id') id: string, @Req() req: AuthedRequest) {
     return this.service.rejectEdit(id, { userId: req.user?.userId, email: req.user?.email });

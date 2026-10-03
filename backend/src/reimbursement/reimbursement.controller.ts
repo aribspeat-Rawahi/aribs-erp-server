@@ -23,6 +23,7 @@ import {
 } from './dto/reimbursement.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
@@ -31,6 +32,7 @@ interface AuthedRequest extends Request {
 const ALLOWED_RECEIPT_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
 const APPROVAL_ROLES = [UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.CEO, UserRole.MD];
 
+@ModuleAccess('accounting')
 @Controller('reimbursements')
 export class ReimbursementController {
   constructor(private service: ReimbursementService) {}
@@ -65,18 +67,21 @@ export class ReimbursementController {
   }
 
   @Roles(...APPROVAL_ROLES)
+  @ModuleAccess('approvals')
   @Post(':id/approve')
   approve(@Param('id') id: string, @Req() req: AuthedRequest) {
     return this.service.approve(id, { userId: req.user?.userId, email: req.user?.email });
   }
 
   @Roles(...APPROVAL_ROLES)
+  @ModuleAccess('approvals')
   @Post(':id/reject')
   reject(@Param('id') id: string, @Body() dto: RejectReimbursementDto, @Req() req: AuthedRequest) {
     return this.service.reject(id, dto.reason, { userId: req.user?.userId, email: req.user?.email });
   }
 
   @Roles(...APPROVAL_ROLES)
+  @ModuleAccess('approvals')
   @Post(':id/mark-paid')
   markPaid(@Param('id') id: string, @Body() dto: MarkReimbursementPaidDto, @Req() req: AuthedRequest) {
     return this.service.markPaid(id, dto, { userId: req.user?.userId, email: req.user?.email });

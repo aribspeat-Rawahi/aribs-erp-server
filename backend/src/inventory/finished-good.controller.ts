@@ -3,10 +3,14 @@ import { FinishedGoodService } from './finished-good.service';
 import { CreateFinishedGoodDto, ScanStockDto } from './dto/finished-good.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('inventory')
 @Controller('finished-goods')
 export class FinishedGoodController {
   constructor(private service: FinishedGoodService) {}
+
+  @ModuleAccess('inventory', { readAlso: ['sales_orders', 'quotations', 'delivery_notes', 'invoices', 'recurring_invoices', 'accounting'] })
 
   @Get()
   findAll() {

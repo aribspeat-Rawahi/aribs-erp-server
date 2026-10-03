@@ -4,11 +4,13 @@ import { ProductionOrderService } from './production-order.service';
 import { CreateProductionOrderDto } from './dto/manufacturing.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
 }
 
+@ModuleAccess('inventory')
 @Controller('production-orders')
 export class ProductionOrderController {
   constructor(private service: ProductionOrderService) {}

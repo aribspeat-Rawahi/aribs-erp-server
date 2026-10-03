@@ -3,7 +3,9 @@ import { EventService } from './event.service';
 import { CreateEventDto, UpdateEventDto } from './dto/event.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
+@ModuleAccess('hr')
 @Controller('events')
 export class EventController {
   constructor(private service: EventService) {}

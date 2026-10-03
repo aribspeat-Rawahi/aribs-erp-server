@@ -4,11 +4,13 @@ import { DeliveryNoteService } from './delivery-note.service';
 import { CreateDeliveryNoteDto, UpdateDeliveryNoteDto } from './dto/delivery-note.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
 }
 
+@ModuleAccess('delivery_notes')
 @Controller('delivery-notes')
 export class DeliveryNoteController {
   constructor(private service: DeliveryNoteService) {}

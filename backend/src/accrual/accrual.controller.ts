@@ -3,6 +3,7 @@ import type { Request } from 'express';
 import { AccrualPostingService } from './accrual-posting.service';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { ModuleAccess } from '../auth/module-access.decorator';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
@@ -13,6 +14,7 @@ interface AuthedRequest extends Request {
 // employee's salary/join date or the income tax rate, without waiting
 // for the 1st-of-month cron (same reasoning as
 // FixedAssetController's per-asset "depreciate now" endpoint).
+@ModuleAccess('accounting')
 @Controller('accruals')
 @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)
 export class AccrualController {
