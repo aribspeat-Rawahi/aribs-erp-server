@@ -8,6 +8,7 @@ import { CustomerService } from '../customer/customer.service';
 import { SettingsService } from '../settings/settings.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { generateInvoicePdf, InvoicePdfItem } from '../common/invoice-pdf.util';
+import { DocumentLinkService } from '../document-link/document-link.service';
 
 @Injectable()
 export class DeliveryNoteService {
@@ -19,6 +20,7 @@ export class DeliveryNoteService {
     private customerService: CustomerService,
     private settingsService: SettingsService,
     private activityLog: ActivityLogService,
+    private documentLinks: DocumentLinkService,
   ) {}
 
   private round3(n: number) {
@@ -249,7 +251,9 @@ export class DeliveryNoteService {
       throw new BadRequestException('This customer has no phone number on file');
     }
     const phone = customer.phone.replace(/[^0-9]/g, '');
-    const message = `Hello ${customer.name}, your delivery note ${note.deliveryNoteNumber} is ready.`;
+    const pdfUrl = this.documentLinks.createUrl('delivery_note', note.id);
+    const message = `Hello ${customer.name}, your delivery note ${note.deliveryNoteNumber} is ready.`
+      + (pdfUrl ? `\n\nView / download PDF:\n${pdfUrl}` : '');
     return { url: `https://wa.me/${phone}?text=${encodeURIComponent(message)}` };
   }
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Plus, Eye, Pencil, Download, MessageCircle, Trash2, PackageCheck } from 'lucide-react';
+import { Plus, Eye, Pencil, Download, MessageCircle, Share2, Trash2, PackageCheck } from 'lucide-react';
 import api from '../api/client';
-import { viewPdf, downloadPdf, openWhatsapp } from '../api/docActions';
+import { viewPdf, downloadPdf, openWhatsapp, sharePdf } from '../api/docActions';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, PrimaryButton, IconButton, Card, EmptyState } from '../components/ui';
 import { labelFor, PAYMENT_TYPE_OPTIONS, DELIVERY_METHOD_OPTIONS } from '../constants';
@@ -129,6 +129,7 @@ export default function DeliveryNotes() {
                     <IconButton icon={Eye} title="View PDF" onClick={() => viewPdf(`/delivery-notes/${n.id}/pdf`)} />
                     <IconButton icon={Download} title="Download PDF" onClick={() => downloadPdf(`/delivery-notes/${n.id}/pdf`, `${n.deliveryNoteNumber}.pdf`)} />
                     <IconButton icon={MessageCircle} title="Send on WhatsApp" onClick={() => openWhatsapp(`/delivery-notes/${n.id}/whatsapp-link`)} />
+                    <IconButton icon={Share2} title="Share PDF (attach the file)" onClick={() => sharePdf(`/delivery-notes/${n.id}/pdf`, `${n.deliveryNoteNumber}.pdf`, `Delivery Note ${n.deliveryNoteNumber}`)} />
                     <IconButton icon={Pencil} title="Edit" onClick={() => startEdit(n)} />
                     {n.status === 'draft' && (
                       <IconButton icon={PackageCheck} tone="success" title="Mark delivered" onClick={() => markDelivered(n.id)} />

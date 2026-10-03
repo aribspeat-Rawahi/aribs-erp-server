@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Plus, Eye, Pencil, Download, MessageCircle, Trash2, Truck, Wallet, Bell, RotateCcw, Check, X } from 'lucide-react';
+import { Plus, Eye, Pencil, Download, MessageCircle, Share2, Trash2, Truck, Wallet, Bell, RotateCcw, Check, X } from 'lucide-react';
 import api from '../api/client';
-import { viewPdf, downloadPdf, openWhatsapp } from '../api/docActions';
+import { viewPdf, downloadPdf, openWhatsapp, sharePdf } from '../api/docActions';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Pill, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
 import { labelFor, PAYMENT_TYPE_OPTIONS, DELIVERY_METHOD_OPTIONS } from '../constants';
@@ -253,6 +253,7 @@ export default function Invoices() {
                     <IconButton icon={Pencil} title="Edit" onClick={() => startEdit(inv)} />
                     <IconButton icon={Download} title="Download PDF" onClick={() => downloadPdf(`/invoices/${inv.id}/pdf`, `${inv.invoiceNumber}.pdf`)} />
                     <IconButton icon={MessageCircle} title="Send on WhatsApp" onClick={() => openWhatsapp(`/invoices/${inv.id}/whatsapp-link`)} />
+                    <IconButton icon={Share2} title="Share PDF (attach the file)" onClick={() => sharePdf(`/invoices/${inv.id}/pdf`, `${inv.invoiceNumber}.pdf`, `Invoice ${inv.invoiceNumber}`)} />
                     <IconButton
                       icon={Wallet}
                       tone={inv.paymentStatus === 'paid' ? 'success' : 'default'}

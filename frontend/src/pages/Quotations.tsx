@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Plus, Eye, Pencil, Download, MessageCircle, Trash2, CheckCircle2, ArrowRightCircle } from 'lucide-react';
+import { Plus, Eye, Pencil, Download, MessageCircle, Share2, Trash2, CheckCircle2, ArrowRightCircle } from 'lucide-react';
 import api from '../api/client';
-import { viewPdf, downloadPdf, openWhatsapp } from '../api/docActions';
+import { viewPdf, downloadPdf, openWhatsapp, sharePdf } from '../api/docActions';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, PrimaryButton, IconButton, Card, EmptyState } from '../components/ui';
 import { labelFor, DELIVERY_METHOD_OPTIONS } from '../constants';
@@ -137,6 +137,7 @@ export default function Quotations() {
                     <IconButton icon={Eye} title="View PDF" onClick={() => viewPdf(`/quotations/${q.id}/pdf`)} />
                     <IconButton icon={Download} title="Download PDF" onClick={() => downloadPdf(`/quotations/${q.id}/pdf`, `${q.quotationNumber}.pdf`)} />
                     <IconButton icon={MessageCircle} title="Send on WhatsApp" onClick={() => openWhatsapp(`/quotations/${q.id}/whatsapp-link`)} />
+                    <IconButton icon={Share2} title="Share PDF (attach the file)" onClick={() => sharePdf(`/quotations/${q.id}/pdf`, `${q.quotationNumber}.pdf`, `Quotation ${q.quotationNumber}`)} />
                     {q.status !== 'converted' && (
                       <IconButton icon={Pencil} title="Edit" onClick={() => startEdit(q)} />
                     )}

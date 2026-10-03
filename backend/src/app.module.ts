@@ -28,6 +28,8 @@ import { AccrualModule } from './accrual/accrual.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { PaymentModule } from './payment/payment.module';
 import { BackupModule } from './backup/backup.module';
+import { DocumentLinkModule } from './document-link/document-link.module';
+import { PublicDocumentModule } from './public-document/public-document.module';
 
 @Module({
   imports: [
@@ -89,6 +91,8 @@ import { BackupModule } from './backup/backup.module';
     AnalyticsModule,
     PaymentModule,
     BackupModule,
+    DocumentLinkModule,
+    PublicDocumentModule,
   ],
 })
 export class AppModule {}

@@ -19,6 +19,7 @@ import { computePaymentStatus } from './payment-status.util';
 import { ApprovalService } from '../approval/approval.service';
 import { ApprovalRequestType, ApprovalRequestStatus } from '../approval/approval-request.entity';
 import { JournalPostingService } from '../journal/journal-posting.service';
+import { DocumentLinkService } from '../document-link/document-link.service';
 
 // Auto-posted Chart-of-Accounts codes for invoice issuance (Dr Accounts
 // Receivable / Cr Sales Revenue [+ Cr VAT Payable]) — matches the
@@ -70,6 +71,7 @@ export class InvoiceService {
     // import ApprovalModule without a cycle. See CRM Step 7.
     private approvalService: ApprovalService,
     private journalPosting: JournalPostingService,
+    private documentLinks: DocumentLinkService,
   ) {
     this.uploadDir = this.config.get('INVOICE_UPLOAD_DIR') || './uploads/invoices';
     fs.mkdirSync(this.uploadDir, { recursive: true });
@@ -549,7 +551,9 @@ export class InvoiceService {
       throw new BadRequestException('This customer has no phone number on file');
     }
     const phone = customer.phone.replace(/[^0-9]/g, '');
-    const message = `Hello ${customer.name}, your invoice ${invoice.invoiceNumber} totalling ${invoice.total} OMR is ready.`;
+    const pdfUrl = invoice.pdfPath ? this.documentLinks.createUrl('invoice', invoice.id) : null;
+    const message = `Hello ${customer.name}, your invoice ${invoice.invoiceNumber} totalling ${invoice.total} OMR is ready.`
+      + (pdfUrl ? `\n\nView / download PDF:\n${pdfUrl}` : '');
     return { url: `https://wa.me/${phone}?text=${encodeURIComponent(message)}` };
   }
 
