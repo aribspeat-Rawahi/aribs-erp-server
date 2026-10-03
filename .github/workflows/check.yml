@@ -12,6 +12,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_DATABASE: erp_ci
+          MARIADB_USER: erp
+          MARIADB_PASSWORD: ci-test-password
+          MARIADB_ROOT_PASSWORD: ci-root-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
       - uses: actions/checkout@v4
 
@@ -27,6 +40,35 @@ jobs:
             echo "$found"
             exit 1
           fi
+
+      # Database safety net: apply every migration to an empty MariaDB,
+      # then make sure the entities match the migrations exactly. If someone
+      # changed an entity without adding a migration, this step fails.
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci --include=dev
+
+      - name: Migrations - apply all to an empty database
+        working-directory: backend
+        env:
+          DB_TYPE: mariadb
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USERNAME: erp
+          DB_PASSWORD: ci-test-password
+          DB_DATABASE: erp_ci
+        run: npm run migration:run
+
+      - name: Migrations - every entity change must have a migration
+        working-directory: backend
+        env:
+          DB_TYPE: mariadb
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USERNAME: erp
+          DB_PASSWORD: ci-test-password
+          DB_DATABASE: erp_ci
+        run: npm run migration:check
 
       - name: Build frontend + backend (same command Hostinger runs)
         run: npm run build

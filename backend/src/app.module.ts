@@ -28,6 +28,9 @@ import { AccrualModule } from './accrual/accrual.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { PaymentModule } from './payment/payment.module';
 import { BackupModule } from './backup/backup.module';
+import { DataSource } from 'typeorm';
+import { databaseOptions, detectDatabaseType, keepUuidAsVarchar } from './data-source';
+import { SchemaCheckModule } from './schema-check/schema-check.module';
 import { DocumentLinkModule } from './document-link/document-link.module';
 import { PublicDocumentModule } from './public-document/public-document.module';
 
@@ -43,28 +46,24 @@ import { PublicDocumentModule } from './public-document/public-document.module';
     // Reminder Automation). No config needed here; each job declares its
     // own schedule.
     ScheduleModule.forRoot(),
+    // Database: settings shared with the migration CLI (see data-source.ts).
+    // synchronize is permanently OFF - schema changes only happen through
+    // migration files in src/migrations, which run automatically on startup.
+    // ConfigModule loads .env (local dev) into process.env before this runs.
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'mysql',
-        host: config.get('DB_HOST'),
-        port: parseInt(config.get('DB_PORT') || '3306', 10),
-        username: config.get('DB_USERNAME'),
-        password: config.get('DB_PASSWORD'),
-        database: config.get('DB_DATABASE'),
+      useFactory: async () => ({
+        ...databaseOptions(process.env, await detectDatabaseType()),
+        // Entities are registered by each module (forFeature).
+        entities: undefined,
         autoLoadEntities: true,
-        // NOTE: synchronize:true auto-creates/updates tables from entities —
-        // great while building, but should be turned OFF once the production
-        // schema is confirmed fully up to date (this project has no migration
-        // system, so several recently-added tables such as approval_requests,
-        // recurring_invoices, customer_interactions and
-        // supplier_interactions may not exist yet in a real deploy — leave
-        // this on until you've verified the production DB has them). Once
-        // confirmed, set DB_SYNCHRONIZE=false in .env to stop schema
-        // auto-sync in production.
-        synchronize: (config.get('DB_SYNCHRONIZE') ?? 'true') !== 'false',
+        migrationsRun: true,
       }),
+      dataSourceFactory: async (options) => {
+        if (!options) throw new Error('Missing database options');
+        return keepUuidAsVarchar(new DataSource(options)).initialize();
+      },
     }),
     InventoryModule,
     ManufacturingModule,
@@ -93,6 +92,7 @@ import { PublicDocumentModule } from './public-document/public-document.module';
     BackupModule,
     DocumentLinkModule,
     PublicDocumentModule,
+    SchemaCheckModule,
   ],
 })
 export class AppModule {}

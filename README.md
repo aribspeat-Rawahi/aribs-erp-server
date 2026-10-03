@@ -52,7 +52,6 @@ the full list. Required:
 | `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_DATABASE` | separate DB for staging |
 | `JWT_SECRET`    | long random string, different per environment |
 | `DATA_DIR`      | persistent folder **outside** the app, e.g. `/home/<user>/erp-data` (staging: `/home/<user>/erp-data-staging`) |
-| `DB_SYNCHRONIZE`| `true` for now (until migrations are introduced) |
 | `CORS_ALLOWED_ORIGINS` | the site's own URL |
 
 Generate a random secret:
@@ -70,6 +69,34 @@ directory (paths like `uploads/invoices/...` are also stored in the DB).
 A Git deploy rebuilds the app folder, so `DATA_DIR` moves the working
 directory to a folder that survives deploys. When moving an existing
 server, copy its old `uploads/` folder into `DATA_DIR` first.
+
+## Database changes (migrations)
+
+`synchronize` is permanently **off**. The schema changes only through
+migration files in `backend/src/migrations`, which the app runs
+**automatically on startup** (each in its own transaction — if one fails,
+it is rolled back and the app does not start, so nothing is half-applied).
+
+When an entity changes:
+
+```bash
+cd backend
+# needs a local database that is at the CURRENT migrations
+npm run migration:run
+npm run migration:generate -- src/migrations/DescribeTheChange
+# review the generated SQL, then commit it together with the entity change
+```
+
+Safety nets:
+- **Build check** applies all migrations to an empty MariaDB and fails if any
+  entity change has no migration (`npm run migration:check`).
+- On startup the app logs `Database schema matches the code.` or a warning
+  listing differences (read-only — it never changes anything itself).
+- The `InitialSchema` baseline is skipped on databases that already existed
+  (staging/production) and cannot be reverted.
+- Destructive changes (dropping/renaming columns) must be written by hand so
+  data is copied first — never accept a generated `DROP COLUMN` blindly.
+- The MariaDB/MySQL driver is auto-detected; UUID ids stay `varchar(36)`.
 
 ## Local development
 

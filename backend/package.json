@@ -7,7 +7,14 @@
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
-    "start:prod": "node dist/main"
+    "start:prod": "node dist/main",
+    "typeorm": "typeorm -d dist/data-source.js",
+    "migration:generate": "nest build && typeorm -d dist/data-source.js migration:generate",
+    "migration:create": "typeorm migration:create",
+    "migration:run": "nest build && typeorm -d dist/data-source.js migration:run",
+    "migration:revert": "nest build && typeorm -d dist/data-source.js migration:revert",
+    "migration:show": "nest build && typeorm -d dist/data-source.js migration:show",
+    "migration:check": "nest build && typeorm -d dist/data-source.js migration:generate src/migrations/Unused --check"
   },
   "dependencies": {
     "@nestjs/common": "^12.1.0",
