@@ -17,7 +17,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string, role?: Role) => Promise<void>;
+  setupFirstAdmin: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   hasAnyRole: (roles: Role[]) => boolean;
   // Whether the current user can see/open a given module (a left-menu
@@ -57,8 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(loggedInUser);
   }
 
-  async function register(name: string, email: string, password: string, role?: Role) {
-    await api.post('/auth/register', { name, email, password, role });
+  // One-time first-run setup (the backend refuses it once any account
+  // exists). Other accounts are created by an admin on the Team page.
+  async function setupFirstAdmin(name: string, email: string, password: string) {
+    await api.post('/auth/setup', { name, email, password });
     await login(email, password);
   }
 
@@ -87,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, hasAnyRole, canAccessModule }}>
+    <AuthContext.Provider value={{ user, loading, login, setupFirstAdmin, logout, hasAnyRole, canAccessModule }}>
       {children}
     </AuthContext.Provider>
   );

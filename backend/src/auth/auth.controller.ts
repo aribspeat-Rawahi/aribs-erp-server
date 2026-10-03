@@ -10,12 +10,26 @@ import { Public } from './public.decorator';
 export class AuthController {
   constructor(private service: AuthService) {}
 
-  // Open only long enough to create the first Admin account; once real
-  // users exist, protect this behind @Roles(UserRole.ADMIN) in production.
-  // Rate-limited (see ThrottlerModule in app.module.ts) since this is a
-  // public, unauthenticated route.
+  // Public: tells the login screen whether to show the one-time
+  // "Create the admin account" link (only before any account exists).
+  @Public()
+  @Get('setup-status')
+  async setupStatus() {
+    return { needsSetup: await this.service.needsSetup() };
+  }
+
+  // Public, but works exactly ONCE: creates the first account as Admin and
+  // is refused (403) as soon as any account exists. Rate-limited.
   @Public()
   @UseGuards(ThrottlerGuard)
+  @Post('setup')
+  setup(@Body() dto: RegisterUserDto) {
+    return this.service.setupFirstAdmin(dto);
+  }
+
+  // Creating accounts is NOT public any more - only Admin, CEO and MD
+  // (the Team page). Nobody on the internet can sign themselves up.
+  @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD)
   @Post('register')
   register(@Body() dto: RegisterUserDto) {
     return this.service.register(dto);

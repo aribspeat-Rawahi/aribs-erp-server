@@ -5,11 +5,11 @@ import { inputClass } from '../components/ui';
 import api from '../api/client';
 import { logoUrl } from './Settings';
 
-// Bootstrap flow: only meaningful the very first time, before any user
-// exists — the backend forces every later self-registration to the Sales
-// role regardless of what's sent here (see AuthService.register).
+// First-run setup: creates the very first account as Admin. Only reachable
+// while no account exists - afterwards this page redirects to the login
+// screen, and the backend refuses /auth/setup regardless (403).
 export default function Setup() {
-  const { user, register } = useAuth();
+  const { user, setupFirstAdmin } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -21,6 +21,15 @@ export default function Setup() {
   const [hasLogo, setHasLogo] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoVersion, setLogoVersion] = useState<string | undefined>(undefined);
+  // null = still checking with the server
+  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    api
+      .get('/auth/setup-status')
+      .then((res) => setNeedsSetup(Boolean(res.data?.needsSetup)))
+      .catch(() => setNeedsSetup(false)); // fail closed: never show setup on errors
+  }, []);
 
   useEffect(() => {
     api.get('/settings').then((res) => {
@@ -31,13 +40,15 @@ export default function Setup() {
   }, []);
 
   if (user) return <Navigate to="/" replace />;
+  if (needsSetup === false) return <Navigate to="/login" replace />;
+  if (needsSetup === null) return null;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
     setBusy(true);
     try {
-      await register(name, email, password, 'admin');
+      await setupFirstAdmin(name, email, password);
       navigate('/');
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Could not create the account.');

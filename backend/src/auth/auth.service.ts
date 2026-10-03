@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, Not } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -31,31 +31,64 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
+  // True only while the system has never had a single account (deleted
+  // accounts still count) - used to show/hide the first-run setup screen.
+  async needsSetup(): Promise<boolean> {
+    return (await this.userRepo.count({ withDeleted: true })) === 0;
+  }
+
+  // First-run setup: creates the very first account as Admin. Works exactly
+  // once - as soon as any account exists it is refused, so nobody can use it
+  // to make themselves an admin later. A database-level lock makes two
+  // simultaneous attempts impossible.
+  async setupFirstAdmin(dto: RegisterUserDto) {
+    return this.userRepo.manager.transaction(async (manager) => {
+      await manager.query("SELECT GET_LOCK('aribs_erp_first_admin_setup', 10)");
+      try {
+        const total = await manager.count(User, { withDeleted: true });
+        if (total > 0) throw new ForbiddenException('Setup is already complete. Ask an administrator to create your account.');
+        const user = manager.create(User, {
+          name: dto.name,
+          email: dto.email,
+          passwordHash: await bcrypt.hash(dto.password, 10),
+          role: UserRole.ADMIN,
+        });
+        const saved = await manager.save(user);
+        const { passwordHash: _, ...safeUser } = saved;
+        return safeUser;
+      } finally {
+        await manager.query("SELECT RELEASE_LOCK('aribs_erp_first_admin_setup')");
+      }
+    });
+  }
+
+  // Creating accounts is Admin/CEO/MD-only (enforced at the controller) -
+  // the same people who can already change anyone's role, so honouring a
+  // requested role here grants no extra power. Defaults to Sales.
   async register(dto: RegisterUserDto) {
-    const existing = await this.userRepo.findOne({ where: { email: dto.email } });
+    const existing = await this.userRepo.findOne({ where: { email: dto.email }, withDeleted: true });
     if (existing) throw new ConflictException('A user with this email already exists');
-
-    const passwordHash = await bcrypt.hash(dto.password, 10);
-
-    // /auth/register is public (no login required), so it must never let
-    // someone hand themselves an elevated role. The one exception is
-    // bootstrapping: if this is the very first account in the whole
-    // system (used by the /setup page), the requested role is honored so
-    // that account can be Admin. Every account after that is forced to
-    // the lowest-privilege role — real role changes only happen via
-    // PATCH /auth/users/:id, which is Admin-only.
-    const isFirstUser = (await this.userRepo.count()) === 0;
-    const role = isFirstUser ? dto.role || UserRole.SALES : UserRole.SALES;
 
     const user = this.userRepo.create({
       name: dto.name,
       email: dto.email,
-      passwordHash,
-      role,
+      passwordHash: await bcrypt.hash(dto.password, 10),
+      role: dto.role || UserRole.SALES,
     });
     const saved = await this.userRepo.save(user);
     const { passwordHash: _, ...safeUser } = saved;
     return safeUser;
+  }
+
+  // Called by JwtStrategy on EVERY request: a token is only honoured while
+  // its account still exists, is active and not deleted, and the CURRENT
+  // role/permissions from the database are used (not the ones baked into
+  // the token at login). Deactivating, deleting or demoting a user takes
+  // effect immediately instead of after the 8-hour token expiry.
+  async findActiveForToken(userId: string) {
+    const user = await this.userRepo.findOne({ where: { id: userId }, withDeleted: true });
+    if (!user || !user.active || user.deletedAt) return null;
+    return user;
   }
 
   async login(dto: LoginDto) {

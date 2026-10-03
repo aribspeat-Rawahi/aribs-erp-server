@@ -17,6 +17,15 @@ export default function Login() {
   const [hasLogo, setHasLogo] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoVersion, setLogoVersion] = useState<string | undefined>(undefined);
+  // Show the one-time setup link only while the system has no accounts.
+  const [needsSetup, setNeedsSetup] = useState(false);
+
+  useEffect(() => {
+    api
+      .get('/auth/setup-status')
+      .then((res) => setNeedsSetup(Boolean(res.data?.needsSetup)))
+      .catch(() => setNeedsSetup(false));
+  }, []);
 
   useEffect(() => {
     api.get('/settings').then((res) => {
@@ -86,12 +95,14 @@ export default function Login() {
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-        <p className="text-xs text-muted mt-5 text-center">
-          First time setting this up?{' '}
-          <Link to="/setup" className="text-brand-600 font-medium">
-            Create the admin account
-          </Link>
-        </p>
+        {needsSetup && (
+          <p className="text-xs text-muted mt-5 text-center">
+            First time setting this up?{' '}
+            <Link to="/setup" className="text-brand-600 font-medium">
+              Create the admin account
+            </Link>
+          </p>
+        )}
         <p className="text-xs text-muted/70 mt-4 text-center">Developed By Rajib Sarder</p>
       </div>
     </div>
