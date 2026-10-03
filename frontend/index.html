@@ -5,6 +5,29 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ARIBS ERP</title>
+    <script>
+      // If this page was loaded just before (or during) a new deploy, the
+      // app's script/style files it points to may already be gone, which
+      // leaves a blank white screen. Reload once to pick up the new version.
+      (function () {
+        var KEY = 'erp_asset_reload_at';
+        window.addEventListener(
+          'error',
+          function (e) {
+            var el = e && e.target;
+            if (!el || (el.tagName !== 'SCRIPT' && el.tagName !== 'LINK')) return;
+            var url = el.src || el.href || '';
+            if (url.indexOf('/assets/') === -1) return;
+            var last = 0;
+            try { last = Number(sessionStorage.getItem(KEY) || 0); } catch (err) {}
+            if (Date.now() - last < 30000) return; // already retried recently - avoid a reload loop
+            try { sessionStorage.setItem(KEY, String(Date.now())); } catch (err) {}
+            setTimeout(function () { window.location.reload(); }, 3000);
+          },
+          true,
+        );
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
