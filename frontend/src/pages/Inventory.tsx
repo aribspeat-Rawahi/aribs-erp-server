@@ -303,11 +303,11 @@ export default function Inventory() {
             subtitle={tab === 'finished' ? 'Manufactured products ready for sale' : 'Materials used to manufacture finished goods'}
             action={
               <div className="flex gap-2">
-                {tab === 'finished' && <SecondaryButton icon={ScanLine} onClick={() => setShowScan(true)}>Scan stock</SecondaryButton>}
+                {tab === 'finished' && <SecondaryButton icon={ScanLine} requires="edit" onClick={() => setShowScan(true)}>Scan stock</SecondaryButton>}
                 {items.length > 0 && (
-                  <SecondaryButton icon={PackagePlus} onClick={() => setShowAddStock(true)}>Add stock</SecondaryButton>
+                  <SecondaryButton icon={PackagePlus} requires="edit" onClick={() => setShowAddStock(true)}>Add stock</SecondaryButton>
                 )}
-                <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>Add product</PrimaryButton>
+                <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAdd(true)}>Add product</PrimaryButton>
               </div>
             }
           />
@@ -342,9 +342,9 @@ export default function Inventory() {
                         </div>
                         <div className="flex items-center gap-1.5">
                           <IconButton icon={Eye} title="View" onClick={() => setViewingItem(item)} />
-                          <IconButton icon={Pencil} title="Edit" onClick={() => setEditingItem(item)} />
+                          <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => setEditingItem(item)} />
                           {canDelete && (
-                            <IconButton icon={Trash2} tone="danger" title="Delete (Admin only)" onClick={() => removeItem(item)} />
+                            <IconButton icon={Trash2} tone="danger" title="Delete (Admin only)" requires="full" onClick={() => removeItem(item)} />
                           )}
                         </div>
                       </div>
@@ -418,7 +418,7 @@ export default function Inventory() {
           <PageHeader
             title="Production Orders"
             subtitle="Manufacturing runs against your recipes"
-            action={<PrimaryButton icon={Plus} onClick={() => setShowNewOrder(true)}>New production order</PrimaryButton>}
+            action={<PrimaryButton icon={Plus} requires="edit" onClick={() => setShowNewOrder(true)}>New production order</PrimaryButton>}
           />
           {ordersLoading ? (
             <div className="text-sm text-muted">Loading…</div>
@@ -441,17 +441,17 @@ export default function Inventory() {
                       </span>
                       {o.status === 'planned' && (
                         <>
-                          <SecondaryButton onClick={() => act(o.id, 'complete')}>Complete</SecondaryButton>
-                          <SecondaryButton onClick={() => act(o.id, 'cancel')}>Cancel</SecondaryButton>
+                          <SecondaryButton requires="edit" onClick={() => act(o.id, 'complete')}>Complete</SecondaryButton>
+                          <SecondaryButton requires="edit" onClick={() => act(o.id, 'cancel')}>Cancel</SecondaryButton>
                         </>
                       )}
                       <div className="flex items-center gap-1.5">
                         <IconButton icon={Eye} title="View" onClick={() => setViewingOrder(o)} />
                         {o.status === 'planned' && (
                           <>
-                            <IconButton icon={Pencil} title="Edit" onClick={() => setEditingOrder(o)} />
+                            <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => setEditingOrder(o)} />
                             {canDelete && (
-                              <IconButton icon={Trash2} tone="danger" title="Delete (Admin only)" onClick={() => removeOrder(o.id)} />
+                              <IconButton icon={Trash2} tone="danger" title="Delete (Admin only)" requires="full" onClick={() => removeOrder(o.id)} />
                             )}
                           </>
                         )}
@@ -500,7 +500,7 @@ export default function Inventory() {
           <PageHeader
             title="Recipes (BOM)"
             subtitle="How much raw material each finished good needs"
-            action={<PrimaryButton icon={Plus} onClick={() => setShowAddLine(true)}>Add ingredient</PrimaryButton>}
+            action={<PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAddLine(true)}>Add ingredient</PrimaryButton>}
           />
           <div className="mb-4 max-w-xs">
             <select className={inputClass} value={selectedFg} onChange={(e) => setSelectedFg(e.target.value)}>
@@ -522,8 +522,8 @@ export default function Inventory() {
                     <div className="flex items-center gap-3">
                       <span className="text-muted">{Number(line.quantityPerUnit).toFixed(4)} per unit</span>
                       <div className="flex items-center gap-1.5">
-                        <IconButton icon={Pencil} title="Edit" onClick={() => setEditingLine(line)} />
-                        <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => removeBomLine(line.id)} />
+                        <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => setEditingLine(line)} />
+                        <IconButton icon={Trash2} tone="danger" title="Remove" requires="full" onClick={() => removeBomLine(line.id)} />
                       </div>
                     </div>
                   </div>
@@ -862,7 +862,7 @@ function AddProductModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -977,7 +977,7 @@ function ScanStockModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Confirm'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Confirm'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -1087,7 +1087,7 @@ function AddStockModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Add stock'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Add stock'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -1163,7 +1163,7 @@ function NewProductionOrderModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : order ? 'Save' : 'Create'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : order ? 'Save' : 'Create'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -1301,7 +1301,7 @@ function BomLineModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>

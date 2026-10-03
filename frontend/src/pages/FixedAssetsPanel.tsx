@@ -111,7 +111,7 @@ export default function FixedAssetsPanel() {
       <PageHeader
         title="Fixed Assets"
         subtitle="Property, Plant & Equipment register — straight-line depreciation posts automatically every month"
-        action={canManage ? <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>Register asset</PrimaryButton> : undefined}
+        action={canManage ? <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAdd(true)}>Register asset</PrimaryButton> : undefined}
       />
 
       <div className="grid grid-cols-3 gap-4 mb-4">
@@ -147,11 +147,11 @@ export default function FixedAssetsPanel() {
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusTone[a.status]}`}>{a.status}</span>
                     {canManage && a.status === 'active' && (
                       <div className="flex items-center gap-1.5">
-                        <IconButton icon={Zap} title={busyId === a.id ? 'Posting…' : "Post this month's depreciation now"} onClick={() => (busyId === a.id ? undefined : depreciateNow(a.id))} />
-                        <IconButton icon={Pencil} title="Edit" onClick={() => setEditAsset(a)} />
-                        <IconButton icon={RotateCcw} title="Dispose" onClick={() => setDisposingAsset(a)} />
+                        <IconButton icon={Zap} requires="edit" title={busyId === a.id ? 'Posting…' : "Post this month's depreciation now"} onClick={() => (busyId === a.id ? undefined : depreciateNow(a.id))} />
+                        <IconButton icon={Pencil} requires="edit" title="Edit" onClick={() => setEditAsset(a)} />
+                        <IconButton icon={RotateCcw} requires="edit" title="Dispose" onClick={() => setDisposingAsset(a)} />
                         {Number(a.accumulatedDepreciation) === 0 && (
-                          <IconButton icon={Trash2} tone="danger" title="Delete" onClick={() => removeAsset(a.id)} />
+                          <IconButton icon={Trash2} tone="danger" requires="full" title="Delete" onClick={() => removeAsset(a.id)} />
                         )}
                       </div>
                     )}
@@ -304,7 +304,7 @@ function AssetModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -373,7 +373,7 @@ function DisposeModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Disposing…' : 'Confirm disposal'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Disposing…' : 'Confirm disposal'}</PrimaryButton>
         </div>
       </form>
     </Modal>

@@ -74,7 +74,7 @@ export default function SalaryAdvance() {
         title="Salary Advance"
         subtitle="Request an advance and track every request through approval and payout"
         action={
-          <PrimaryButton icon={Plus} onClick={() => setShowRequest(true)}>
+          <PrimaryButton icon={Plus} onClick={() => setShowRequest(true)} requires="edit">
             New request
           </PrimaryButton>
         }
@@ -117,7 +117,9 @@ export default function SalaryAdvance() {
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-sm font-semibold text-brand-700">{Number(r.amount).toFixed(3)} OMR</span>
                   {canManage && r.status === 'approved' && !r.disbursed && (
-                    <SecondaryButton onClick={() => setDisbursingItem(r)}>Disburse</SecondaryButton>
+                    <SecondaryButton onClick={() => setDisbursingItem(r)} requires="edit" requiresModule="approvals">
+                      Disburse
+                    </SecondaryButton>
                   )}
                 </div>
               </div>
@@ -229,7 +231,7 @@ function NewRequestModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>
+          <PrimaryButton type="submit" disabled={busy} requires="edit">
             {busy ? 'Submitting…' : 'Submit request'}
           </PrimaryButton>
         </div>
@@ -284,7 +286,7 @@ function DisburseModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>
+          <PrimaryButton type="submit" disabled={busy} requires="edit" requiresModule="approvals">
             {busy ? 'Saving…' : 'Confirm payout'}
           </PrimaryButton>
         </div>

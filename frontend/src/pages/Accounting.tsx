@@ -241,7 +241,7 @@ export default function Accounting() {
       {tab === 'expenses' && (
         <>
           <div className="flex justify-end mb-4">
-            <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>Add expense</PrimaryButton>
+            <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAdd(true)}>Add expense</PrimaryButton>
           </div>
 
           <div className="grid grid-cols-3 gap-4 mb-4">
@@ -288,6 +288,7 @@ export default function Accounting() {
                         ) : (
                           <SecondaryButton
                             icon={Upload}
+                            requires="edit"
                             onClick={() => {
                               uploadTargetId.current = exp.id;
                               uploadInputRef.current?.click();
@@ -296,7 +297,7 @@ export default function Accounting() {
                             {uploadingId === exp.id ? 'Uploading…' : 'Scan/Upload invoice'}
                           </SecondaryButton>
                         )}
-                        <IconButton icon={Pencil} title="Edit expense" onClick={() => setEditExpense(exp)} />
+                        <IconButton icon={Pencil} requires="edit" title="Edit expense" onClick={() => setEditExpense(exp)} />
                       </div>
                     </div>
                   </div>
@@ -346,7 +347,7 @@ export default function Accounting() {
       {tab === 'reimbursements' && (
         <>
           <div className="flex justify-end mb-4">
-            <PrimaryButton icon={Plus} onClick={() => setShowAddReimb(true)}>New claim</PrimaryButton>
+            <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAddReimb(true)}>New claim</PrimaryButton>
           </div>
 
           {reimbLoading ? (
@@ -381,6 +382,7 @@ export default function Accounting() {
                         ) : (
                           <SecondaryButton
                             icon={Upload}
+                            requires="edit"
                             onClick={() => {
                               receiptTargetId.current = r.id;
                               receiptInputRef.current?.click();
@@ -391,18 +393,18 @@ export default function Accounting() {
                         )}
                         {r.status === 'pending' && (
                           <>
-                            <IconButton icon={Pencil} title="Edit claim" onClick={() => setEditReimb(r)} />
-                            <IconButton icon={Trash2} tone="danger" title="Delete claim" onClick={() => removeReimbursement(r.id)} />
+                            <IconButton icon={Pencil} requires="edit" title="Edit claim" onClick={() => setEditReimb(r)} />
+                            <IconButton icon={Trash2} tone="danger" requires="full" title="Delete claim" onClick={() => removeReimbursement(r.id)} />
                             {canDecide && (
                               <>
-                                <IconButton icon={Check} tone="success" title="Approve" onClick={() => approveReimbursement(r.id)} />
-                                <IconButton icon={X} tone="danger" title="Reject" onClick={() => setRejectingReimb(r)} />
+                                <IconButton icon={Check} tone="success" requires="edit" requiresModule="approvals" title="Approve" onClick={() => approveReimbursement(r.id)} />
+                                <IconButton icon={X} tone="danger" requires="edit" requiresModule="approvals" title="Reject" onClick={() => setRejectingReimb(r)} />
                               </>
                             )}
                           </>
                         )}
                         {r.status === 'approved' && canDecide && (
-                          <IconButton icon={BadgeDollarSign} title="Mark as paid" onClick={() => setPayingReimb(r)} />
+                          <IconButton icon={BadgeDollarSign} requires="edit" requiresModule="approvals" title="Mark as paid" onClick={() => setPayingReimb(r)} />
                         )}
                       </div>
                     </div>
@@ -570,7 +572,7 @@ function AddExpenseModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -684,7 +686,7 @@ function EditExpenseModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -799,7 +801,7 @@ function ReimbursementModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : claim ? 'Save' : 'Submit'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : claim ? 'Save' : 'Submit'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -842,7 +844,7 @@ function RejectReimbursementModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Reject'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" requiresModule="approvals" disabled={busy}>{busy ? 'Saving…' : 'Reject'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -909,7 +911,7 @@ function MarkPaidModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Confirm payment'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" requiresModule="approvals" disabled={busy}>{busy ? 'Saving…' : 'Confirm payment'}</PrimaryButton>
         </div>
       </form>
     </Modal>

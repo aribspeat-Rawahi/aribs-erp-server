@@ -133,10 +133,10 @@ export default function AccountsPanel() {
         <div className="text-sm font-semibold text-ink">Cash, Bank and Transfer Fund</div>
         {canManage && (
           <div className="flex items-center gap-2">
-            <SecondaryButton icon={ArrowLeftRight} onClick={() => setShowAddTransfer(true)}>
+            <SecondaryButton icon={ArrowLeftRight} requires="edit" onClick={() => setShowAddTransfer(true)}>
               Transfer fund
             </SecondaryButton>
-            <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>
+            <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAdd(true)}>
               New account
             </PrimaryButton>
           </div>
@@ -169,8 +169,8 @@ export default function AccountsPanel() {
                 </div>
                 {canManage && (
                   <div className="flex items-center gap-1">
-                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditing(a)} />
-                    <IconButton icon={Trash2} tone="danger" title="Delete" onClick={() => removeAccount(a.id)} />
+                    <IconButton icon={Pencil} requires="edit" title="Edit" onClick={() => setEditing(a)} />
+                    <IconButton icon={Trash2} tone="danger" requires="full" title="Delete" onClick={() => removeAccount(a.id)} />
                   </div>
                 )}
               </div>
@@ -225,7 +225,7 @@ export default function AccountsPanel() {
                   <div className="text-sm font-semibold text-ink">{Number(t.amount).toFixed(3)} OMR</div>
                   <div className="flex items-center gap-1.5">
                     {canManage && t.status === 'in_transit' && (
-                      <SecondaryButton icon={CheckCircle2} onClick={() => clearTransfer(t.id)}>
+                      <SecondaryButton icon={CheckCircle2} requires="edit" onClick={() => clearTransfer(t.id)}>
                         Mark Received
                       </SecondaryButton>
                     )}
@@ -235,8 +235,8 @@ export default function AccountsPanel() {
                     )}
                     {canManage && (
                       <>
-                        <IconButton icon={Pencil} title="Edit transfer" onClick={() => setEditTransfer(t)} />
-                        <IconButton icon={Trash2} tone="danger" title="Delete transfer" onClick={() => removeTransfer(t.id)} />
+                        <IconButton icon={Pencil} requires="edit" title="Edit transfer" onClick={() => setEditTransfer(t)} />
+                        <IconButton icon={Trash2} tone="danger" requires="full" title="Delete transfer" onClick={() => removeTransfer(t.id)} />
                       </>
                     )}
                   </div>
@@ -388,7 +388,7 @@ function AccountModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -458,7 +458,7 @@ function TransactionsModal({
             Current balance: <span className="font-semibold text-ink">{Number(account.currentBalance).toFixed(3)} OMR</span>
           </div>
           {canManage && (
-            <PrimaryButton icon={Plus} onClick={() => setShowAddTxn((v) => !v)}>
+            <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAddTxn((v) => !v)}>
               Record transaction
             </PrimaryButton>
           )}
@@ -508,7 +508,7 @@ function TransactionsModal({
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2">
               <SecondaryButton onClick={() => setShowAddTxn(false)}>Cancel</SecondaryButton>
-              <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+              <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
             </div>
           </form>
         )}
@@ -674,7 +674,7 @@ function TransferModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : transfer ? 'Save' : 'Transfer'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : transfer ? 'Save' : 'Transfer'}</PrimaryButton>
         </div>
       </form>
     </Modal>

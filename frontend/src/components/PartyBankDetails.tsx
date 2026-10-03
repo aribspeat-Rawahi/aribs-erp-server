@@ -7,6 +7,7 @@
 import { useRef } from 'react';
 import { Paperclip, Plus, Trash2, Upload } from 'lucide-react';
 import { Field, IconButton, SecondaryButton, inputClass } from './ui';
+import { useCan } from './Permission';
 import api from '../api/client';
 import { viewFile } from '../api/docActions';
 
@@ -116,6 +117,7 @@ export function BankDetailsFields({
   // dropping it from local state.
   basePath?: string;
 }) {
+  const can = useCan();
   function update(key: string, patch: Partial<BankAccountEntry>) {
     onChange(entries.map((e) => (e._key === key ? { ...e, ...patch } : e)));
   }
@@ -133,7 +135,8 @@ export function BankDetailsFields({
         <div key={entry._key} className="border border-black/10 rounded-lg p-3 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-muted uppercase tracking-wide">Bank Account {idx + 1}</span>
-            {entries.length > 1 && (
+            {/* removing a saved account is a DELETE (full); an unsaved one is just local */}
+            {entries.length > 1 && (!entry.id || !basePath || can('full')) && (
               <IconButton icon={Trash2} tone="danger" title="Remove this account" onClick={() => removeEntry(entry)} />
             )}
           </div>
@@ -195,7 +198,7 @@ export function BankDetailsFields({
           />
         </div>
       ))}
-      <SecondaryButton icon={Plus} onClick={addAnother}>
+      <SecondaryButton icon={Plus} requires="edit" onClick={addAnother}>
         Add Another Account
       </SecondaryButton>
     </div>
@@ -223,7 +226,7 @@ function BankStatementUpload({
         onChange={(e) => e.target.files?.[0] && onFileSelected(e.target.files[0])}
       />
       <div className="flex items-center gap-2 flex-wrap">
-        <SecondaryButton icon={Upload} onClick={() => inputRef.current?.click()}>
+        <SecondaryButton icon={Upload} requires="edit" onClick={() => inputRef.current?.click()}>
           {entry.statementFile || entry.statementOriginalName ? 'Replace file' : 'Upload file'}
         </SecondaryButton>
         {entry.statementFile ? (
@@ -297,6 +300,7 @@ export function DocumentsFields({
   // document can be viewed, and removing it deletes it immediately.
   basePath?: string;
 }) {
+  const can = useCan();
   function update(key: string, patch: Partial<PartyDocumentEntry>) {
     onChange(entries.map((e) => (e._key === key ? { ...e, ...patch } : e)));
   }
@@ -340,10 +344,13 @@ export function DocumentsFields({
               <DocumentFileUpload entry={entry} onFileSelected={(file) => update(entry._key, { file })} />
             )}
           </div>
-          <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => removeEntry(entry)} />
+          {/* removing a saved document is a DELETE (full); an unsaved one is just local */}
+          {(!entry.id || !basePath || can('full')) && (
+            <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => removeEntry(entry)} />
+          )}
         </div>
       ))}
-      <SecondaryButton icon={Plus} onClick={addAnother}>
+      <SecondaryButton icon={Plus} requires="edit" onClick={addAnother}>
         Add Another Document
       </SecondaryButton>
     </div>
@@ -362,7 +369,7 @@ function DocumentFileUpload({ entry, onFileSelected }: { entry: PartyDocumentEnt
         onChange={(e) => e.target.files?.[0] && onFileSelected(e.target.files[0])}
       />
       <div className="flex items-center gap-2 flex-wrap">
-        <SecondaryButton icon={Upload} onClick={() => inputRef.current?.click()}>
+        <SecondaryButton icon={Upload} requires="edit" onClick={() => inputRef.current?.click()}>
           {entry.file ? 'Change file' : 'Upload file'}
         </SecondaryButton>
         {entry.file && <span className="text-xs text-muted">{entry.file.name}</span>}

@@ -112,12 +112,14 @@ export default function Approvals() {
                     icon={CheckCircle2}
                     tone="success"
                     title="Approve"
+                    requires="edit"
                     onClick={() => busyId !== row.id && act(row, 'approve')}
                   />
                   <IconButton
                     icon={XCircle}
                     tone="danger"
                     title="Reject"
+                    requires="edit"
                     onClick={() => busyId !== row.id && act(row, 'reject')}
                   />
                 </div>

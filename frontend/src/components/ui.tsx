@@ -1,4 +1,10 @@
 import { ReactNode } from 'react';
+import { ActionLevel, useCan } from './Permission';
+
+// `requires` on a button hides it from users without that level for the
+// page's module ('edit' = add/change, 'full' = delete); `requiresModule`
+// checks another module instead (e.g. 'approvals').
+type PermissionProps = { requires?: ActionLevel; requiresModule?: string };
 
 export function PageHeader({
   title,
@@ -27,6 +33,8 @@ export function PrimaryButton({
   icon: Icon,
   className = '',
   disabled,
+  requires,
+  requiresModule,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -34,7 +42,9 @@ export function PrimaryButton({
   icon?: any;
   className?: string;
   disabled?: boolean;
-}) {
+} & PermissionProps) {
+  const can = useCan();
+  if (requires && !can(requires, requiresModule)) return null;
   return (
     <button
       type={type}
@@ -54,13 +64,17 @@ export function SecondaryButton({
   icon: Icon,
   className = '',
   disabled = false,
+  requires,
+  requiresModule,
 }: {
   children: ReactNode;
   onClick?: () => void;
   icon?: any;
   className?: string;
   disabled?: boolean;
-}) {
+} & PermissionProps) {
+  const can = useCan();
+  if (requires && !can(requires, requiresModule)) return null;
   return (
     <button
       type="button"
@@ -79,12 +93,16 @@ export function IconButton({
   icon: Icon,
   tone = 'default',
   title,
+  requires,
+  requiresModule,
 }: {
   onClick?: () => void;
   icon: any;
   tone?: 'default' | 'danger' | 'success';
   title?: string;
-}) {
+} & PermissionProps) {
+  const can = useCan();
+  if (requires && !can(requires, requiresModule)) return null;
   const tones: Record<string, string> = {
     default: 'text-ink/70 border-black/10 hover:bg-black/5',
     danger: 'text-red-600 border-red-200 hover:bg-red-50',

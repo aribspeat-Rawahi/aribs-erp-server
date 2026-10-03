@@ -263,7 +263,7 @@ export default function Suppliers() {
           <PageHeader
             title="Purchase Orders"
             subtitle="Raw material purchases from your suppliers"
-            action={<PrimaryButton icon={Plus} onClick={() => setShowNewPo(true)}>New purchase order</PrimaryButton>}
+            action={<PrimaryButton icon={Plus} requires="edit" onClick={() => setShowNewPo(true)}>New purchase order</PrimaryButton>}
           />
           {loading ? (
             <div className="text-sm text-muted">Loading…</div>
@@ -284,29 +284,29 @@ export default function Suppliers() {
                       </span>
                       {o.status === 'ordered' && (
                         <>
-                          <SecondaryButton onClick={() => act(o.id, 'receive')}>Receive</SecondaryButton>
-                          <SecondaryButton onClick={() => act(o.id, 'cancel')}>Cancel</SecondaryButton>
+                          <SecondaryButton requires="edit" onClick={() => act(o.id, 'receive')}>Receive</SecondaryButton>
+                          <SecondaryButton requires="edit" onClick={() => act(o.id, 'cancel')}>Cancel</SecondaryButton>
                         </>
                       )}
                       {o.status === 'received' && (
                         <>
                           {dueOf(o) > 0.001 ? (
-                            <SecondaryButton icon={Wallet} onClick={() => setPayingOrder(o)}>
+                            <SecondaryButton icon={Wallet} requires="edit" onClick={() => setPayingOrder(o)}>
                               Pay ({dueOf(o).toFixed(3)} due)
                             </SecondaryButton>
                           ) : (
                             <span className="text-xs px-2 py-1 rounded-full font-medium bg-brand-50 text-brand-700">Paid</span>
                           )}
-                          <SecondaryButton icon={RotateCcw} onClick={() => setReturningOrder(o)}>Return</SecondaryButton>
+                          <SecondaryButton icon={RotateCcw} requires="edit" onClick={() => setReturningOrder(o)}>Return</SecondaryButton>
                         </>
                       )}
                       <div className="flex items-center gap-1.5">
                         <IconButton icon={Eye} title="View purchase order" onClick={() => setViewingOrder(o)} />
                         {o.status === 'ordered' && (
                           <>
-                            <IconButton icon={Pencil} title="Edit" onClick={() => setEditingOrder(o)} />
+                            <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => setEditingOrder(o)} />
                             {canDelete && (
-                              <IconButton icon={Trash2} tone="danger" title="Delete (Admin only)" onClick={() => removeOrder(o.id)} />
+                              <IconButton icon={Trash2} tone="danger" title="Delete (Admin only)" requires="full" onClick={() => removeOrder(o.id)} />
                             )}
                           </>
                         )}
@@ -375,7 +375,7 @@ export default function Suppliers() {
           <PageHeader
             title="Suppliers"
             subtitle="Vendors you buy raw materials from"
-            action={<PrimaryButton icon={Plus} onClick={() => setShowNewSupplier(true)}>New supplier</PrimaryButton>}
+            action={<PrimaryButton icon={Plus} requires="edit" onClick={() => setShowNewSupplier(true)}>New supplier</PrimaryButton>}
           />
           {loading ? (
             <div className="text-sm text-muted">Loading…</div>
@@ -392,9 +392,9 @@ export default function Suppliers() {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <IconButton icon={Eye} title="View supplier data & history" onClick={() => setViewingSupplier(s)} />
-                      <IconButton icon={Pencil} title="Edit" onClick={() => setEditingSupplier(s)} />
+                      <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => setEditingSupplier(s)} />
                       {canDelete && (
-                        <IconButton icon={Trash2} tone="danger" title="Delete (Admin only)" onClick={() => removeSupplier(s.id)} />
+                        <IconButton icon={Trash2} tone="danger" title="Delete (Admin only)" requires="full" onClick={() => removeSupplier(s.id)} />
                       )}
                     </div>
                   </div>
@@ -459,11 +459,11 @@ export default function Suppliers() {
                       </span>
                       {r.status === 'pending' && (
                         <div className="flex items-center gap-1.5">
-                          <IconButton icon={Trash2} tone="danger" title="Delete return" onClick={() => removeReturn(r.id)} />
+                          <IconButton icon={Trash2} tone="danger" title="Delete return" requires="full" onClick={() => removeReturn(r.id)} />
                           {canDecide && (
                             <>
-                              <IconButton icon={Check} tone="success" title="Approve" onClick={() => approveReturn(r.id)} />
-                              <IconButton icon={X} tone="danger" title="Reject" onClick={() => setRejectingReturn(r)} />
+                              <IconButton icon={Check} tone="success" title="Approve" requires="edit" requiresModule="approvals" onClick={() => approveReturn(r.id)} />
+                              <IconButton icon={X} tone="danger" title="Reject" requires="edit" requiresModule="approvals" onClick={() => setRejectingReturn(r)} />
                             </>
                           )}
                         </div>
@@ -523,6 +523,7 @@ export default function Suppliers() {
                       </div>
                       <PrimaryButton
                         icon={Plus}
+                        requires="edit"
                         onClick={() =>
                           setReorderDraft({
                             supplierId: g.supplierId || suppliers[0]?.id || '',
@@ -787,7 +788,7 @@ function SupplierModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -971,7 +972,7 @@ function PayBillModal({
                       {p.note ? ` · ${p.note}` : ''}
                     </div>
                   </div>
-                  <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => removePayment(p.id)} />
+                  <IconButton icon={Trash2} tone="danger" title="Remove" requires="full" onClick={() => removePayment(p.id)} />
                 </div>
               ))}
             </div>
@@ -1022,7 +1023,7 @@ function PayBillModal({
             </Field>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end">
-              <PrimaryButton type="submit" disabled={busy}>{busy ? 'Recording…' : 'Record Payment'}</PrimaryButton>
+              <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Recording…' : 'Record Payment'}</PrimaryButton>
             </div>
           </form>
         ) : (
@@ -1144,7 +1145,7 @@ function NewPurchaseOrderModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : order ? 'Save' : 'Create'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : order ? 'Save' : 'Create'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -1271,7 +1272,7 @@ function NewPurchaseReturnModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Submit return'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Submit return'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -1314,7 +1315,7 @@ function RejectPurchaseReturnModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Reject'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" requiresModule="approvals" disabled={busy}>{busy ? 'Saving…' : 'Reject'}</PrimaryButton>
         </div>
       </form>
     </Modal>

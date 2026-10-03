@@ -106,10 +106,10 @@ export default function TaxPanel() {
           ]}
         />
         {canManage && subTab === 'rates' && (
-          <PrimaryButton icon={Plus} onClick={() => setShowAddRate(true)}>Add tax rate</PrimaryButton>
+          <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAddRate(true)}>Add tax rate</PrimaryButton>
         )}
         {canManage && subTab === 'payments' && (
-          <PrimaryButton icon={Plus} onClick={() => setShowAddPayment(true)}>Record tax payment</PrimaryButton>
+          <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAddPayment(true)}>Record tax payment</PrimaryButton>
         )}
       </div>
 
@@ -136,9 +136,9 @@ export default function TaxPanel() {
                       <div className="text-sm font-semibold text-ink">{Number(r.rate).toFixed(2)}%</div>
                       {canManage && (
                         <div className="flex items-center gap-1.5">
-                          <IconButton icon={Pencil} title="Edit rate" onClick={() => setEditRate(r)} />
+                          <IconButton icon={Pencil} requires="edit" title="Edit rate" onClick={() => setEditRate(r)} />
                           {r.active && (
-                            <IconButton icon={Trash2} tone="danger" title="Deactivate rate" onClick={() => deactivateRate(r.id)} />
+                            <IconButton icon={Trash2} tone="danger" requires="full" title="Deactivate rate" onClick={() => deactivateRate(r.id)} />
                           )}
                         </div>
                       )}
@@ -202,8 +202,8 @@ export default function TaxPanel() {
                         )}
                         {canManage && (
                           <>
-                            <IconButton icon={Pencil} title="Edit payment" onClick={() => setEditPayment(p)} />
-                            <IconButton icon={Trash2} tone="danger" title="Delete payment" onClick={() => removePayment(p.id)} />
+                            <IconButton icon={Pencil} requires="edit" title="Edit payment" onClick={() => setEditPayment(p)} />
+                            <IconButton icon={Trash2} tone="danger" requires="full" title="Delete payment" onClick={() => removePayment(p.id)} />
                           </>
                         )}
                       </div>
@@ -290,7 +290,7 @@ function TaxRateModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -397,7 +397,7 @@ function TaxPaymentModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : payment ? 'Save' : 'Record'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : payment ? 'Save' : 'Record'}</PrimaryButton>
         </div>
       </form>
     </Modal>

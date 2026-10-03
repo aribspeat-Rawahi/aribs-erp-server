@@ -75,7 +75,7 @@ export default function Customers() {
       <PageHeader
         title="Customers"
         subtitle="Everyone you sell to"
-        action={<PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>New customer</PrimaryButton>}
+        action={<PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAdd(true)}>New customer</PrimaryButton>}
       />
       {loading ? (
         <div className="text-sm text-muted">Loading…</div>
@@ -94,9 +94,9 @@ export default function Customers() {
                   {c.vatApplicable && <span className="text-xs px-2 py-1 rounded-full bg-brand-50 text-brand-700 font-medium">VAT</span>}
                   <div className="flex items-center gap-1.5">
                     <IconButton icon={Eye} title="View customer data & history" onClick={() => setViewing(c)} />
-                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditing(c)} />
+                    <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => setEditing(c)} />
                     {canDelete && (
-                      <IconButton icon={Trash2} tone="danger" title="Delete (Admin only)" onClick={() => remove(c.id)} />
+                      <IconButton icon={Trash2} tone="danger" title="Delete (Admin only)" requires="full" onClick={() => remove(c.id)} />
                     )}
                   </div>
                 </div>
@@ -284,7 +284,7 @@ function CustomerModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>

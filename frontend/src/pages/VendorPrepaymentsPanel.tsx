@@ -79,7 +79,7 @@ export default function VendorPrepaymentsPanel({
   return (
     <div>
       <div className="flex justify-end mb-4">
-        {canManage && <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>New prepayment</PrimaryButton>}
+        {canManage && <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAdd(true)}>New prepayment</PrimaryButton>}
       </div>
 
       {loading ? (
@@ -113,10 +113,10 @@ export default function VendorPrepaymentsPanel({
                     {canManage && (
                       <div className="flex items-center gap-1.5">
                         {remaining > 0.001 && (
-                          <IconButton icon={ArrowRightLeft} title="Apply against payable" onClick={() => setApplying(p)} />
+                          <IconButton icon={ArrowRightLeft} title="Apply against payable" requires="edit" onClick={() => setApplying(p)} />
                         )}
                         {Number(p.appliedAmount) === 0 && (
-                          <IconButton icon={Trash2} tone="danger" title="Delete" onClick={() => removeItem(p.id)} />
+                          <IconButton icon={Trash2} tone="danger" title="Delete" requires="full" onClick={() => removeItem(p.id)} />
                         )}
                       </div>
                     )}
@@ -223,7 +223,7 @@ function NewPrepaymentModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -284,7 +284,7 @@ function ApplyPrepaymentModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Applying…' : 'Apply'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Applying…' : 'Apply'}</PrimaryButton>
         </div>
       </form>
     </Modal>

@@ -5,6 +5,7 @@ import { PageHeader, Card, PrimaryButton, SecondaryButton, IconButton, Modal, Em
 import { TEMPLATE_OPTIONS } from '../constants';
 import { viewFile, downloadFile } from '../api/docActions';
 import { useAuth } from '../context/AuthContext';
+import { Can } from '../components/Permission';
 
 interface CompanyDocument {
   id: string;
@@ -312,7 +313,7 @@ export default function Settings() {
               className="hidden"
               onChange={(e) => e.target.files?.[0] && onLogoSelected(e.target.files[0])}
             />
-            <SecondaryButton icon={Upload} onClick={() => fileInputRef.current?.click()}>
+            <SecondaryButton icon={Upload} requires="edit" onClick={() => fileInputRef.current?.click()}>
               {uploading ? 'Uploading…' : 'Upload logo'}
             </SecondaryButton>
           </div>
@@ -473,7 +474,7 @@ export default function Settings() {
           {error && <p className="text-sm text-red-600">{error}</p>}
           {notice && <p className="text-sm text-brand-700">{notice}</p>}
           <div className="flex justify-end pt-2">
-            <PrimaryButton type="submit" disabled={saving}>
+            <PrimaryButton type="submit" requires="edit" disabled={saving}>
               {saving ? 'Saving…' : 'Save changes'}
             </PrimaryButton>
           </div>
@@ -489,6 +490,7 @@ export default function Settings() {
           Trade license, VAT certificate, CR paper, or any other company paperwork — upload as many as you need.
         </p>
 
+        <Can>
         <div className="flex items-end gap-2 mb-4">
           <div className="flex-1">
             <Field label="Document title">
@@ -511,6 +513,7 @@ export default function Settings() {
             {uploadingDoc ? 'Uploading…' : 'Upload'}
           </SecondaryButton>
         </div>
+        </Can>
         {docError && <p className="text-sm text-red-600 mb-3">{docError}</p>}
 
         {docsLoading ? (
@@ -531,13 +534,14 @@ export default function Settings() {
                   <IconButton icon={Eye} title="View" onClick={() => viewFile(`/settings/documents/${doc.id}`)} />
                   <IconButton
                     icon={Pencil}
+                    requires="edit"
                     title="Edit"
                     onClick={() => {
                       setEditingDoc(doc);
                       setEditTitle(doc.title);
                     }}
                   />
-                  <IconButton icon={Trash2} title="Delete" tone="danger" onClick={() => removeDocument(doc)} />
+                  <IconButton icon={Trash2} title="Delete" tone="danger" requires="full" onClick={() => removeDocument(doc)} />
                 </div>
               </div>
             ))}
@@ -656,7 +660,7 @@ export default function Settings() {
               <SecondaryButton onClick={() => setEditingDoc(null)}>
                 Cancel
               </SecondaryButton>
-              <PrimaryButton type="submit" disabled={savingEdit}>
+              <PrimaryButton type="submit" requires="edit" disabled={savingEdit}>
                 {savingEdit ? 'Saving…' : 'Save'}
               </PrimaryButton>
             </div>

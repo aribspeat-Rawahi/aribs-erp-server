@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import PageErrorBoundary from './components/PageErrorBoundary';
+import { PageModuleContext } from './components/Permission';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
 import Dashboard from './pages/Dashboard';
@@ -77,7 +78,9 @@ function ProtectedRoute({ children, module }: { children: JSX.Element; module?: 
   }
   return (
     <Layout>
-      <PageErrorBoundary resetKey={location.pathname}>{children}</PageErrorBoundary>
+      <PageErrorBoundary resetKey={location.pathname}>
+        <PageModuleContext.Provider value={module}>{children}</PageModuleContext.Provider>
+      </PageErrorBoundary>
     </Layout>
   );
 }

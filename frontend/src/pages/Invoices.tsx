@@ -4,6 +4,7 @@ import api from '../api/client';
 import { viewPdf, downloadPdf, openWhatsapp, sharePdf } from '../api/docActions';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Pill, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
+import { Can } from '../components/Permission';
 import { labelFor, PAYMENT_TYPE_OPTIONS, DELIVERY_METHOD_OPTIONS } from '../constants';
 import NewDocumentModal, { ExistingDoc } from '../components/NewDocumentModal';
 import { formatQuantity, quantityInputStep, snapQuantityToUnit } from '../utils/formatQuantity';
@@ -221,7 +222,7 @@ export default function Invoices() {
       <PageHeader
         title="Invoices"
         subtitle="Tax invoices issued to customers"
-        action={<PrimaryButton icon={Plus} onClick={() => setShowNew(true)}>New invoice</PrimaryButton>}
+        action={<PrimaryButton icon={Plus} requires="edit" onClick={() => setShowNew(true)}>New invoice</PrimaryButton>}
       />
       {loading ? (
         <div className="text-sm text-muted">Loading…</div>
@@ -250,7 +251,7 @@ export default function Invoices() {
                   </div>
                   <div className="flex items-center gap-1.5">
                     <IconButton icon={Eye} title="View PDF" onClick={() => viewPdf(`/invoices/${inv.id}/pdf`)} />
-                    <IconButton icon={Pencil} title="Edit" onClick={() => startEdit(inv)} />
+                    <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => startEdit(inv)} />
                     <IconButton icon={Download} title="Download PDF" onClick={() => downloadPdf(`/invoices/${inv.id}/pdf`, `${inv.invoiceNumber}.pdf`)} />
                     <IconButton icon={MessageCircle} title="Send on WhatsApp" onClick={() => openWhatsapp(`/invoices/${inv.id}/whatsapp-link`)} />
                     <IconButton icon={Share2} title="Share PDF (attach the file)" onClick={() => sharePdf(`/invoices/${inv.id}/pdf`, `${inv.invoiceNumber}.pdf`, `Invoice ${inv.invoiceNumber}`)} />
@@ -260,13 +261,13 @@ export default function Invoices() {
                       title="Record payment"
                       onClick={() => setPayingInvoice(inv)}
                     />
-                    <IconButton icon={Truck} title="Convert to delivery note" onClick={() => convert(inv.id)} />
-                    <IconButton icon={RotateCcw} title="Return items from this invoice" onClick={() => startReturn(inv)} />
+                    <IconButton icon={Truck} title="Convert to delivery note" requires="edit" onClick={() => convert(inv.id)} />
+                    <IconButton icon={RotateCcw} title="Return items from this invoice" requires="edit" onClick={() => startReturn(inv)} />
                     {inv.paymentStatus !== 'paid' && inv.dueDate && (
-                      <IconButton icon={Bell} title="Send payment reminder now" onClick={() => sendReminder(inv.id)} />
+                      <IconButton icon={Bell} title="Send payment reminder now" requires="edit" onClick={() => sendReminder(inv.id)} />
                     )}
                     {canDelete && (
-                      <IconButton icon={Trash2} tone="danger" title="Delete" onClick={() => remove(inv.id)} />
+                      <IconButton icon={Trash2} tone="danger" title="Delete" requires="full" onClick={() => remove(inv.id)} />
                     )}
                   </div>
                 </div>
@@ -350,11 +351,11 @@ export default function Invoices() {
                       </span>
                       {r.status === 'pending' && (
                         <div className="flex items-center gap-1.5">
-                          <IconButton icon={Trash2} tone="danger" title="Delete return" onClick={() => removeReturn(r.id)} />
+                          <IconButton icon={Trash2} tone="danger" title="Delete return" requires="full" onClick={() => removeReturn(r.id)} />
                           {canDecide && (
                             <>
-                              <IconButton icon={Check} tone="success" title="Approve" onClick={() => approveReturn(r.id)} />
-                              <IconButton icon={X} tone="danger" title="Reject" onClick={() => setRejectingReturn(r)} />
+                              <IconButton icon={Check} tone="success" title="Approve" requires="edit" requiresModule="approvals" onClick={() => approveReturn(r.id)} />
+                              <IconButton icon={X} tone="danger" title="Reject" requires="edit" requiresModule="approvals" onClick={() => setRejectingReturn(r)} />
                             </>
                           )}
                         </div>
@@ -489,7 +490,7 @@ function PaymentLedgerModal({
                       {p.note ? ` · ${p.note}` : ''}
                     </div>
                   </div>
-                  <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => removePayment(p.id)} />
+                  <IconButton icon={Trash2} tone="danger" title="Remove" requires="full" onClick={() => removePayment(p.id)} />
                 </div>
               ))}
             </div>
@@ -497,6 +498,7 @@ function PaymentLedgerModal({
         </div>
 
         {remaining > 0 ? (
+          <Can>
           <form onSubmit={addPayment} className="space-y-3 border-t border-black/10 pt-3">
             <span className="block text-xs font-semibold text-muted uppercase tracking-wide">Record a Payment</span>
             <div className="grid grid-cols-2 gap-3">
@@ -530,9 +532,10 @@ function PaymentLedgerModal({
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end">
-              <PrimaryButton type="submit" disabled={busy}>{busy ? 'Recording…' : 'Record Payment'}</PrimaryButton>
+              <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Recording…' : 'Record Payment'}</PrimaryButton>
             </div>
           </form>
+          </Can>
         ) : (
           <p className="text-sm text-brand-700 border-t border-black/10 pt-3">This invoice is fully paid.</p>
         )}
@@ -680,7 +683,7 @@ function NewSalesReturnModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy || items.length === 0}>{busy ? 'Saving…' : 'Submit return'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy || items.length === 0}>{busy ? 'Saving…' : 'Submit return'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -723,7 +726,7 @@ function RejectSalesReturnModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Reject'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" requiresModule="approvals" disabled={busy}>{busy ? 'Saving…' : 'Reject'}</PrimaryButton>
         </div>
       </form>
     </Modal>

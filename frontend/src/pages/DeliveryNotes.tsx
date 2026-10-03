@@ -101,7 +101,7 @@ export default function DeliveryNotes() {
       <PageHeader
         title="Delivery Notes"
         subtitle="What physically went out to the customer"
-        action={<PrimaryButton icon={Plus} onClick={() => setShowNew(true)}>New delivery note</PrimaryButton>}
+        action={<PrimaryButton icon={Plus} requires="edit" onClick={() => setShowNew(true)}>New delivery note</PrimaryButton>}
       />
       {loading ? (
         <div className="text-sm text-muted">Loading…</div>
@@ -130,12 +130,12 @@ export default function DeliveryNotes() {
                     <IconButton icon={Download} title="Download PDF" onClick={() => downloadPdf(`/delivery-notes/${n.id}/pdf`, `${n.deliveryNoteNumber}.pdf`)} />
                     <IconButton icon={MessageCircle} title="Send on WhatsApp" onClick={() => openWhatsapp(`/delivery-notes/${n.id}/whatsapp-link`)} />
                     <IconButton icon={Share2} title="Share PDF (attach the file)" onClick={() => sharePdf(`/delivery-notes/${n.id}/pdf`, `${n.deliveryNoteNumber}.pdf`, `Delivery Note ${n.deliveryNoteNumber}`)} />
-                    <IconButton icon={Pencil} title="Edit" onClick={() => startEdit(n)} />
+                    <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => startEdit(n)} />
                     {n.status === 'draft' && (
-                      <IconButton icon={PackageCheck} tone="success" title="Mark delivered" onClick={() => markDelivered(n.id)} />
+                      <IconButton icon={PackageCheck} tone="success" title="Mark delivered" requires="edit" onClick={() => markDelivered(n.id)} />
                     )}
                     {canDelete && (
-                      <IconButton icon={Trash2} tone="danger" title="Delete" onClick={() => remove(n.id)} />
+                      <IconButton icon={Trash2} tone="danger" title="Delete" requires="full" onClick={() => remove(n.id)} />
                     )}
                   </div>
                 </div>

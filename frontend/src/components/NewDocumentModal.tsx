@@ -358,7 +358,7 @@ export default function NewDocumentModal({
         {notice && <p className="text-sm text-amber-600">{notice}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>
             {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create'}
           </PrimaryButton>
         </div>

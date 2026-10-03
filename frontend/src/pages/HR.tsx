@@ -24,6 +24,7 @@ import {
 import api from '../api/client';
 import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Card, StatCard, EmptyState, Modal, Field, inputClass } from '../components/ui';
 import { fetchFileBlobUrl, viewFile } from '../api/docActions';
+import { Can, useCan } from '../components/Permission';
 import SalaryAdvance from './SalaryAdvance';
 
 // Common document types kept as suggestions (via <datalist>) rather than
@@ -511,7 +512,7 @@ export default function HR() {
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                 />
-                <PrimaryButton icon={Plus} onClick={() => setShowMark(true)}>Mark attendance</PrimaryButton>
+                <PrimaryButton icon={Plus} onClick={() => setShowMark(true)} requires="edit">Mark attendance</PrimaryButton>
               </div>
             }
           />
@@ -550,8 +551,8 @@ export default function HR() {
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusTone[r.status] || 'bg-black/5 text-ink/70'}`}>
                         {labelFor(ATTENDANCE_STATUS_OPTIONS, r.status)}
                       </span>
-                      <IconButton icon={Pencil} title="Edit attendance" onClick={() => setEditAttendance(r)} />
-                      <IconButton icon={Trash2} tone="danger" title="Delete attendance" onClick={() => deleteAttendance(r.id, employeeName(r.employeeId))} />
+                      <IconButton icon={Pencil} title="Edit attendance" onClick={() => setEditAttendance(r)} requires="edit" />
+                      <IconButton icon={Trash2} tone="danger" title="Delete attendance" onClick={() => deleteAttendance(r.id, employeeName(r.employeeId))} requires="full" />
                     </div>
                   </div>
                 ))}
@@ -600,8 +601,8 @@ export default function HR() {
                       placeholder="Search name, ID, team, mobile, department"
                     />
                   </div>
-                  <SecondaryButton icon={Settings2} onClick={() => setShowManageTeams(true)}>Manage teams</SecondaryButton>
-                  <PrimaryButton icon={Plus} onClick={() => setShowAddEmployee(true)}>New employee</PrimaryButton>
+                  <SecondaryButton icon={Settings2} onClick={() => setShowManageTeams(true)} requires="edit">Manage teams</SecondaryButton>
+                  <PrimaryButton icon={Plus} onClick={() => setShowAddEmployee(true)} requires="edit">New employee</PrimaryButton>
                 </div>
               ) : undefined
             }
@@ -674,10 +675,10 @@ export default function HR() {
                           <EmployeePhoto employeeId={e.id} hasPhoto={!!e.photoPath} />
                           {!e.active && <span className="text-xs px-2 py-1 rounded-full bg-black/5 text-ink/60 font-medium">Inactive</span>}
                           <IconButton icon={Eye} title="View details" onClick={() => setViewEmployee(e)} />
-                          <IconButton icon={Pencil} title="Edit employee" onClick={() => setEditEmployee(e)} />
+                          <IconButton icon={Pencil} title="Edit employee" onClick={() => setEditEmployee(e)} requires="edit" />
                           <IconButton icon={Paperclip} title="Documents" onClick={() => setDocsEmployee(e)} />
-                          {e.active && <IconButton icon={UserX} tone="danger" title="Deactivate" onClick={() => deactivate(e.id)} />}
-                          <IconButton icon={Trash2} tone="danger" title="Delete" onClick={() => setArchiveEmployee(e)} />
+                          {e.active && <IconButton icon={UserX} tone="danger" title="Deactivate" onClick={() => deactivate(e.id)} requires="edit" />}
+                          <IconButton icon={Trash2} tone="danger" title="Delete" onClick={() => setArchiveEmployee(e)} requires="edit" />
                         </div>
                       </div>
                     ))}
@@ -823,7 +824,7 @@ function DepartmentTab() {
       <PageHeader
         title="Department"
         subtitle="Manage company departments and internal structures."
-        action={<PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>Add Department</PrimaryButton>}
+        action={<PrimaryButton icon={Plus} onClick={() => setShowAdd(true)} requires="edit">Add Department</PrimaryButton>}
       />
 
       <Card>
@@ -849,8 +850,8 @@ function DepartmentTab() {
                   <span className="text-sm text-ink">{d.name}</span>
                   <span className="text-sm text-muted">{d.otRatePerHour != null ? Number(d.otRatePerHour).toFixed(2) + '/hr' : '-'}</span>
                   <div className="flex items-center justify-end gap-2">
-                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditDept(d)} />
-                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(d)} />
+                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditDept(d)} requires="edit" />
+                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(d)} requires="full" />
                   </div>
                 </div>
               ))}
@@ -943,7 +944,7 @@ function DepartmentFormModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy || !name.trim()}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" disabled={busy || !name.trim()} requires="edit">{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -989,7 +990,7 @@ function DesignationTab({ onViewDepartment }: { onViewDepartment: () => void }) 
         action={
           <div className="flex items-center gap-2">
             <SecondaryButton icon={Eye} onClick={onViewDepartment}>View Department</SecondaryButton>
-            <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>Add Designation</PrimaryButton>
+            <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)} requires="edit">Add Designation</PrimaryButton>
           </div>
         }
       />
@@ -1034,8 +1035,8 @@ function DesignationTab({ onViewDepartment }: { onViewDepartment: () => void }) 
                     {d.active ? 'Active' : 'Inactive'}
                   </span>
                   <div className="flex items-center justify-end gap-2">
-                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(d)} />
-                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(d)} />
+                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(d)} requires="edit" />
+                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(d)} requires="full" />
                   </div>
                 </div>
               ))}
@@ -1158,7 +1159,7 @@ function DesignationFormModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy || !name.trim()}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" disabled={busy || !name.trim()} requires="edit">{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -1203,7 +1204,7 @@ function ShiftTab() {
       <PageHeader
         title="Shifts"
         subtitle="Manage company shifts and work schedules."
-        action={<PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>Add Shift</PrimaryButton>}
+        action={<PrimaryButton icon={Plus} onClick={() => setShowAdd(true)} requires="edit">Add Shift</PrimaryButton>}
       />
 
       <Card>
@@ -1243,8 +1244,8 @@ function ShiftTab() {
                     {s.active ? 'Active' : 'Inactive'}
                   </span>
                   <div className="flex items-center justify-end gap-2">
-                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(s)} />
-                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(s)} />
+                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(s)} requires="edit" />
+                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(s)} requires="full" />
                   </div>
                 </div>
               ))}
@@ -1343,7 +1344,7 @@ function ShiftFormModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy || !name.trim() || !startTime || !endTime}>
+          <PrimaryButton type="submit" disabled={busy || !name.trim() || !startTime || !endTime} requires="edit">
             {busy ? 'Saving…' : 'Save'}
           </PrimaryButton>
         </div>
@@ -1409,7 +1410,7 @@ function ProjectTab({ employees }: { employees: Employee[] }) {
       <Card>
         <div className="flex items-center justify-between px-4 py-3 border-b border-black/10">
           <h3 className="text-sm font-semibold text-brand-700">Active Projects Log</h3>
-          <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>Add Project</PrimaryButton>
+          <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)} requires="edit">Add Project</PrimaryButton>
         </div>
 
         <div className="flex items-center justify-between px-4 py-2 border-b border-black/10 text-sm">
@@ -1485,8 +1486,8 @@ function ProjectTab({ employees }: { employees: Employee[] }) {
                   </span>
                   <div className="flex items-center justify-end gap-2">
                     <IconButton icon={Eye} title="View" onClick={() => setViewItem(p)} />
-                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(p)} />
-                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(p)} />
+                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(p)} requires="edit" />
+                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(p)} requires="full" />
                   </div>
                 </div>
               ))}
@@ -1663,7 +1664,7 @@ function ProjectFormModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy || !name.trim()}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" disabled={busy || !name.trim()} requires="edit">{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -1776,7 +1777,7 @@ function LeaveRequestTab({ employees }: { employees: Employee[] }) {
       <Card>
         <div className="flex items-center justify-between px-4 py-3 border-b border-black/10">
           <h3 className="text-sm font-semibold text-brand-700">Requests</h3>
-          <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>Add Leave Request</PrimaryButton>
+          <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)} requires="edit">Add Leave Request</PrimaryButton>
         </div>
         {loading ? (
           <div className="p-4 text-sm text-muted">Loading…</div>
@@ -1815,8 +1816,8 @@ function LeaveRequestTab({ employees }: { employees: Employee[] }) {
                   </span>
                   <span className="text-sm text-muted">{r.manageBy || '-'}</span>
                   <div className="flex items-center justify-end gap-2">
-                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(r)} />
-                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(r)} />
+                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(r)} requires="edit" />
+                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(r)} requires="full" />
                   </div>
                 </div>
               ))}
@@ -1961,7 +1962,7 @@ function LeaveRequestFormModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy || !staffName.trim() || !requestFrom || !requestTo}>
+          <PrimaryButton type="submit" disabled={busy || !staffName.trim() || !requestFrom || !requestTo} requires="edit">
             {busy ? 'Saving…' : 'Save'}
           </PrimaryButton>
         </div>
@@ -2228,7 +2229,7 @@ function AttendanceReportsTab({ employees, departments }: { employees: Employee[
             <PrimaryButton icon={FileText} onClick={onGenerate}>
               {generating ? 'Generating…' : 'Generate'}
             </PrimaryButton>
-            <SecondaryButton icon={Upload} onClick={() => setShowImport(true)}>Import</SecondaryButton>
+            <SecondaryButton icon={Upload} onClick={() => setShowImport(true)} requires="edit">Import</SecondaryButton>
             <SecondaryButton icon={Download} onClick={downloadSample}>Sample</SecondaryButton>
           </div>
         </div>
@@ -2602,7 +2603,7 @@ function PayrollTab({ employees }: { employees: Employee[] }) {
               <input className={inputClass} type="date" value={to} onChange={(e) => setTo(e.target.value)} />
             </Field>
           </div>
-          <PrimaryButton icon={FileText} onClick={onGenerate} disabled={generating}>
+          <PrimaryButton icon={FileText} onClick={onGenerate} disabled={generating} requires="edit">
             {generating ? 'Generating…' : 'Generate'}
           </PrimaryButton>
         </div>
@@ -2697,9 +2698,9 @@ function PayrollTab({ employees }: { employees: Employee[] }) {
                         </>
                       ) : (
                         <>
-                          <SecondaryButton onClick={() => setPayingItem(r)}>Pay</SecondaryButton>
-                          <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(r)} />
-                          <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(r)} />
+                          <SecondaryButton onClick={() => setPayingItem(r)} requires="edit">Pay</SecondaryButton>
+                          <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(r)} requires="edit" />
+                          <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(r)} requires="full" />
                         </>
                       )}
                     </div>
@@ -2841,6 +2842,7 @@ function PayrollDocumentsModal({ row, onClose }: { row: PayrollRow; onClose: () 
 
   return (
     <Modal title={`Payment documents — ${row.staffName}`} onClose={onClose} wide>
+      <Can>
       <form onSubmit={onUpload} className="flex items-end gap-2 mb-3">
         <div className="flex-1">
           <Field label="Document type">
@@ -2864,10 +2866,11 @@ function PayrollDocumentsModal({ row, onClose }: { row: PayrollRow; onClose: () 
             {file ? file.name.slice(0, 18) : 'Choose file'}
           </SecondaryButton>
         </div>
-        <PrimaryButton type="submit" disabled={busy || !file || !label.trim()}>
+        <PrimaryButton type="submit" disabled={busy || !file || !label.trim()} requires="edit">
           {busy ? 'Uploading…' : 'Add'}
         </PrimaryButton>
       </form>
+      </Can>
       {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
 
       {loading ? (
@@ -2893,8 +2896,9 @@ function PayrollDocumentsModal({ row, onClose }: { row: PayrollRow; onClose: () 
                     setEditingDoc(d);
                     setEditLabel(d.label);
                   }}
+                  requires="edit"
                 />
-                <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(d.id)} />
+                <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(d.id)} requires="full" />
               </div>
             </div>
           ))}
@@ -2913,7 +2917,7 @@ function PayrollDocumentsModal({ row, onClose }: { row: PayrollRow; onClose: () 
             </Field>
             <div className="flex justify-end gap-2 pt-2">
               <SecondaryButton onClick={() => setEditingDoc(null)}>Cancel</SecondaryButton>
-              <PrimaryButton type="submit" disabled={savingEdit}>
+              <PrimaryButton type="submit" disabled={savingEdit} requires="edit">
                 {savingEdit ? 'Saving…' : 'Save'}
               </PrimaryButton>
             </div>
@@ -2994,7 +2998,7 @@ function PayrollMarkPaidModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Confirm payment'}</PrimaryButton>
+          <PrimaryButton type="submit" disabled={busy} requires="edit">{busy ? 'Saving…' : 'Confirm payment'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -3059,7 +3063,7 @@ function PayrollEditModal({ row, onClose, onSaved }: { row: PayrollRow; onClose:
           <SecondaryButton onClick={onClose}>
             Cancel
           </SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>
+          <PrimaryButton type="submit" disabled={busy} requires="edit">
             {busy ? 'Saving…' : 'Save'}
           </PrimaryButton>
         </div>
@@ -3112,9 +3116,9 @@ function EventTab() {
         <div className="flex items-center justify-between px-4 py-3 border-b border-black/10">
           <h3 className="text-sm font-semibold text-brand-700">Active Events Log</h3>
           <div className="flex items-center gap-2">
-            <SecondaryButton icon={Upload} onClick={() => setShowImport(true)}>Import</SecondaryButton>
+            <SecondaryButton icon={Upload} onClick={() => setShowImport(true)} requires="edit">Import</SecondaryButton>
             <SecondaryButton icon={Download} onClick={onExport}>Export</SecondaryButton>
-            <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>Add Event</PrimaryButton>
+            <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)} requires="edit">Add Event</PrimaryButton>
           </div>
         </div>
 
@@ -3153,8 +3157,8 @@ function EventTab() {
                     {e.active ? 'Active' : 'Inactive'}
                   </span>
                   <div className="flex items-center justify-end gap-2">
-                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(e)} />
-                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(e)} />
+                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(e)} requires="edit" />
+                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(e)} requires="full" />
                   </div>
                 </div>
               ))}
@@ -3278,7 +3282,7 @@ function EventFormModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>
+          <PrimaryButton type="submit" disabled={busy} requires="edit">
             {busy ? 'Saving…' : 'Save'}
           </PrimaryButton>
         </div>
@@ -3322,7 +3326,7 @@ function NoticeTab() {
       <Card>
         <div className="flex items-center justify-between px-4 py-3 border-b border-black/10">
           <h3 className="text-sm font-semibold text-brand-700">Broadcast History</h3>
-          <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>Add Notice</PrimaryButton>
+          <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)} requires="edit">Add Notice</PrimaryButton>
         </div>
 
         {loading ? (
@@ -3358,8 +3362,8 @@ function NoticeTab() {
                     {n.active ? 'Active' : 'Inactive'}
                   </span>
                   <div className="flex items-center justify-end gap-2">
-                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(n)} />
-                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(n)} />
+                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(n)} requires="edit" />
+                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(n)} requires="full" />
                   </div>
                 </div>
               ))}
@@ -3460,7 +3464,7 @@ function NoticeFormModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>
+          <PrimaryButton type="submit" disabled={busy} requires="edit">
             {busy ? 'Saving…' : 'Save'}
           </PrimaryButton>
         </div>
@@ -3513,9 +3517,9 @@ function HolidayTab() {
         <div className="flex items-center justify-between px-4 py-3 border-b border-black/10">
           <h3 className="text-sm font-semibold text-brand-700">Scheduled Holidays</h3>
           <div className="flex items-center gap-2">
-            <SecondaryButton icon={Upload} onClick={() => setShowImport(true)}>Import</SecondaryButton>
+            <SecondaryButton icon={Upload} onClick={() => setShowImport(true)} requires="edit">Import</SecondaryButton>
             <SecondaryButton icon={Download} onClick={onExport}>Export</SecondaryButton>
-            <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>Add Holiday</PrimaryButton>
+            <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)} requires="edit">Add Holiday</PrimaryButton>
           </div>
         </div>
 
@@ -3556,8 +3560,8 @@ function HolidayTab() {
                     {h.active ? 'Active' : 'Inactive'}
                   </span>
                   <div className="flex items-center justify-end gap-2">
-                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(h)} />
-                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(h)} />
+                    <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(h)} requires="edit" />
+                    <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(h)} requires="full" />
                   </div>
                 </div>
               ))}
@@ -3672,7 +3676,7 @@ function HolidayFormModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>
+          <PrimaryButton type="submit" disabled={busy} requires="edit">
             {busy ? 'Saving…' : 'Save'}
           </PrimaryButton>
         </div>
@@ -3875,11 +3879,11 @@ function DashboardTab({ employees, shifts }: { employees: Employee[]; shifts: Sh
                         {loggedOut ? (
                           <span className="text-xs text-muted">Done</span>
                         ) : loggedIn ? (
-                          <SecondaryButton onClick={() => onLogout(emp)} className="!px-3 !py-1 text-xs">
+                          <SecondaryButton onClick={() => onLogout(emp)} className="!px-3 !py-1 text-xs" requires="edit">
                             {busyId === emp.id ? '…' : 'Logout'}
                           </SecondaryButton>
                         ) : (
-                          <PrimaryButton onClick={() => onLogin(emp)} className="!px-3 !py-1 text-xs">
+                          <PrimaryButton onClick={() => onLogin(emp)} className="!px-3 !py-1 text-xs" requires="edit">
                             {busyId === emp.id ? '…' : 'Login'}
                           </PrimaryButton>
                         )}
@@ -3998,6 +4002,9 @@ function ArchiveEmployeeModal({
   const [suggested, setSuggested] = useState<'old' | 'temporary' | 'delete'>('temporary');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Permanent delete needs 'full' — without it only the archive options show.
+  const can = useCan();
+  const canDelete = can('full');
 
   useEffect(() => {
     let cancelled = false;
@@ -4013,7 +4020,7 @@ function ArchiveEmployeeModal({
         days === 0 ? 'delete' : days >= ARCHIVE_WORKED_DAYS_THRESHOLD ? 'old' : 'temporary';
       setWorkedDays(days);
       setSuggested(suggestion);
-      setChoice(suggestion);
+      setChoice(suggestion === 'delete' && !canDelete ? 'temporary' : suggestion);
       setLoadingDays(false);
     });
     return () => {
@@ -4080,7 +4087,7 @@ function ArchiveEmployeeModal({
           )}
         </p>
         <div className="space-y-2">
-          {options.map((opt) => (
+          {options.filter((opt) => opt.value !== 'delete' || canDelete).map((opt) => (
             <label
               key={opt.value}
               className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${
@@ -4109,7 +4116,7 @@ function ArchiveEmployeeModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton onClick={onConfirm} disabled={busy || loadingDays}>
+          <PrimaryButton onClick={onConfirm} disabled={busy || loadingDays} requires="edit">
             {busy ? 'Working…' : choice === 'delete' ? 'Delete Permanently' : 'Move to Folder'}
           </PrimaryButton>
         </div>
@@ -4195,10 +4202,10 @@ function ArchivedEmployeesTab({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <SecondaryButton onClick={() => onRestore(e)} disabled={busyId === e.id}>
+                  <SecondaryButton onClick={() => onRestore(e)} disabled={busyId === e.id} requires="edit">
                     {busyId === e.id ? '…' : 'Restore'}
                   </SecondaryButton>
-                  <IconButton icon={Trash2} tone="danger" title="Delete permanently" onClick={() => onDelete(e)} />
+                  <IconButton icon={Trash2} tone="danger" title="Delete permanently" onClick={() => onDelete(e)} requires="full" />
                 </div>
               </div>
             ))}
@@ -4720,7 +4727,7 @@ function AddEmployeeModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" disabled={busy} requires="edit">{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -5042,7 +5049,7 @@ function EditEmployeeModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" disabled={busy} requires="edit">{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -5416,6 +5423,7 @@ function EmployeeDocumentsModal({ employee, onClose }: { employee: Employee; onC
 
   return (
     <Modal title={`Documents — ${employee.name}`} onClose={onClose} wide>
+      <Can>
       <form onSubmit={onUpload} className="flex items-end gap-2 mb-3">
         <div className="flex-1">
           <Field label="Document type">
@@ -5445,10 +5453,11 @@ function EmployeeDocumentsModal({ employee, onClose }: { employee: Employee; onC
             {file ? file.name.slice(0, 18) : 'Choose file'}
           </SecondaryButton>
         </div>
-        <PrimaryButton type="submit" disabled={busy || !file || !label.trim()}>
+        <PrimaryButton type="submit" disabled={busy || !file || !label.trim()} requires="edit">
           {busy ? 'Uploading…' : 'Add'}
         </PrimaryButton>
       </form>
+      </Can>
       {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
 
       {loading ? (
@@ -5467,7 +5476,7 @@ function EmployeeDocumentsModal({ employee, onClose }: { employee: Employee; onC
               </div>
               <div className="flex items-center gap-2">
                 <IconButton icon={Download} title="View / download" onClick={() => onView(d.id)} />
-                <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(d.id)} />
+                <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(d.id)} requires="full" />
               </div>
             </div>
           ))}
@@ -5530,7 +5539,7 @@ function ManageListModal({
             <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Store Manager" />
           </Field>
         </div>
-        <PrimaryButton type="submit" disabled={busy || !name.trim()}>Add</PrimaryButton>
+        <PrimaryButton type="submit" disabled={busy || !name.trim()} requires="edit">Add</PrimaryButton>
       </form>
       {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
       {items.length === 0 ? (
@@ -5540,7 +5549,7 @@ function ManageListModal({
           {items.map((item) => (
             <div key={item.id} className="flex items-center justify-between px-3 py-2">
               <span className="text-sm text-ink">{roleLabel(item.name)}</span>
-              <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(item.id)} />
+              <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(item.id)} requires="full" />
             </div>
           ))}
         </div>
@@ -5698,7 +5707,7 @@ function MarkAttendanceModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" disabled={busy} requires="edit">{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>

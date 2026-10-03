@@ -89,7 +89,7 @@ export function InteractionLogSection({ basePath }: { basePath: string }) {
     <div className="rounded-lg border border-black/10 px-3 py-3 space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Interaction Log</h3>
-        <SecondaryButton icon={Plus} onClick={() => setShowForm((v) => !v)}>
+        <SecondaryButton icon={Plus} requires="edit" onClick={() => setShowForm((v) => !v)}>
           Log interaction
         </SecondaryButton>
       </div>
@@ -124,7 +124,7 @@ export function InteractionLogSection({ basePath }: { basePath: string }) {
           {error && <p className="text-xs text-red-600">{error}</p>}
           <div className="flex justify-end gap-2">
             <SecondaryButton onClick={() => setShowForm(false)}>Cancel</SecondaryButton>
-            <PrimaryButton type="submit" disabled={busy}>
+            <PrimaryButton type="submit" requires="edit" disabled={busy}>
               {busy ? 'Saving…' : 'Save entry'}
             </PrimaryButton>
           </div>
@@ -150,7 +150,7 @@ export function InteractionLogSection({ basePath }: { basePath: string }) {
                   {entry.createdByEmail ? ` · ${entry.createdByEmail}` : ''}
                 </div>
               </div>
-              <IconButton icon={Trash2} tone="danger" title="Delete" onClick={() => remove(entry.id)} />
+              <IconButton icon={Trash2} tone="danger" title="Delete" requires="full" onClick={() => remove(entry.id)} />
             </div>
           ))}
         </div>

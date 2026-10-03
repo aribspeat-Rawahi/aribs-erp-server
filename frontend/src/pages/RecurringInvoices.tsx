@@ -120,7 +120,7 @@ export default function RecurringInvoices() {
       <PageHeader
         title="Recurring Invoices"
         subtitle="Rent, subscriptions and retainers that bill automatically on a schedule"
-        action={<PrimaryButton icon={Plus} onClick={() => setShowNew(true)}>New recurring invoice</PrimaryButton>}
+        action={<PrimaryButton icon={Plus} requires="edit" onClick={() => setShowNew(true)}>New recurring invoice</PrimaryButton>}
       />
       {loading ? (
         <div className="text-sm text-muted">Loading…</div>
@@ -150,15 +150,17 @@ export default function RecurringInvoices() {
                   <IconButton
                     icon={Zap}
                     title="Generate now"
+                    requires="edit"
                     onClick={() => busyId !== item.id && generateNow(item)}
                   />
                   <IconButton
                     icon={item.active ? Pause : Play}
                     title={item.active ? 'Pause' : 'Resume'}
+                    requires="edit"
                     onClick={() => busyId !== item.id && toggleActive(item)}
                   />
-                  <IconButton icon={Pencil} title="Edit" onClick={() => setEditing(item)} />
-                  <IconButton icon={Trash2} tone="danger" title="Delete" onClick={() => remove(item.id)} />
+                  <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => setEditing(item)} />
+                  <IconButton icon={Trash2} tone="danger" title="Delete" requires="full" onClick={() => remove(item.id)} />
                 </div>
               </div>
             ))}
@@ -414,7 +416,7 @@ function RecurringInvoiceModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>
             {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create'}
           </PrimaryButton>
         </div>

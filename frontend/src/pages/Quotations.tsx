@@ -109,7 +109,7 @@ export default function Quotations() {
       <PageHeader
         title="Quotations"
         subtitle="Priced proposals sent to customers before an invoice is raised"
-        action={<PrimaryButton icon={Plus} onClick={() => setShowNew(true)}>New quotation</PrimaryButton>}
+        action={<PrimaryButton icon={Plus} requires="edit" onClick={() => setShowNew(true)}>New quotation</PrimaryButton>}
       />
       {loading ? (
         <div className="text-sm text-muted">Loading…</div>
@@ -139,16 +139,16 @@ export default function Quotations() {
                     <IconButton icon={MessageCircle} title="Send on WhatsApp" onClick={() => openWhatsapp(`/quotations/${q.id}/whatsapp-link`)} />
                     <IconButton icon={Share2} title="Share PDF (attach the file)" onClick={() => sharePdf(`/quotations/${q.id}/pdf`, `${q.quotationNumber}.pdf`, `Quotation ${q.quotationNumber}`)} />
                     {q.status !== 'converted' && (
-                      <IconButton icon={Pencil} title="Edit" onClick={() => startEdit(q)} />
+                      <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => startEdit(q)} />
                     )}
                     {q.status === 'draft' && (
-                      <IconButton icon={CheckCircle2} tone="success" title="Approve" onClick={() => approve(q.id)} />
+                      <IconButton icon={CheckCircle2} tone="success" title="Approve" requires="edit" onClick={() => approve(q.id)} />
                     )}
                     {q.status === 'approved' && (
-                      <IconButton icon={ArrowRightCircle} tone="success" title="Convert to invoice" onClick={() => convert(q.id)} />
+                      <IconButton icon={ArrowRightCircle} tone="success" title="Convert to invoice" requires="edit" onClick={() => convert(q.id)} />
                     )}
                     {canDelete && (
-                      <IconButton icon={Trash2} tone="danger" title="Delete" onClick={() => remove(q.id)} />
+                      <IconButton icon={Trash2} tone="danger" title="Delete" requires="full" onClick={() => remove(q.id)} />
                     )}
                   </div>
                 </div>

@@ -166,12 +166,12 @@ export default function JournalsPanel() {
           ]}
         />
         {subTab === 'entries' && (
-          <PrimaryButton icon={Plus} onClick={() => setShowAddEntry(true)}>
+          <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAddEntry(true)}>
             New journal entry
           </PrimaryButton>
         )}
         {subTab === 'accounts' && (
-          <PrimaryButton icon={Plus} onClick={() => setShowAddAccount(true)}>
+          <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAddAccount(true)}>
             Add account
           </PrimaryButton>
         )}
@@ -207,7 +207,7 @@ export default function JournalsPanel() {
                           {entry.autoPosted ? (
                             <span className="text-xs px-2 py-1 rounded-full font-medium bg-black/5 text-ink/70">Auto-posted</span>
                           ) : (
-                            <IconButton icon={Trash2} tone="danger" title="Delete entry" onClick={() => removeEntry(entry.id)} />
+                            <IconButton icon={Trash2} tone="danger" requires="full" title="Delete entry" onClick={() => removeEntry(entry.id)} />
                           )}
                         </div>
                       </div>
@@ -267,9 +267,9 @@ export default function JournalsPanel() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <IconButton icon={Pencil} title="Edit account" onClick={() => setEditAccount(acc)} />
+                      <IconButton icon={Pencil} requires="edit" title="Edit account" onClick={() => setEditAccount(acc)} />
                       {acc.active && (
-                        <IconButton icon={Ban} tone="danger" title="Deactivate account" onClick={() => deactivateAccount(acc.id)} />
+                        <IconButton icon={Ban} tone="danger" requires="full" title="Deactivate account" onClick={() => deactivateAccount(acc.id)} />
                       )}
                     </div>
                   </div>
@@ -415,7 +415,7 @@ function AccountModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -574,7 +574,7 @@ function JournalEntryModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy || !balanced || lines.length < 2}>
+          <PrimaryButton type="submit" requires="edit" disabled={busy || !balanced || lines.length < 2}>
             {busy ? 'Saving…' : 'Save entry'}
           </PrimaryButton>
         </div>

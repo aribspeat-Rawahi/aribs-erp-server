@@ -69,7 +69,7 @@ export default function SalesOrders() {
       <PageHeader
         title="Sales Orders"
         subtitle="Orders that deduct finished-goods stock on completion"
-        action={<PrimaryButton icon={Plus} onClick={() => setShowNew(true)}>New sales order</PrimaryButton>}
+        action={<PrimaryButton icon={Plus} requires="edit" onClick={() => setShowNew(true)}>New sales order</PrimaryButton>}
       />
       {loading ? (
         <div className="text-sm text-muted">Loading…</div>
@@ -90,8 +90,8 @@ export default function SalesOrders() {
                   </span>
                   {o.status === 'pending' && (
                     <>
-                      <SecondaryButton onClick={() => act(o.id, 'complete')}>Complete</SecondaryButton>
-                      <SecondaryButton onClick={() => act(o.id, 'cancel')}>Cancel</SecondaryButton>
+                      <SecondaryButton requires="edit" onClick={() => act(o.id, 'complete')}>Complete</SecondaryButton>
+                      <SecondaryButton requires="edit" onClick={() => act(o.id, 'cancel')}>Cancel</SecondaryButton>
                     </>
                   )}
                 </div>
@@ -225,7 +225,7 @@ function NewSalesOrderModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Creating…' : 'Create'}</PrimaryButton>
         </div>
       </form>
     </Modal>

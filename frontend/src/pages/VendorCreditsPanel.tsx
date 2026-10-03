@@ -85,7 +85,7 @@ export default function VendorCreditsPanel({
   return (
     <div>
       <div className="flex justify-end mb-4">
-        {canManage && <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)}>New vendor credit</PrimaryButton>}
+        {canManage && <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAdd(true)}>New vendor credit</PrimaryButton>}
       </div>
 
       {loading ? (
@@ -122,12 +122,12 @@ export default function VendorCreditsPanel({
                       <div className="flex items-center gap-1.5">
                         {remaining > 0.001 && (
                           <>
-                            <IconButton icon={ArrowRightLeft} title="Apply against a bill" onClick={() => setApplying(c)} />
-                            <IconButton icon={Banknote} title="Record cash refund" onClick={() => setRefunding(c)} />
+                            <IconButton icon={ArrowRightLeft} title="Apply against a bill" requires="edit" onClick={() => setApplying(c)} />
+                            <IconButton icon={Banknote} title="Record cash refund" requires="edit" onClick={() => setRefunding(c)} />
                           </>
                         )}
                         {Number(c.appliedAmount) === 0 && Number(c.refundedAmount) === 0 && (
-                          <IconButton icon={Trash2} tone="danger" title="Delete" onClick={() => removeItem(c.id)} />
+                          <IconButton icon={Trash2} tone="danger" title="Delete" requires="full" onClick={() => removeItem(c.id)} />
                         )}
                       </div>
                     )}
@@ -233,7 +233,7 @@ function NewCreditModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -294,7 +294,7 @@ function ApplyCreditModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Applying…' : 'Apply'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Applying…' : 'Apply'}</PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -361,7 +361,7 @@ function RefundCreditModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy}>{busy ? 'Saving…' : 'Confirm refund'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Confirm refund'}</PrimaryButton>
         </div>
       </form>
     </Modal>
