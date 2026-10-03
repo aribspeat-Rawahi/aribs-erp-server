@@ -20,7 +20,7 @@ import { ApprovalService } from '../approval/approval.service';
 import { ApprovalRequestType, ApprovalRequestStatus } from '../approval/approval-request.entity';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { DocumentLinkService } from '../document-link/document-link.service';
-import { toWhatsappPhone } from '../common/whatsapp-phone.util';
+import { buildWhatsappLinks, toWhatsappPhone } from '../common/whatsapp-phone.util';
 
 // Auto-posted Chart-of-Accounts codes for invoice issuance (Dr Accounts
 // Receivable / Cr Sales Revenue [+ Cr VAT Payable]) — matches the
@@ -555,7 +555,7 @@ export class InvoiceService {
     const pdfUrl = invoice.pdfPath ? this.documentLinks.createUrl('invoice', invoice.id) : null;
     const message = `Hello ${customer.name}, your invoice ${invoice.invoiceNumber} totalling ${invoice.total} OMR is ready.`
       + (pdfUrl ? `\n\nView / download PDF:\n${pdfUrl}` : '');
-    return { url: `https://wa.me/${phone}?text=${encodeURIComponent(message)}` };
+    return buildWhatsappLinks(phone, message);
   }
 
   // One-click: invoice -> delivery note, carrying over customer, items,

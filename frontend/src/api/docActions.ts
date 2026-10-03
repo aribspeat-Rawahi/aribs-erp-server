@@ -140,7 +140,18 @@ export async function downloadFile(path: string, filename: string) {
   triggerBrowserDownload(url, filename);
 }
 
+// Phones (the Android app or a mobile browser) open the installed WhatsApp
+// app directly; PCs use WhatsApp Web (wa.me is blocked on some networks).
+function isPhone(): boolean {
+  return isNativeApp() || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 export async function openWhatsapp(linkPath: string) {
   const res = await api.get(linkPath);
-  window.open(res.data.url, '_blank');
+  const { url, appUrl } = res.data as { url: string; appUrl?: string };
+  if (appUrl && isPhone()) {
+    window.location.href = appUrl;
+    return;
+  }
+  window.open(url, '_blank');
 }

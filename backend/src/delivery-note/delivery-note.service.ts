@@ -9,7 +9,7 @@ import { SettingsService } from '../settings/settings.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { generateInvoicePdf, InvoicePdfItem } from '../common/invoice-pdf.util';
 import { DocumentLinkService } from '../document-link/document-link.service';
-import { toWhatsappPhone } from '../common/whatsapp-phone.util';
+import { buildWhatsappLinks, toWhatsappPhone } from '../common/whatsapp-phone.util';
 
 @Injectable()
 export class DeliveryNoteService {
@@ -255,7 +255,7 @@ export class DeliveryNoteService {
     const pdfUrl = this.documentLinks.createUrl('delivery_note', note.id);
     const message = `Hello ${customer.name}, your delivery note ${note.deliveryNoteNumber} is ready.`
       + (pdfUrl ? `\n\nView / download PDF:\n${pdfUrl}` : '');
-    return { url: `https://wa.me/${phone}?text=${encodeURIComponent(message)}` };
+    return buildWhatsappLinks(phone, message);
   }
 
   // Admin-only (enforced at the controller).

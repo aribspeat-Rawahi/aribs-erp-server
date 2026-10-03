@@ -23,3 +23,14 @@ export function toWhatsappPhone(raw: string, defaultCountryCode = process.env.DE
   if (local.length <= 8) return countryCode + local;
   return local;
 }
+
+// Builds the links the "Send on WhatsApp" button uses.
+// - url:    WhatsApp Web (works on PCs; wa.me is blocked on some networks)
+// - appUrl: opens the installed WhatsApp app directly (phones / Android app)
+export function buildWhatsappLinks(phone: string, message: string) {
+  const query = `phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(message)}`;
+  return {
+    url: `https://web.whatsapp.com/send?${query}`,
+    appUrl: `whatsapp://send?${query}`,
+  };
+}

@@ -14,7 +14,7 @@ import { generateInvoicePdf, InvoicePdfItem } from '../common/invoice-pdf.util';
 import { ApprovalService } from '../approval/approval.service';
 import { ApprovalRequestType, ApprovalRequestStatus } from '../approval/approval-request.entity';
 import { DocumentLinkService } from '../document-link/document-link.service';
-import { toWhatsappPhone } from '../common/whatsapp-phone.util';
+import { buildWhatsappLinks, toWhatsappPhone } from '../common/whatsapp-phone.util';
 
 @Injectable()
 export class QuotationService {
@@ -402,7 +402,7 @@ export class QuotationService {
     const pdfUrl = this.documentLinks.createUrl('quotation', quotation.id);
     const message = `Hello ${customer.name}, your quotation ${quotation.quotationNumber} totalling ${quotation.total} OMR is ready.`
       + (pdfUrl ? `\n\nView / download PDF:\n${pdfUrl}` : '');
-    return { url: `https://wa.me/${phone}?text=${encodeURIComponent(message)}` };
+    return buildWhatsappLinks(phone, message);
   }
 
   // One-click convert: builds an Invoice from this quotation's items and
