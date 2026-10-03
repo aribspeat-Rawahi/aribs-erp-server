@@ -1,35 +1,42 @@
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
-// Safety net, read-only: after startup (and after migrations have run),
-// compares the real database with the entity definitions WITHOUT changing
-// anything. If they differ, a code change is missing its migration - the
-// warning appears in Hostinger's Runtime logs so it's caught early.
+// Safety net, read-only: compares the real database with the entity
+// definitions WITHOUT changing anything. If they differ, a code change is
+// missing its migration.
+//
+// - Runs in the background AFTER startup, so it never delays the app
+//   (Hostinger expects the app to start listening within ~3 seconds).
+// - Logs with console.* because Hostinger's Runtime logs only show plain
+//   console output, not NestJS logger lines.
 @Injectable()
 export class SchemaCheckService implements OnApplicationBootstrap {
-  private readonly logger = new Logger('SchemaCheck');
-
   constructor(private readonly dataSource: DataSource) {}
 
-  async onApplicationBootstrap() {
+  onApplicationBootstrap() {
     if (process.env.DB_SYNCHRONIZE) {
-      this.logger.warn(
-        'DB_SYNCHRONIZE is set but is ignored now - schema changes only happen through migrations. You can delete this environment variable.',
+      console.warn(
+        '[SchemaCheck] DB_SYNCHRONIZE is set but ignored - schema changes only happen through migrations. You can delete this environment variable.',
       );
     }
+    // Deliberately not awaited: let the app finish starting first.
+    setTimeout(() => void this.check(), 5000);
+  }
+
+  private async check() {
     try {
       const sql = await this.dataSource.driver.createSchemaBuilder().log();
       if (sql.upQueries.length === 0) {
-        this.logger.log('Database schema matches the code.');
+        console.log('[SchemaCheck] Database schema matches the code.');
         return;
       }
-      this.logger.warn(
-        `Database schema differs from the code (${sql.upQueries.length} change(s) not covered by a migration). ` +
-          'A migration is missing - nothing was changed automatically. First differences:',
+      console.warn(
+        `[SchemaCheck] WARNING: database schema differs from the code (${sql.upQueries.length} change(s) not covered by a migration). ` +
+          'Nothing was changed automatically. First differences:',
       );
-      for (const q of sql.upQueries.slice(0, 5)) this.logger.warn(`  ${q.query}`);
+      for (const q of sql.upQueries.slice(0, 5)) console.warn(`[SchemaCheck]   ${q.query}`);
     } catch (err) {
-      this.logger.warn(`Schema check skipped: ${(err as Error).message}`);
+      console.warn(`[SchemaCheck] Skipped: ${(err as Error).message}`);
     }
   }
 }

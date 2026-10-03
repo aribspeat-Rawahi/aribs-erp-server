@@ -68,7 +68,7 @@ export async function detectDatabaseType(env: NodeJS.ProcessEnv = process.env): 
       user: env.DB_USERNAME,
       password: env.DB_PASSWORD,
       database: env.DB_DATABASE,
-      connectTimeout: 10000,
+      connectTimeout: 5000,
     });
     const [rows] = await conn.query('SELECT VERSION() AS v');
     const version = String(rows?.[0]?.v || '');
