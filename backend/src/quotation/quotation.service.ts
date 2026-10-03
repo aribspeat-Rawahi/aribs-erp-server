@@ -14,6 +14,7 @@ import { generateInvoicePdf, InvoicePdfItem } from '../common/invoice-pdf.util';
 import { ApprovalService } from '../approval/approval.service';
 import { ApprovalRequestType, ApprovalRequestStatus } from '../approval/approval-request.entity';
 import { DocumentLinkService } from '../document-link/document-link.service';
+import { toWhatsappPhone } from '../common/whatsapp-phone.util';
 
 @Injectable()
 export class QuotationService {
@@ -397,7 +398,7 @@ export class QuotationService {
     if (!customer.phone) {
       throw new BadRequestException('This customer has no phone number on file');
     }
-    const phone = customer.phone.replace(/[^0-9]/g, '');
+    const phone = toWhatsappPhone(customer.phone);
     const pdfUrl = this.documentLinks.createUrl('quotation', quotation.id);
     const message = `Hello ${customer.name}, your quotation ${quotation.quotationNumber} totalling ${quotation.total} OMR is ready.`
       + (pdfUrl ? `\n\nView / download PDF:\n${pdfUrl}` : '');

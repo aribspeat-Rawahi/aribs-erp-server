@@ -20,6 +20,7 @@ import { ApprovalService } from '../approval/approval.service';
 import { ApprovalRequestType, ApprovalRequestStatus } from '../approval/approval-request.entity';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { DocumentLinkService } from '../document-link/document-link.service';
+import { toWhatsappPhone } from '../common/whatsapp-phone.util';
 
 // Auto-posted Chart-of-Accounts codes for invoice issuance (Dr Accounts
 // Receivable / Cr Sales Revenue [+ Cr VAT Payable]) — matches the
@@ -550,7 +551,7 @@ export class InvoiceService {
     if (!customer.phone) {
       throw new BadRequestException('This customer has no phone number on file');
     }
-    const phone = customer.phone.replace(/[^0-9]/g, '');
+    const phone = toWhatsappPhone(customer.phone);
     const pdfUrl = invoice.pdfPath ? this.documentLinks.createUrl('invoice', invoice.id) : null;
     const message = `Hello ${customer.name}, your invoice ${invoice.invoiceNumber} totalling ${invoice.total} OMR is ready.`
       + (pdfUrl ? `\n\nView / download PDF:\n${pdfUrl}` : '');
