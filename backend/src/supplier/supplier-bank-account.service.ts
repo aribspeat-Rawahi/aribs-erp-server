@@ -8,6 +8,7 @@ import { SupplierBankAccount } from './supplier-bank-account.entity';
 import { SupplierService } from './supplier.service';
 import { UpsertSupplierBankAccountDto } from './dto/supplier.dto';
 import { verifyFileSignature } from '../common/file-signature.util';
+import { discardFile } from '../common/discard-file.util';
 
 @Injectable()
 export class SupplierBankAccountService {
@@ -47,7 +48,7 @@ export class SupplierBankAccountService {
 
   async remove(supplierId: string, id: string) {
     const item = await this.findOwned(supplierId, id);
-    if (item.statementPath && fs.existsSync(item.statementPath)) fs.unlinkSync(item.statementPath);
+    discardFile(item.statementPath);
     await this.repo.remove(item);
     return { ok: true };
   }

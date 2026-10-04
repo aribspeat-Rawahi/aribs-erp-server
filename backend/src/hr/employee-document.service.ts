@@ -7,6 +7,7 @@ import * as path from 'path';
 import { EmployeeDocument } from './employee-document.entity';
 import { EmployeeService } from './employee.service';
 import { verifyFileSignature } from '../common/file-signature.util';
+import { discardFile } from '../common/discard-file.util';
 
 @Injectable()
 export class EmployeeDocumentService {
@@ -60,7 +61,7 @@ export class EmployeeDocumentService {
 
   async remove(employeeId: string, docId: string) {
     const doc = await this.findOwned(employeeId, docId);
-    if (fs.existsSync(doc.filePath)) fs.unlinkSync(doc.filePath);
+    discardFile(doc.filePath);
     await this.repo.remove(doc);
     return { ok: true };
   }

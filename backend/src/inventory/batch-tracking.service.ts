@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, MoreThan, Repository, In } from 'typeorm';
 import { RawMaterialBatch } from './raw-material-batch.entity';
@@ -238,6 +238,40 @@ export class BatchTrackingService {
     const qty = Math.min(backorder, Number(added));
     if (qty <= EPSILON) return;
     await this.consumeFinishedGoodFifo(manager, { finishedGoodId, quantity: qty, noTopUp: true });
+  }
+
+  // Removes a product's batches and their trace rows (used when the
+  // product itself is deleted, stock 0). .remove() so the Activity Log
+  // undo can put them back.
+  async removeFinishedGoodBatches(finishedGoodId: string) {
+    const batches = await this.finishedBatchRepo.find({ where: { finishedGoodId } });
+    await this.removeBatchRows(batches);
+  }
+
+  // Admin: delete a leftover batch whose product no longer exists. A
+  // batch of an existing product is part of its stock and can't go alone.
+  async removeOrphanFinishedBatch(id: string) {
+    const batch = await this.finishedBatchRepo.findOne({ where: { id } });
+    if (!batch) throw new NotFoundException('Batch not found');
+    const product = await this.finishedBatchRepo.manager.findOne(FinishedGood, { where: { id: batch.finishedGoodId } });
+    if (product) {
+      throw new BadRequestException(
+        `This batch is part of ${product.name}'s stock. Stock it out or delete the product instead - its batches are removed with it.`,
+      );
+    }
+    await this.removeBatchRows([batch]);
+    return { deleted: true };
+  }
+
+  private async removeBatchRows(batches: FinishedGoodBatch[]) {
+    if (!batches.length) return;
+    const ids = batches.map((b) => b.id);
+    const manager = this.finishedBatchRepo.manager;
+    const sales = await manager.find(SalesBatchConsumption, { where: { finishedGoodBatchId: In(ids) } });
+    if (sales.length) await manager.remove(sales);
+    const production = await manager.find(ProductionBatchConsumption, { where: { finishedGoodBatchId: In(ids) } });
+    if (production.length) await manager.remove(production);
+    await manager.remove(batches);
   }
 
   // --- Read side (Traceability page) ---

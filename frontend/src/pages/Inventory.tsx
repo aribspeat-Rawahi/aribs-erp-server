@@ -218,6 +218,18 @@ export default function Inventory() {
       .finally(() => setBatchLoading(false));
   }
 
+  // Admin: remove a leftover batch whose product was deleted earlier
+  // (a product's own batches are removed together with the product).
+  async function removeOrphanBatch(b: FinishedGoodBatch) {
+    if (!window.confirm(`Delete batch ${b.batchNumber}? Its product no longer exists.`)) return;
+    try {
+      await api.delete(`/finished-good-batches/${b.id}`);
+      loadFinishedBatches();
+    } catch (err: any) {
+      window.alert(err?.response?.data?.message || 'Could not delete this batch.');
+    }
+  }
+
   function refreshStockLookups() {
     api.get('/finished-goods').then((res) => setFinishedGoods(res.data));
     api.get('/raw-materials').then((res) => setRawMaterials(res.data));
@@ -701,7 +713,7 @@ export default function Inventory() {
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-ink whitespace-nowrap">{b.batchNumber}</div>
                       <div className="text-xs text-muted">
-                        {fgName(b.finishedGoodId)} · {b.producedDate}
+                        {finishedGoods.some((f) => f.id === b.finishedGoodId) ? fgName(b.finishedGoodId) : 'Product deleted'} · {b.producedDate}
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
@@ -715,6 +727,9 @@ export default function Inventory() {
                         <div className="text-xs text-muted">remaining</div>
                       </div>
                       <IconButton icon={Eye} title="Trace back to raw materials" onClick={() => setViewingFinishedBatch(b)} />
+                      {hasAnyRole(['admin']) && finishedGoods.length > 0 && !finishedGoods.some((f) => f.id === b.finishedGoodId) && (
+                        <IconButton icon={Trash2} tone="danger" title="Delete leftover batch" requires="full" onClick={() => removeOrphanBatch(b)} />
+                      )}
                     </div>
                   </div>
                 ))}

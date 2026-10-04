@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { SalesOrderService } from './sales-order.service';
 import { CreateSalesOrderDto } from './dto/sales-order.dto';
 import { ModuleAccess } from '../auth/module-access.decorator';
+import { Roles } from '../auth/roles.guard';
+import { UserRole } from '../auth/user.entity';
 
 interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
@@ -30,7 +32,7 @@ export class SalesOrderController {
     return this.service.create(dto);
   }
 
-  // Deducts finished goods stock — the actual "sale" moment.
+  // Order tracking only - stock leaves with the invoice.
   @Post(':id/complete')
   complete(@Param('id') id: string, @Req() req: AuthedRequest) {
     return this.service.complete(id, { userId: req.user?.userId, email: req.user?.email });
@@ -39,5 +41,13 @@ export class SalesOrderController {
   @Post(':id/cancel')
   cancel(@Param('id') id: string) {
     return this.service.cancel(id);
+  }
+
+  // Same roles as deleting an invoice. Logged, emailed and (for orders
+  // that never moved stock) undoable from the Activity Log.
+  @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.service.remove(id);
   }
 }

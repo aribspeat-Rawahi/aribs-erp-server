@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
-import { PageHeader, PrimaryButton, SecondaryButton, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
+import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
 import { PAYMENT_TYPE_OPTIONS } from '../constants';
 import { formatQuantityWithUnit, quantityInputStep, snapQuantityToUnit, unitLabel } from '../utils/formatQuantity';
 
@@ -34,6 +35,8 @@ function newItemKey() {
 }
 
 export default function SalesOrders() {
+  const { hasAnyRole } = useAuth();
+  const canDelete = hasAnyRole(['admin', 'accountant']);
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [finishedGoods, setFinishedGoods] = useState<FinishedGood[]>([]);
@@ -63,6 +66,20 @@ export default function SalesOrders() {
         return `${fg?.name || 'Item'} x ${formatQuantityWithUnit(it.quantity, it.unit || fg?.unit)}`;
       })
       .join(', ');
+  }
+
+  async function remove(o: SalesOrder) {
+    const note =
+      o.status === 'completed'
+        ? '\n\nIf this order took stock out (older orders did), the stock is put back.'
+        : '\n\nAdmin, CEO, MD and Accountant are emailed and can undo it from the Activity Log.';
+    if (!window.confirm(`Delete this sales order?${note}`)) return;
+    try {
+      await api.delete(`/sales-orders/${o.id}`);
+      load();
+    } catch (err: any) {
+      window.alert(err?.response?.data?.message || 'Could not delete this sales order.');
+    }
   }
 
   async function act(id: string, action: 'complete' | 'cancel') {
@@ -105,6 +122,7 @@ export default function SalesOrders() {
                       <SecondaryButton requires="edit" onClick={() => act(o.id, 'cancel')}>Cancel</SecondaryButton>
                     </>
                   )}
+                  {canDelete && <IconButton icon={Trash2} tone="danger" title="Delete" requires="full" onClick={() => remove(o)} />}
                 </div>
               </div>
             ))}

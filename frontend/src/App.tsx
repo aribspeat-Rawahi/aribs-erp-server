@@ -66,7 +66,8 @@ function ProtectedRoute({ children, module }: { children: JSX.Element; module?: 
   const { user, loading, canAccessModule } = useAuth();
   const location = useLocation();
   if (loading) return null;
-  if (!user) return <Navigate to="/login" replace />;
+  // remember where they were going (e.g. an undo link from an email)
+  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   if (module && !canAccessModule(module)) {
     const firstAllowed = MODULE_HOME.find((m) => m.module !== module && canAccessModule(m.module));
     if (firstAllowed) return <Navigate to={firstAllowed.path} replace />;

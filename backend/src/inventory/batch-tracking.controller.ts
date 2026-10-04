@@ -1,4 +1,6 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Delete, Get, Param, Query } from '@nestjs/common';
+import { Roles } from '../auth/roles.guard';
+import { UserRole } from '../auth/user.entity';
 import { BatchTrackingService } from './batch-tracking.service';
 import { ModuleAccess } from '../auth/module-access.decorator';
 
@@ -35,5 +37,12 @@ export class BatchTrackingController {
   @Get('finished-good-batches/:id/sales')
   salesFor(@Param('id') id: string) {
     return this.service.salesForFinishedBatch(id);
+  }
+
+  // Admin only: a leftover batch of a product that no longer exists.
+  @Roles(UserRole.ADMIN)
+  @Delete('finished-good-batches/:id')
+  removeOrphan(@Param('id') id: string) {
+    return this.service.removeOrphanFinishedBatch(id);
   }
 }

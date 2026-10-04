@@ -203,6 +203,10 @@ export class FinishedGoodService {
     const bomLines = await this.bomRepo.find({ where: { finishedGoodId: id } });
     if (bomLines.length > 0) await this.bomRepo.remove(bomLines);
 
+    // its batches (all used up - stock is 0) and their trace rows go too,
+    // so the Finished Good Batches page has no leftovers
+    await this.batchTrackingService.removeFinishedGoodBatches(id);
+
     await this.repo.remove(item);
     return { deleted: true };
   }

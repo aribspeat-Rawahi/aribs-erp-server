@@ -284,4 +284,19 @@ export class EmailService {
       text: body,
     });
   }
+
+  // Plain-text notice to a list of addresses (delete / restore proof).
+  async sendPlainNotice(to: string[], subject: string, text: string) {
+    if (!to.length) return;
+    if (!this.transporter) {
+      this.logger.warn(`SMTP not configured — would have sent to [${to.join(', ')}]: ${subject}`);
+      return;
+    }
+    await this.transporter.sendMail({
+      from: this.config.get('SMTP_FROM') || 'erp@aribs.net',
+      to: to.join(','),
+      subject,
+      text,
+    });
+  }
 }

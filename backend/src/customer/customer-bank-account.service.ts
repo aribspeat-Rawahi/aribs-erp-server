@@ -8,6 +8,7 @@ import { CustomerBankAccount } from './customer-bank-account.entity';
 import { CustomerService } from './customer.service';
 import { UpsertCustomerBankAccountDto } from './dto/customer.dto';
 import { verifyFileSignature } from '../common/file-signature.util';
+import { discardFile } from '../common/discard-file.util';
 
 @Injectable()
 export class CustomerBankAccountService {
@@ -47,7 +48,7 @@ export class CustomerBankAccountService {
 
   async remove(customerId: string, id: string) {
     const item = await this.findOwned(customerId, id);
-    if (item.statementPath && fs.existsSync(item.statementPath)) fs.unlinkSync(item.statementPath);
+    discardFile(item.statementPath);
     await this.repo.remove(item);
     return { ok: true };
   }

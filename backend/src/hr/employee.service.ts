@@ -8,6 +8,7 @@ import { Employee } from './employee.entity';
 import { EmployeeDocument } from './employee-document.entity';
 import { ArchiveEmployeeDto, CreateEmployeeDto, UpdateEmployeeDto } from './dto/hr.dto';
 import { verifyFileSignature } from '../common/file-signature.util';
+import { discardFile } from '../common/discard-file.util';
 
 @Injectable()
 export class EmployeeService {
@@ -126,19 +127,13 @@ export class EmployeeService {
   async remove(id: string) {
     const item = await this.findOne(id);
 
-    if (item.photoPath && fs.existsSync(item.photoPath)) {
-      fs.unlinkSync(item.photoPath);
-    }
-    if (item.guardianPhotoPath && fs.existsSync(item.guardianPhotoPath)) {
-      fs.unlinkSync(item.guardianPhotoPath);
-    }
-    if (item.nomineePhotoPath && fs.existsSync(item.nomineePhotoPath)) {
-      fs.unlinkSync(item.nomineePhotoPath);
-    }
+    discardFile(item.photoPath);
+    discardFile(item.guardianPhotoPath);
+    discardFile(item.nomineePhotoPath);
 
     const docs = await this.documentRepo.find({ where: { employeeId: id } });
     for (const doc of docs) {
-      if (fs.existsSync(doc.filePath)) fs.unlinkSync(doc.filePath);
+      discardFile(doc.filePath);
     }
     if (docs.length > 0) await this.documentRepo.remove(docs);
 

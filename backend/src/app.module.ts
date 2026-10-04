@@ -36,6 +36,7 @@ import { PublicDocumentModule } from './public-document/public-document.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
 import { UnitsModule } from './units/units.module';
 import { StockAlertsModule } from './stock-alerts/stock-alerts.module';
+import { DeletedRecordsModule } from './deleted-records/deleted-records.module';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { StockAlertsModule } from './stock-alerts/stock-alerts.module';
     MonitoringModule,
     UnitsModule,
     StockAlertsModule,
+    DeletedRecordsModule,
     SchemaCheckModule,
   ],
 })

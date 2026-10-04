@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Navigate, useNavigate, Link } from 'react-router-dom';
+import { Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { inputClass } from '../components/ui';
 import api from '../api/client';
@@ -8,6 +8,7 @@ import { logoUrl } from './Settings';
 export default function Login() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -35,7 +36,11 @@ export default function Login() {
     });
   }, []);
 
-  if (user) return <Navigate to="/" replace />;
+  // back to the page they opened before logging in (internal paths only)
+  const from = (location.state as { from?: string } | null)?.from;
+  const target = from && from.startsWith('/') && !from.startsWith('//') && !from.startsWith('/login') ? from : '/';
+
+  if (user) return <Navigate to={target} replace />;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -43,7 +48,7 @@ export default function Login() {
     setBusy(true);
     try {
       await login(email, password);
-      navigate('/');
+      navigate(target);
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Login failed. Check your email and password.');
     } finally {

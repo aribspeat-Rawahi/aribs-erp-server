@@ -12,6 +12,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { Invoice } from '../invoice/invoice.entity';
 import { Quotation } from '../quotation/quotation.entity';
 import { DeliveryNote } from '../delivery-note/delivery-note.entity';
+import { discardFile } from '../common/discard-file.util';
 
 @Injectable()
 export class CustomerService {
@@ -84,13 +85,13 @@ export class CustomerService {
 
     const bankAccounts = await this.bankAccountRepo.find({ where: { customerId: id } });
     for (const acc of bankAccounts) {
-      if (acc.statementPath && fs.existsSync(acc.statementPath)) fs.unlinkSync(acc.statementPath);
+      discardFile(acc.statementPath);
     }
     if (bankAccounts.length > 0) await this.bankAccountRepo.remove(bankAccounts);
 
     const documents = await this.documentRepo.find({ where: { customerId: id } });
     for (const doc of documents) {
-      if (fs.existsSync(doc.filePath)) fs.unlinkSync(doc.filePath);
+      discardFile(doc.filePath);
     }
     if (documents.length > 0) await this.documentRepo.remove(documents);
 

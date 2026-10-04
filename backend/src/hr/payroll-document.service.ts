@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PayrollDocument } from './payroll-document.entity';
 import { verifyFileSignature } from '../common/file-signature.util';
+import { discardFile } from '../common/discard-file.util';
 
 // Mirrors EmployeeDocumentService's pattern (same signature-verified
 // upload + on-disk storage), keyed by payrollId instead of employeeId.
@@ -58,7 +59,7 @@ export class PayrollDocumentService {
 
   async remove(payrollId: string, docId: string) {
     const doc = await this.findOwned(payrollId, docId);
-    if (fs.existsSync(doc.filePath)) fs.unlinkSync(doc.filePath);
+    discardFile(doc.filePath);
     await this.repo.remove(doc);
     return { ok: true };
   }

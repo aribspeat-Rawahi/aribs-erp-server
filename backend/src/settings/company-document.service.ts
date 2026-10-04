@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { CompanyDocument } from './company-document.entity';
 import { verifyFileSignature } from '../common/file-signature.util';
+import { discardFile } from '../common/discard-file.util';
 
 // Mirrors CustomerDocumentService's pattern (customer/customer-document.service.ts)
 // — same on-disk storage + signature-verified upload approach, just without
@@ -59,7 +60,7 @@ export class CompanyDocumentService {
 
   async remove(id: string) {
     const doc = await this.findOrThrow(id);
-    if (fs.existsSync(doc.filePath)) fs.unlinkSync(doc.filePath);
+    discardFile(doc.filePath);
     await this.repo.remove(doc);
     return { ok: true };
   }

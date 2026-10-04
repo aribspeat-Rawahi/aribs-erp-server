@@ -779,6 +779,68 @@ export class InvoiceService {
     return { deleted: true };
   }
 
+  // Undo of a deleted invoice (Activity Log > Deleted): puts the invoice
+  // and its lines back with their original ids/numbers, then re-applies
+  // what the delete reversed - stock out (and waiting-for-stock), cost of
+  // goods sold, the sales journal entry, the PDF, and each payment
+  // (re-deposited on its bank/cash account when it had one).
+  async restoreDeleted(rows: { entity: string; data: Record<string, unknown> }[], actor: ActorRef = {}) {
+    const invRow = rows.find((r) => r.entity === 'Invoice');
+    if (!invRow) throw new BadRequestException('Nothing to restore for this invoice.');
+    const itemRows = rows.filter((r) => r.entity === 'InvoiceItem');
+    const paymentRows = rows.filter((r) => r.entity === 'InvoicePayment' && !r.data.salesReturnId);
+    const toDate = (v: unknown) => (typeof v === 'string' ? new Date(v) : v);
+
+    await this.dataSource.transaction(async (manager) => {
+      const data = { ...invRow.data };
+      delete data.sequenceNumber;
+      await manager.insert(Invoice, {
+        ...data,
+        createdAt: toDate(data.createdAt),
+        updatedAt: new Date(),
+        deliveredAt: toDate(data.deliveredAt),
+        stockReadyAt: toDate(data.stockReadyAt),
+        cogsAmount: 0,
+        paidAmount: 0,
+        paymentStatus: computePaymentStatus(0, Number(data.total)),
+        pdfPath: null,
+        waitingForStock: false,
+      } as any);
+      for (const r of itemRows) await manager.insert(InvoiceItem, { ...r.data, shortQuantity: 0 } as any);
+    });
+
+    const invoice = await this.invoiceRepo.findOne({ where: { id: String(invRow.data.id) } });
+    if (!invoice) throw new NotFoundException('Restored invoice not found');
+    const items = await this.itemRepo.find({ where: { invoiceId: invoice.id } });
+    await this.syncStock(invoice, [], items, actor);
+    await this.recordShortages(invoice, items);
+    const customer = await this.customerService.findOne(invoice.customerId);
+    invoice.pdfPath = await this.writePdfAndGetPath(invoice, items, customer.name, customer.vatin, customer.address, customer.phone);
+    await this.invoiceRepo.update({ id: invoice.id }, { pdfPath: invoice.pdfPath });
+    await this.postJournalEntry(invoice, actor);
+
+    for (const p of paymentRows) {
+      const d = p.data;
+      let bankAccountId = (d.bankAccountId as string) || undefined;
+      if (bankAccountId) {
+        const exists = await this.dataSource.query('SELECT id FROM bank_accounts WHERE id = ?', [bankAccountId]).catch(() => []);
+        if (!exists.length) bankAccountId = undefined;
+      }
+      await this.invoicePaymentService.create(
+        invoice.id,
+        {
+          amount: Number(d.amount),
+          paymentType: (d.paymentType as any) || undefined,
+          paymentDate: (d.paymentDate as string) || undefined,
+          note: (d.note as string) || undefined,
+          bankAccountId,
+        } as any,
+        actor,
+      );
+    }
+    return invoice;
+  }
+
   // Used by the Accounting module for revenue summaries — total invoiced
   // amounts (subtotal/VAT/total) issued within a date range.
   async getTotalsInRange(startDate: string, endDate: string) {

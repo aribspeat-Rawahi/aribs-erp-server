@@ -9,6 +9,11 @@ import { FinishedGood } from '../inventory/finished-good.entity';
 import { BatchTrackingService } from '../inventory/batch-tracking.service';
 import { UnitService } from '../units/unit.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
+import { SalesBatchConsumption } from './sales-batch-consumption.entity';
+import { FinishedGoodBatch } from '../inventory/finished-good-batch.entity';
+import { BatchSource } from '../inventory/batch-source.enum';
+import { BackorderService } from '../stock-alerts/backorder.service';
+import { markNotRestorable } from '../deleted-records/deletion-context';
 
 // Auto-posted Chart-of-Accounts codes for the Cost of Goods Sold entry a
 // completed sale generates (matches the DEFAULT_ACCOUNTS seed in
@@ -34,6 +39,7 @@ export class SalesOrderService {
     @InjectDataSource()
     private dataSource: DataSource,
     private units: UnitService,
+    private backorders: BackorderService,
   ) {}
 
   findAll() {
@@ -99,6 +105,63 @@ export class SalesOrderService {
     }
     order.status = SalesOrderStatus.CANCELLED;
     return this.orderRepo.save(order);
+  }
+
+  // Admin/Accountant only (controller). Pending/cancelled orders never
+  // moved stock, so they are simply removed (and can be undone from the
+  // Activity Log). Orders completed under the OLD flow (before invoices
+  // took over stock) did take stock out and post cost of goods sold: that
+  // is put back first - the goods return to the same batches and the
+  // 'sales_order' journal entry is removed - so stock and accounts stay
+  // right. Such a delete can't be undone (it would have to take the stock
+  // out again).
+  async remove(id: string) {
+    const order = await this.orderRepo.findOne({ where: { id } });
+    if (!order) throw new NotFoundException('Sales order not found');
+    const items = await this.itemRepo.find({ where: { salesOrderId: id } });
+    const productIds: string[] = [];
+
+    await this.dataSource.transaction(async (manager) => {
+      const consumptions = await manager.find(SalesBatchConsumption, { where: { salesOrderId: id } });
+      if (consumptions.length > 0) {
+        const backByProduct = new Map<string, number>();
+        for (const c of consumptions) {
+          const qty = Number(c.quantityConsumed);
+          const batch = await manager.findOne(FinishedGoodBatch, { where: { id: c.finishedGoodBatchId }, lock: { mode: 'pessimistic_write' } });
+          if (batch) {
+            batch.quantityRemaining = Number(batch.quantityRemaining) + qty;
+            await manager.save(batch);
+          } else {
+            await this.batchTrackingService.createFinishedGoodBatch(manager, { finishedGoodId: c.finishedGoodId, quantity: qty, source: BatchSource.MANUAL });
+          }
+          backByProduct.set(c.finishedGoodId, (backByProduct.get(c.finishedGoodId) || 0) + qty);
+        }
+        await manager.remove(consumptions);
+        for (const [productId, qty] of backByProduct) {
+          const good = await manager.findOne(FinishedGood, { where: { id: productId }, lock: { mode: 'pessimistic_write' } });
+          if (!good) continue;
+          const before = Number(good.quantityInStock);
+          good.quantityInStock = Math.round((before + qty) * 1000) / 1000;
+          await manager.save(good);
+          // if stock was below zero, part of what came back goes to invoices waiting for it
+          await this.batchTrackingService.absorbBackorder(manager, productId, before, qty);
+          productIds.push(productId);
+        }
+        markNotRestorable('This order had taken stock out (old flow); deleting it put the stock and cost of goods sold back.');
+      }
+      if (items.length) await manager.remove(items);
+      await manager.remove(order);
+    });
+
+    if (productIds.length) {
+      try {
+        await this.journalPosting.removeForSource('sales_order', id);
+      } catch (err) {
+        console.error(`Removing auto-posted journal entry failed for sales_order ${id}:`, err);
+      }
+      await this.backorders.refresh(productIds);
+    }
+    return { deleted: true, stockReturned: productIds.length > 0 };
   }
 
   // Used by the Reporting module — count and total value of completed
