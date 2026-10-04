@@ -62,6 +62,29 @@ function errorParts(error: unknown): { message: string; stack: string } {
   }
 }
 
+// For Settings > "Send test email": sends one email right now (no
+// grouping/limits) and reports exactly what went wrong if it can't.
+export async function sendTestAlert(requestedBy: string): Promise<{ sentTo: string[] }> {
+  const to = recipients();
+  if (!to.length) throw new Error('No recipient set: add ERROR_ALERT_EMAILS on the hosting panel.');
+  if (!process.env.SMTP_HOST) throw new Error('Email sending is not set up: add SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS on the hosting panel.');
+  const mailer = getTransporter();
+  if (!mailer) throw new Error('Email sending is not set up.');
+  await mailer.sendMail({
+    from: process.env.SMTP_FROM || 'erp@aribs.net',
+    to: to.join(','),
+    subject: 'ARIBS ERP: test alert',
+    text: [
+      `Site: ${process.env.PUBLIC_BASE_URL || 'ERP server'}`,
+      `Time: ${new Date().toISOString()}`,
+      `Requested by: ${requestedBy}`,
+      '',
+      'Error alerts are working. You will get an email like this when something breaks.',
+    ].join('\n'),
+  });
+  return { sentTo: to };
+}
+
 // Fire-and-forget: never throws, never blocks the caller.
 export function reportError(kind: string, error: unknown, context: AlertContext = {}): void {
   void send(kind, error, context).catch((err) => {

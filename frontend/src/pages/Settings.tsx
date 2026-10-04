@@ -144,6 +144,23 @@ export default function Settings() {
     return () => window.clearTimeout(timer);
   }, [offsite]);
 
+  // Error alerts: "Send test email" checks the email settings end to end.
+  const [testAlertMsg, setTestAlertMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [testingAlert, setTestingAlert] = useState(false);
+
+  async function onTestAlert() {
+    setTestingAlert(true);
+    setTestAlertMsg(null);
+    try {
+      const res = await api.post<{ sentTo: string[] }>('/monitoring/test-alert');
+      setTestAlertMsg({ ok: true, text: `Test email sent to ${res.data.sentTo.join(', ')}. Check the inbox (and spam folder).` });
+    } catch (err: any) {
+      setTestAlertMsg({ ok: false, text: err?.response?.data?.message || 'Could not send the test email.' });
+    } finally {
+      setTestingAlert(false);
+    }
+  }
+
   async function onRunOffsite() {
     setOffsiteError('');
     try {
@@ -678,6 +695,22 @@ export default function Settings() {
             </div>
           )}
           {offsiteError && <p className="text-xs text-red-600 mt-2">{offsiteError}</p>}
+        </div>
+
+        <div className="mt-5 pt-4 border-t border-black/10">
+          <div className="text-sm font-semibold text-ink mb-1">Error Alerts</div>
+          <p className="text-xs text-muted mb-3">
+            When something breaks (server errors, failed nightly jobs or backups, page crashes in the app) an email goes
+            to the addresses set in ERROR_ALERT_EMAILS. Use this button to check that emails really arrive.
+          </p>
+          <SecondaryButton onClick={onTestAlert} disabled={testingAlert}>
+            {testingAlert ? 'Sending…' : 'Send test email'}
+          </SecondaryButton>
+          {testAlertMsg && (
+            <p className={`text-xs mt-2 rounded-lg px-3 py-2 break-words ${testAlertMsg.ok ? 'text-brand-700 bg-brand-50' : 'text-red-600 bg-red-50'}`}>
+              {testAlertMsg.text}
+            </p>
+          )}
         </div>
 
         <div className="mt-5 pt-4 border-t border-black/10">

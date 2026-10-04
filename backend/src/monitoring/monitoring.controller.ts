@@ -1,11 +1,13 @@
-import { Body, Controller, Get, HttpCode, Post, Req, ServiceUnavailableException, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Post, Req, ServiceUnavailableException, UseGuards } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { DataSource } from 'typeorm';
 import { Public } from '../auth/public.decorator';
-import { AnySignedInUser } from '../auth/module-access.decorator';
-import { reportError } from './error-alert';
+import { AnySignedInUser, ModuleAccess } from '../auth/module-access.decorator';
+import { Roles } from '../auth/roles.guard';
+import { UserRole } from '../auth/user.entity';
+import { reportError, sendTestAlert } from './error-alert';
 
 export class ClientErrorDto {
   @IsString()
@@ -59,5 +61,18 @@ export class MonitoringController {
       User: req.user?.email ? `${req.user.email} (${req.user.role})` : undefined,
       Device: dto.userAgent,
     });
+  }
+
+  // Settings > "Send test email": checks the whole email path right now and
+  // returns the real reason if it fails (e.g. wrong SMTP password). Admin only.
+  @ModuleAccess('settings', { strictRoles: true })
+  @Roles(UserRole.ADMIN)
+  @Post('monitoring/test-alert')
+  async testAlert(@Req() req: { user?: { email?: string } }) {
+    try {
+      return await sendTestAlert(req.user?.email || 'admin');
+    } catch (err) {
+      throw new BadRequestException(`Test email failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 }
