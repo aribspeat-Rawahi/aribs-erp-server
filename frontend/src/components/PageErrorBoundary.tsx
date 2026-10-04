@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
+import { reportCrash } from '../api/reportCrash';
 
 // Catches a crash inside ONE page so the rest of the app (sidebar, top bar)
 // keeps working instead of the whole screen going blank. Reset whenever the
@@ -21,6 +22,7 @@ export default class PageErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[PageErrorBoundary]', error, info.componentStack);
+    reportCrash(error, info.componentStack);
   }
 
   componentDidUpdate(prev: Props) {

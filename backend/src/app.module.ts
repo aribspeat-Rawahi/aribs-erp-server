@@ -33,6 +33,7 @@ import { databaseOptions, detectDatabaseType, keepUuidAsVarchar } from './data-s
 import { SchemaCheckModule } from './schema-check/schema-check.module';
 import { DocumentLinkModule } from './document-link/document-link.module';
 import { PublicDocumentModule } from './public-document/public-document.module';
+import { MonitoringModule } from './monitoring/monitoring.module';
 
 @Module({
   imports: [
@@ -92,6 +93,7 @@ import { PublicDocumentModule } from './public-document/public-document.module';
     BackupModule,
     DocumentLinkModule,
     PublicDocumentModule,
+    MonitoringModule,
     SchemaCheckModule,
   ],
 })

@@ -3,11 +3,14 @@
 import './data-dir';
 import * as fs from 'fs';
 import * as path from 'path';
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
+import { AlertingLogger } from './monitoring/alerting-logger';
+import { AllExceptionsFilter } from './monitoring/all-exceptions.filter';
+import { installConsoleErrorAlerts, installProcessCrashAlerts } from './monitoring/error-alert';
 
 // Every backend route lives under /api, so it can never collide with a
 // frontend page that has the same path (e.g. page /invoices vs API
@@ -32,7 +35,12 @@ function resolveFrontendDir(): string | null {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Production errors are emailed to ERROR_ALERT_EMAILS (see monitoring/).
+  installProcessCrashAlerts();
+  installConsoleErrorAlerts();
+
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: new AlertingLogger() });
+  app.useGlobalFilters(new AllExceptionsFilter(app.get(HttpAdapterHost).httpAdapter));
   app.setGlobalPrefix(API_PREFIX);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
