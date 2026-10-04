@@ -87,7 +87,7 @@ export default function Team() {
         title="Team"
         subtitle={showDeleted ? 'Deleted team members — restore anyone from here' : 'Everyone with a login to this ERP'}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {canDelete && (
               <SecondaryButton onClick={() => setShowDeleted((v) => !v)}>
                 {showDeleted ? 'Back to active list' : 'Show deleted'}
@@ -239,7 +239,7 @@ function PermissionsModal({ user, onClose, onSaved }: { user: TeamUser; onClose:
           </p>
         )}
 
-        <div className="flex items-center gap-2 border border-black/10 rounded-lg p-2.5 bg-black/[0.02]">
+        <div className="flex flex-wrap items-center gap-2 border border-black/10 rounded-lg p-2.5 bg-black/[0.02]">
           <span className="text-xs text-muted">Select all:</span>
           <select className={`${inputClass} !py-1 !text-xs w-40`} value={bulkValue} onChange={(e) => setBulkValue(e.target.value)}>
             {ACCESS_LEVEL_OPTIONS.map((o) => (
@@ -253,7 +253,7 @@ function PermissionsModal({ user, onClose, onSaved }: { user: TeamUser; onClose:
 
         <div className="border border-black/10 rounded-lg divide-y divide-black/5 max-h-[50vh] overflow-y-auto">
           {MODULE_OPTIONS.map((m) => (
-            <div key={m.key} className="flex items-center justify-between px-3 py-2">
+            <div key={m.key} className="flex items-center justify-between gap-2 px-3 py-2">
               <span className="text-sm text-ink">{m.label}</span>
               <select
                 className={`${inputClass} !py-1.5 !text-xs w-44`}

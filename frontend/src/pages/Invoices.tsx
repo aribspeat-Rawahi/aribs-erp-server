@@ -232,15 +232,15 @@ export default function Invoices() {
         <Card>
           <div className="divide-y divide-black/5">
             {invoices.map((inv) => (
-              <div key={inv.id} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <div className="text-sm font-medium text-ink">{inv.invoiceNumber}</div>
+              <div key={inv.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-ink whitespace-nowrap">{inv.invoiceNumber}</div>
                   <div className="text-xs text-muted">
                     {customerName(inv.customerId)} · {labelFor(PAYMENT_TYPE_OPTIONS, inv.paymentType)} · {labelFor(DELIVERY_METHOD_OPTIONS, inv.deliveryMethod)}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
+                <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end sm:gap-3">
+                  <div className="sm:text-right">
                     <div className="text-sm font-semibold text-ink">{Number(inv.total).toFixed(3)} OMR</div>
                     {inv.paymentStatus !== 'paid' && Number(inv.paidAmount) > 0 && (
                       <div className="text-xs text-muted">Paid {Number(inv.paidAmount).toFixed(3)}</div>
@@ -249,7 +249,7 @@ export default function Invoices() {
                       {inv.paymentStatus}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <IconButton icon={Eye} title="View PDF" onClick={() => viewPdf(`/invoices/${inv.id}/pdf`)} />
                     <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => startEdit(inv)} />
                     <IconButton icon={Download} title="Download PDF" onClick={() => downloadPdf(`/invoices/${inv.id}/pdf`, `${inv.invoiceNumber}.pdf`)} />
@@ -335,8 +335,8 @@ export default function Invoices() {
             <Card>
               <div className="divide-y divide-black/5">
                 {returns.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between px-4 py-3">
-                    <div>
+                  <div key={r.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
                       <div className="text-sm font-medium text-ink">{customerName(r.customerId)}</div>
                       <div className="text-xs text-muted">
                         {r.returnNumber} · {r.date}
@@ -344,8 +344,8 @@ export default function Invoices() {
                         {r.status === 'rejected' && r.rejectionReason ? ` · Rejected: ${r.rejectionReason}` : ''}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm font-semibold text-ink">{Number(r.total).toFixed(3)} OMR</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-semibold text-ink whitespace-nowrap">{Number(r.total).toFixed(3)} OMR</div>
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${returnStatusTone[r.status] || 'bg-black/5 text-ink/70'}`}>
                         {r.status}
                       </span>
@@ -458,7 +458,7 @@ function PaymentLedgerModal({
   return (
     <Modal title={`Payment Ledger — ${invoice.invoiceNumber}`} onClose={onClose} wide>
       <div className="space-y-4">
-        <div className="grid grid-cols-3 gap-3 text-sm">
+        <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
           <div className="rounded-lg border border-black/10 p-3">
             <div className="text-xs text-muted">Invoice Total</div>
             <div className="font-semibold text-ink">{total.toFixed(3)} OMR</div>
@@ -482,8 +482,8 @@ function PaymentLedgerModal({
           ) : (
             <div className="divide-y divide-black/5 border border-black/10 rounded-lg overflow-hidden">
               {payments.map((p) => (
-                <div key={p.id} className="flex items-center justify-between px-3 py-2">
-                  <div className="text-sm">
+                <div key={p.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <div className="text-sm min-w-0">
                     <div className="font-medium text-ink">{Number(p.amount).toFixed(3)} OMR</div>
                     <div className="text-xs text-muted">
                       {p.paymentDate} · {labelFor(PAYMENT_TYPE_OPTIONS, p.paymentType)}
@@ -501,7 +501,7 @@ function PaymentLedgerModal({
           <Can>
           <form onSubmit={addPayment} className="space-y-3 border-t border-black/10 pt-3">
             <span className="block text-xs font-semibold text-muted uppercase tracking-wide">Record a Payment</span>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label={`Amount (max ${remaining.toFixed(3)} OMR)`}>
                 <input
                   className={inputClass}
@@ -518,7 +518,7 @@ function PaymentLedgerModal({
                 <input className={inputClass} type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Payment Type">
                 <select className={inputClass} value={paymentType} onChange={(e) => setPaymentType(e.target.value)}>
                   {PAYMENT_TYPE_OPTIONS.map((o) => (
@@ -632,7 +632,7 @@ function NewSalesReturnModal({
             No returnable line items on this invoice — only free-text lines with no linked product.
           </p>
         ) : (
-          <div className="border border-black/10 rounded-lg overflow-hidden">
+          <div className="border border-black/10 rounded-lg overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-black/5 text-xs text-muted">
                 <tr>
@@ -648,7 +648,7 @@ function NewSalesReturnModal({
                     <td className="px-3 py-2 text-right">{formatQuantity(it.maxQty, productUnit(it.finishedGoodId))}</td>
                     <td className="px-3 py-2 text-right">
                       <input
-                        className={`${inputClass} text-right`}
+                        className={`${inputClass} text-right max-w-[6rem] sm:max-w-none`}
                         type="number"
                         step={quantityInputStep(productUnit(it.finishedGoodId))}
                         min="0"

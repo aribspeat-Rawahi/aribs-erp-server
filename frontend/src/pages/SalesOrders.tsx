@@ -79,12 +79,12 @@ export default function SalesOrders() {
         <Card>
           <div className="divide-y divide-black/5">
             {orders.map((o) => (
-              <div key={o.id} className="flex items-center justify-between px-4 py-3">
-                <div>
+              <div key={o.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
                   <div className="text-sm font-medium text-ink">{customerName(o.customerId)}</div>
                   <div className="text-xs text-muted">{o.items?.length || 0} item(s)</div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusTone[o.status] || 'bg-black/5 text-ink/70'}`}>
                     {o.status}
                   </span>
@@ -161,7 +161,7 @@ function NewSalesOrderModal({
   return (
     <Modal title="New sales order" onClose={onClose} wide>
       <form onSubmit={onSubmit} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Customer">
             <select className={inputClass} value={customerId} onChange={(e) => setCustomerId(e.target.value)} required>
               {customers.map((c) => (
@@ -184,9 +184,9 @@ function NewSalesOrderModal({
         </div>
         <div className="space-y-2">
           {items.map((item, i) => (
-            <div key={item._key} className="grid grid-cols-[1fr_90px_110px] gap-2">
+            <div key={item._key} className="grid grid-cols-2 gap-2 border-b border-black/5 pb-2 sm:grid-cols-[1fr_90px_110px] sm:border-0 sm:pb-0">
               <select
-                className={inputClass}
+                className={`${inputClass} col-span-2 sm:col-span-1`}
                 value={item.finishedGoodId}
                 onChange={(e) => {
                   const fg = finishedGoods.find((f) => f.id === e.target.value);

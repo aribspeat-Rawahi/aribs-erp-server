@@ -65,8 +65,25 @@ export class RecurringInvoiceService {
     }
   }
 
-  findAll() {
-    return this.repo.find({ order: { createdAt: 'DESC' } });
+  // `items` is stored as JSON text; API responses send it as a real list
+  // (the edit form reads it as one).
+  private toView(entity: RecurringInvoice) {
+    let items: unknown = [];
+    try {
+      items = JSON.parse(entity.items || '[]');
+    } catch {
+      items = [];
+    }
+    return { ...entity, items };
+  }
+
+  async findAll() {
+    const rows = await this.repo.find({ order: { createdAt: 'DESC' } });
+    return rows.map((r) => this.toView(r));
+  }
+
+  async findOneView(id: string) {
+    return this.toView(await this.findOne(id));
   }
 
   async findOne(id: string) {
@@ -94,7 +111,7 @@ export class RecurringInvoiceService {
       active: true,
       createdByEmail,
     });
-    return this.repo.save(item);
+    return this.toView(await this.repo.save(item));
   }
 
   async update(id: string, dto: UpdateRecurringInvoiceDto) {
@@ -115,7 +132,7 @@ export class RecurringInvoiceService {
     if (dto.nextRunDate !== undefined) item.nextRunDate = dto.nextRunDate;
     if (dto.endDate !== undefined) item.endDate = dto.endDate;
     if (dto.active !== undefined) item.active = dto.active;
-    return this.repo.save(item);
+    return this.toView(await this.repo.save(item));
   }
 
   async remove(id: string) {

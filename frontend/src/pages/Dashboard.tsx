@@ -629,7 +629,7 @@ export default function Dashboard() {
               <p className="text-sm text-muted">No accounts yet</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[480px] sm:min-w-0 text-sm">
                   <thead>
                     <tr className="text-left text-[11px] text-muted border-b border-black/10">
                       <th className="py-2 font-medium">Account</th>

@@ -111,21 +111,21 @@ export default function DeliveryNotes() {
         <Card>
           <div className="divide-y divide-black/5">
             {notes.map((n) => (
-              <div key={n.id} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <div className="text-sm font-medium text-ink">{n.deliveryNoteNumber}</div>
+              <div key={n.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-ink whitespace-nowrap">{n.deliveryNoteNumber}</div>
                   <div className="text-xs text-muted">
                     {customerName(n.customerId)} · {labelFor(PAYMENT_TYPE_OPTIONS, n.paymentType)} · {labelFor(DELIVERY_METHOD_OPTIONS, n.deliveryMethod)}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
+                <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end sm:gap-3">
+                  <div className="sm:text-right">
                     <div className="text-sm font-semibold text-ink">{Number(n.total).toFixed(3)} OMR</div>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusTone[n.status] || 'bg-black/5 text-ink/70'}`}>
                       {n.status}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <IconButton icon={Eye} title="View PDF" onClick={() => viewPdf(`/delivery-notes/${n.id}/pdf`)} />
                     <IconButton icon={Download} title="Download PDF" onClick={() => downloadPdf(`/delivery-notes/${n.id}/pdf`, `${n.deliveryNoteNumber}.pdf`)} />
                     <IconButton icon={MessageCircle} title="Send on WhatsApp" onClick={() => openWhatsapp(`/delivery-notes/${n.id}/whatsapp-link`)} />

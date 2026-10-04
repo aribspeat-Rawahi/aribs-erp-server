@@ -63,26 +63,28 @@ function YoyBadge({ pct }: { pct: number | null }) {
 function RevenueTrendChart({ months }: { months: RevenueTrendMonth[] }) {
   const max = Math.max(1, ...months.map((m) => Math.max(m.revenue, m.expense)));
   return (
-    <div className="flex items-end gap-3 h-44 px-2">
-      {months.map((m) => (
-        <div key={m.label} className="flex-1 flex flex-col items-center gap-1">
-          <div className="text-xs font-medium text-ink">{m.netProfit.toFixed(0)}</div>
-          <div className="w-full flex items-end gap-0.5 h-32">
-            <div
-              className="flex-1 bg-brand-500 rounded-t-sm min-h-[2px]"
-              style={{ height: `${Math.max(2, (m.revenue / max) * 100)}%` }}
-              title={`Revenue: ${m.revenue.toFixed(3)} OMR`}
-            />
-            <div
-              className="flex-1 bg-amber-400 rounded-t-sm min-h-[2px]"
-              style={{ height: `${Math.max(2, (m.expense / max) * 100)}%` }}
-              title={`Expense: ${m.expense.toFixed(3)} OMR`}
-            />
+    <div className="overflow-x-auto">
+      <div className="flex items-end gap-3 h-44 px-2 min-w-[680px] sm:min-w-0">
+        {months.map((m) => (
+          <div key={m.label} className="flex-1 flex flex-col items-center gap-1">
+            <div className="text-xs font-medium text-ink">{m.netProfit.toFixed(0)}</div>
+            <div className="w-full flex items-end gap-0.5 h-32">
+              <div
+                className="flex-1 bg-brand-500 rounded-t-sm min-h-[2px]"
+                style={{ height: `${Math.max(2, (m.revenue / max) * 100)}%` }}
+                title={`Revenue: ${m.revenue.toFixed(3)} OMR`}
+              />
+              <div
+                className="flex-1 bg-amber-400 rounded-t-sm min-h-[2px]"
+                style={{ height: `${Math.max(2, (m.expense / max) * 100)}%` }}
+                title={`Expense: ${m.expense.toFixed(3)} OMR`}
+              />
+            </div>
+            <div className="text-xs text-muted whitespace-nowrap">{m.label}</div>
+            <YoyBadge pct={m.yoyRevenueChangePct} />
           </div>
-          <div className="text-xs text-muted">{m.label}</div>
-          <YoyBadge pct={m.yoyRevenueChangePct} />
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -182,28 +184,28 @@ export default function AnalyticsPanel() {
           <EmptyState>No sales in this range.</EmptyState>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="text-left text-xs text-muted border-b border-black/10">
                   <th className="py-2 pr-3 font-medium">Product</th>
-                  <th className="py-2 px-3 font-medium text-right">Qty Sold</th>
-                  <th className="py-2 px-3 font-medium text-right">Revenue</th>
-                  <th className="py-2 px-3 font-medium text-right">COGS</th>
-                  <th className="py-2 px-3 font-medium text-right">Margin</th>
-                  <th className="py-2 pl-3 font-medium text-right">Margin %</th>
+                  <th className="py-2 px-3 font-medium text-right whitespace-nowrap">Qty Sold</th>
+                  <th className="py-2 px-3 font-medium text-right whitespace-nowrap">Revenue</th>
+                  <th className="py-2 px-3 font-medium text-right whitespace-nowrap">COGS</th>
+                  <th className="py-2 px-3 font-medium text-right whitespace-nowrap">Margin</th>
+                  <th className="py-2 pl-3 font-medium text-right whitespace-nowrap">Margin %</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/5">
                 {profitability.rows.map((r) => (
                   <tr key={r.finishedGoodId || r.productName}>
                     <td className="py-2 pr-3 text-ink font-medium">{r.productName}</td>
-                    <td className="py-2 px-3 text-right text-ink/70">{r.quantitySold.toFixed(3)}</td>
-                    <td className="py-2 px-3 text-right text-ink/70">{r.revenue.toFixed(3)}</td>
-                    <td className="py-2 px-3 text-right text-ink/70">{r.cogs.toFixed(3)}</td>
-                    <td className={`py-2 px-3 text-right font-medium ${r.margin >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                    <td className="py-2 px-3 text-right whitespace-nowrap text-ink/70">{r.quantitySold.toFixed(3)}</td>
+                    <td className="py-2 px-3 text-right whitespace-nowrap text-ink/70">{r.revenue.toFixed(3)}</td>
+                    <td className="py-2 px-3 text-right whitespace-nowrap text-ink/70">{r.cogs.toFixed(3)}</td>
+                    <td className={`py-2 px-3 text-right whitespace-nowrap font-medium ${r.margin >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                       {r.margin.toFixed(3)}
                     </td>
-                    <td className={`py-2 pl-3 text-right font-semibold ${r.marginPct >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                    <td className={`py-2 pl-3 text-right whitespace-nowrap font-semibold ${r.marginPct >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                       {r.marginPct.toFixed(1)}%
                     </td>
                   </tr>
@@ -213,10 +215,10 @@ export default function AnalyticsPanel() {
                 <tr className="border-t border-black/10 font-semibold text-ink">
                   <td className="py-2 pr-3">Total</td>
                   <td />
-                  <td className="py-2 px-3 text-right">{profitability.totals.revenue.toFixed(3)}</td>
-                  <td className="py-2 px-3 text-right">{profitability.totals.cogs.toFixed(3)}</td>
-                  <td className="py-2 px-3 text-right">{profitability.totals.margin.toFixed(3)}</td>
-                  <td className="py-2 pl-3 text-right">{profitability.totals.marginPct.toFixed(1)}%</td>
+                  <td className="py-2 px-3 text-right whitespace-nowrap">{profitability.totals.revenue.toFixed(3)}</td>
+                  <td className="py-2 px-3 text-right whitespace-nowrap">{profitability.totals.cogs.toFixed(3)}</td>
+                  <td className="py-2 px-3 text-right whitespace-nowrap">{profitability.totals.margin.toFixed(3)}</td>
+                  <td className="py-2 pl-3 text-right whitespace-nowrap">{profitability.totals.marginPct.toFixed(1)}%</td>
                 </tr>
               </tfoot>
             </table>
@@ -236,24 +238,24 @@ export default function AnalyticsPanel() {
           <EmptyState>No sales in this range.</EmptyState>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="text-left text-xs text-muted border-b border-black/10">
                   <th className="py-2 pr-3 font-medium">Customer</th>
-                  <th className="py-2 px-3 font-medium text-right">Orders</th>
-                  <th className="py-2 px-3 font-medium text-right">Total Revenue</th>
-                  <th className="py-2 px-3 font-medium text-right">Avg Order Value</th>
-                  <th className="py-2 pl-3 font-medium text-right">Outstanding Due</th>
+                  <th className="py-2 px-3 font-medium text-right whitespace-nowrap">Orders</th>
+                  <th className="py-2 px-3 font-medium text-right whitespace-nowrap">Total Revenue</th>
+                  <th className="py-2 px-3 font-medium text-right whitespace-nowrap">Avg Order Value</th>
+                  <th className="py-2 pl-3 font-medium text-right whitespace-nowrap">Outstanding Due</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/5">
                 {customers.rows.map((c) => (
                   <tr key={c.customerId}>
                     <td className="py-2 pr-3 text-ink font-medium">{c.customerName}</td>
-                    <td className="py-2 px-3 text-right text-ink/70">{c.orderCount}</td>
-                    <td className="py-2 px-3 text-right font-semibold text-ink">{c.totalRevenue.toFixed(3)}</td>
-                    <td className="py-2 px-3 text-right text-ink/70">{c.avgOrderValue.toFixed(3)}</td>
-                    <td className={`py-2 pl-3 text-right ${c.outstanding > 0 ? 'text-amber-700 font-medium' : 'text-ink/50'}`}>
+                    <td className="py-2 px-3 text-right whitespace-nowrap text-ink/70">{c.orderCount}</td>
+                    <td className="py-2 px-3 text-right whitespace-nowrap font-semibold text-ink">{c.totalRevenue.toFixed(3)}</td>
+                    <td className="py-2 px-3 text-right whitespace-nowrap text-ink/70">{c.avgOrderValue.toFixed(3)}</td>
+                    <td className={`py-2 pl-3 text-right whitespace-nowrap ${c.outstanding > 0 ? 'text-amber-700 font-medium' : 'text-ink/50'}`}>
                       {c.outstanding > 0 ? c.outstanding.toFixed(3) : '-'}
                     </td>
                   </tr>
@@ -291,12 +293,12 @@ export default function AnalyticsPanel() {
               ) : (
                 <div className="divide-y divide-black/5">
                   {slowMovingRaw.map((r) => (
-                    <div key={r.id} className="flex items-center justify-between py-2 text-sm">
-                      <div>
+                    <div key={r.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                      <div className="min-w-0">
                         <div className="text-ink font-medium">{r.name}</div>
                         <div className="text-xs text-amber-700">No usage in 90 days</div>
                       </div>
-                      <div className="text-ink/70 text-right">
+                      <div className="text-ink/70 text-right whitespace-nowrap">
                         {formatQuantity(r.quantityInStock, r.unit)} {r.unit}
                         <div className="text-xs text-muted">{r.stockValue.toFixed(3)} OMR</div>
                       </div>
@@ -312,12 +314,12 @@ export default function AnalyticsPanel() {
               ) : (
                 <div className="divide-y divide-black/5">
                   {slowMovingFinished.map((r) => (
-                    <div key={r.id} className="flex items-center justify-between py-2 text-sm">
-                      <div>
+                    <div key={r.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                      <div className="min-w-0">
                         <div className="text-ink font-medium">{r.name}</div>
                         <div className="text-xs text-amber-700">No sales in 90 days</div>
                       </div>
-                      <div className="text-ink/70 text-right">
+                      <div className="text-ink/70 text-right whitespace-nowrap">
                         {formatQuantity(r.quantityInStock, r.unit)} {r.unit}
                         <div className="text-xs text-muted">{r.stockValue.toFixed(3)} OMR</div>
                       </div>

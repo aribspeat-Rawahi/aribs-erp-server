@@ -98,11 +98,11 @@ export default function VendorCreditsPanel({
             {items.map((c) => {
               const remaining = Number(c.amount) - Number(c.appliedAmount) - Number(c.refundedAmount);
               return (
-                <div key={c.id} className="flex items-center justify-between px-4 py-3">
-                  <div>
+                <div key={c.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
                     <div className="text-sm font-medium text-ink">{supplierName(c.supplierId)}</div>
                     <div className="text-xs text-muted">
-                      {c.creditNumber} · {c.date}
+                      <span className="whitespace-nowrap">{c.creditNumber}</span> · {c.date}
                       {c.reason ? ` · ${c.reason}` : ''}
                     </div>
                     {(c.applications.length > 0 || c.refunds.length > 0) && (
@@ -113,9 +113,9 @@ export default function VendorCreditsPanel({
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <div className="text-sm font-semibold text-ink">{money(c.amount)} OMR</div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+                    <div className="sm:text-right">
+                      <div className="text-sm font-semibold text-ink whitespace-nowrap">{money(c.amount)} OMR</div>
                       <div className="text-xs text-muted">{remaining > 0.001 ? `${money(remaining)} remaining` : 'Fully used'}</div>
                     </div>
                     {canManage && (

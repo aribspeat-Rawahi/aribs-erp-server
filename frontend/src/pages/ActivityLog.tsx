@@ -47,11 +47,11 @@ export default function ActivityLog() {
         <Card>
           <div className="divide-y divide-black/5">
             {logs.map((log) => (
-              <div key={log.id} className="flex items-start gap-3 px-4 py-3">
+              <div key={log.id} className="flex flex-wrap sm:flex-nowrap items-start gap-x-3 gap-y-1 sm:gap-3 px-4 py-3">
                 <div className="w-7 h-7 rounded-full bg-black/5 flex items-center justify-center shrink-0 mt-0.5">
                   <History size={14} className="text-ink/60" />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-[calc(100%-2.5rem)] sm:min-w-0">
                   <div className="text-sm text-ink">
                     <span className="font-medium">{log.userEmail || 'System'}</span> — {log.action}
                     {log.entityType && (
@@ -64,7 +64,7 @@ export default function ActivityLog() {
                   </div>
                   {log.details && <div className="text-xs text-muted mt-0.5 break-all">{log.details}</div>}
                 </div>
-                <div className="text-xs text-muted whitespace-nowrap">
+                <div className="text-xs text-muted whitespace-nowrap pl-10 sm:pl-0">
                   {new Date(log.createdAt).toLocaleString()}
                 </div>
               </div>

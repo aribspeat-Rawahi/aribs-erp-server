@@ -267,8 +267,8 @@ export default function Accounting() {
             <Card>
               <div className="divide-y divide-black/5">
                 {expenses.map((exp) => (
-                  <div key={exp.id} className="flex items-center justify-between px-4 py-3">
-                    <div>
+                  <div key={exp.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
                       <div className="text-sm font-medium text-ink">
                         {labelFor(EXPENSE_CATEGORY_OPTIONS, exp.category)}
                         {exp.vendorName ? ` · ${exp.vendorName}` : ''}
@@ -280,9 +280,9 @@ export default function Accounting() {
                         {bankAccountName(exp.bankAccountId) ? ` · Paid from ${bankAccountName(exp.bankAccountId)}` : ''}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-sm font-semibold text-ink">{Number(exp.amount).toFixed(3)} OMR</div>
-                      <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end sm:gap-3">
+                      <div className="text-sm font-semibold text-ink whitespace-nowrap">{Number(exp.amount).toFixed(3)} OMR</div>
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {exp.invoiceFilePath ? (
                           <IconButton icon={Eye} title="View invoice" onClick={() => viewFile(`/expenses/${exp.id}/invoice`)} />
                         ) : (
@@ -358,8 +358,8 @@ export default function Accounting() {
             <Card>
               <div className="divide-y divide-black/5">
                 {reimbursements.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between px-4 py-3">
-                    <div>
+                  <div key={r.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
                       <div className="text-sm font-medium text-ink">
                         {employeeName(r.employeeId)} · {labelFor(REIMBURSEMENT_CATEGORY_OPTIONS, r.category)}
                       </div>
@@ -371,12 +371,12 @@ export default function Accounting() {
                         {r.status === 'paid' && r.paymentMethod ? ` · Paid via ${r.paymentMethod}` : ''}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm font-semibold text-ink">{Number(r.amount).toFixed(3)} OMR</div>
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                      <div className="text-sm font-semibold text-ink whitespace-nowrap">{Number(r.amount).toFixed(3)} OMR</div>
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${reimbursementStatusTone[r.status] || 'bg-black/5 text-ink/70'}`}>
                         {r.status}
                       </span>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {r.receiptFilePath ? (
                           <IconButton icon={Eye} title="View receipt" onClick={() => viewFile(`/reimbursements/${r.id}/receipt`)} />
                         ) : (

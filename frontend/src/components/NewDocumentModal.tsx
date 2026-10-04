@@ -220,9 +220,9 @@ export default function NewDocumentModal({
         <div className="space-y-2">
           <span className="block text-xs font-medium text-muted">Items</span>
           {items.map((item, i) => (
-            <div key={item._key} className="grid grid-cols-[1fr_80px_100px_24px] gap-2 items-center">
+            <div key={item._key} className="grid grid-cols-[1fr_1fr_24px] gap-2 items-center border-b border-black/5 pb-2 sm:grid-cols-[1fr_80px_100px_24px] sm:border-0 sm:pb-0">
               <select
-                className={inputClass}
+                className={`${inputClass} col-span-3 sm:col-span-1`}
                 value={item.finishedGoodId}
                 onChange={(e) => {
                   const fg = finishedGoods.find((f) => f.id === e.target.value);

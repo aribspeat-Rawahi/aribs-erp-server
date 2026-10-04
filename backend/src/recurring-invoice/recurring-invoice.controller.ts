@@ -24,7 +24,7 @@ export class RecurringInvoiceController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.service.findOne(id);
+    return this.service.findOneView(id);
   }
 
   @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)

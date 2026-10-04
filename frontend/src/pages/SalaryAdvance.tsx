@@ -80,7 +80,7 @@ export default function SalaryAdvance() {
         }
       />
 
-      <div className="grid grid-cols-3 gap-4 mb-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 mb-5">
         <StatCard icon={Banknote} label="Pending approval" value={String(pendingCount)} sub="waiting on Approvals" />
         <StatCard icon={Banknote} label="Approved, not disbursed" value={String(approvedNotDisbursed.length)} sub="ready to pay out" />
         <StatCard icon={Banknote} label="Total disbursed" value={`${totalDisbursed.toFixed(3)} OMR`} sub="all time" />
@@ -94,7 +94,7 @@ export default function SalaryAdvance() {
         <Card>
           <div className="divide-y divide-black/5">
             {rows.map((r) => (
-              <div key={r.id} className="flex items-center justify-between px-4 py-3 gap-3">
+              <div key={r.id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 py-3 sm:gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium text-ink">{r.employeeName}</span>
@@ -114,7 +114,7 @@ export default function SalaryAdvance() {
                     {r.decidedByEmail ? ` · Decided by ${r.decidedByEmail}` : ''}
                   </p>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-start shrink-0">
                   <span className="text-sm font-semibold text-brand-700">{Number(r.amount).toFixed(3)} OMR</span>
                   {canManage && r.status === 'approved' && !r.disbursed && (
                     <SecondaryButton onClick={() => setDisbursingItem(r)} requires="edit" requiresModule="approvals">

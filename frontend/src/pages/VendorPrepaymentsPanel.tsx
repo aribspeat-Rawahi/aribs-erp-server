@@ -92,11 +92,11 @@ export default function VendorPrepaymentsPanel({
             {items.map((p) => {
               const remaining = Number(p.amount) - Number(p.appliedAmount);
               return (
-                <div key={p.id} className="flex items-center justify-between px-4 py-3">
-                  <div>
+                <div key={p.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
                     <div className="text-sm font-medium text-ink">{supplierName(p.supplierId)}</div>
                     <div className="text-xs text-muted">
-                      {p.prepaymentNumber} · {p.date} · Paid from {bankAccountName(p.bankAccountId)}
+                      <span className="whitespace-nowrap">{p.prepaymentNumber}</span> · {p.date} · Paid from {bankAccountName(p.bankAccountId)}
                       {p.note ? ` · ${p.note}` : ''}
                     </div>
                     {p.applications.length > 0 && (
@@ -105,9 +105,9 @@ export default function VendorPrepaymentsPanel({
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <div className="text-sm font-semibold text-ink">{money(p.amount)} OMR</div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+                    <div className="sm:text-right">
+                      <div className="text-sm font-semibold text-ink whitespace-nowrap">{money(p.amount)} OMR</div>
                       <div className="text-xs text-muted">{remaining > 0.001 ? `${money(remaining)} remaining` : 'Fully applied'}</div>
                     </div>
                     {canManage && (

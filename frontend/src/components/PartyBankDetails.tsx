@@ -133,14 +133,14 @@ export function BankDetailsFields({
     <div className="space-y-4">
       {entries.map((entry, idx) => (
         <div key={entry._key} className="border border-black/10 rounded-lg p-3 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-muted uppercase tracking-wide">Bank Account {idx + 1}</span>
             {/* removing a saved account is a DELETE (full); an unsaved one is just local */}
             {entries.length > 1 && (!entry.id || !basePath || can('full')) && (
               <IconButton icon={Trash2} tone="danger" title="Remove this account" onClick={() => removeEntry(entry)} />
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Account Name (optional)">
               <input
                 className={inputClass}
@@ -156,7 +156,7 @@ export function BankDetailsFields({
               />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Bank Name (optional)">
               <input
                 className={inputClass}
@@ -172,7 +172,7 @@ export function BankDetailsFields({
               />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Branch Code (optional)">
               <input
                 className={inputClass}
@@ -230,7 +230,7 @@ function BankStatementUpload({
           {entry.statementFile || entry.statementOriginalName ? 'Replace file' : 'Upload file'}
         </SecondaryButton>
         {entry.statementFile ? (
-          <span className="text-xs text-muted">{entry.statementFile.name} (not saved yet)</span>
+          <span className="text-xs text-muted break-all">{entry.statementFile.name} (not saved yet)</span>
         ) : entry.statementOriginalName ? (
           onView ? (
             <button type="button" onClick={onView} className="text-xs text-brand-600 font-medium hover:underline">
@@ -315,8 +315,8 @@ export function DocumentsFields({
   return (
     <div className="space-y-3">
       {entries.map((entry, idx) => (
-        <div key={entry._key} className="border border-black/10 rounded-lg p-3 flex items-end gap-3">
-          <div className="w-44 shrink-0">
+        <div key={entry._key} className="border border-black/10 rounded-lg p-3 flex flex-wrap items-end gap-3 sm:flex-nowrap">
+          <div className="w-full shrink-0 sm:w-44">
             <Field label={`Document ${idx + 1} Type`}>
               <select
                 className={inputClass}
@@ -332,7 +332,7 @@ export function DocumentsFields({
               </select>
             </Field>
           </div>
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             {entry.id ? (
               <SecondaryButton
                 icon={Paperclip}
@@ -372,7 +372,7 @@ function DocumentFileUpload({ entry, onFileSelected }: { entry: PartyDocumentEnt
         <SecondaryButton icon={Upload} requires="edit" onClick={() => inputRef.current?.click()}>
           {entry.file ? 'Change file' : 'Upload file'}
         </SecondaryButton>
-        {entry.file && <span className="text-xs text-muted">{entry.file.name}</span>}
+        {entry.file && <span className="text-xs text-muted break-all">{entry.file.name}</span>}
       </div>
     </div>
   );

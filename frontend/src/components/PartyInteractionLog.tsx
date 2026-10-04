@@ -87,7 +87,7 @@ export function InteractionLogSection({ basePath }: { basePath: string }) {
 
   return (
     <div className="rounded-lg border border-black/10 px-3 py-3 space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Interaction Log</h3>
         <SecondaryButton icon={Plus} requires="edit" onClick={() => setShowForm((v) => !v)}>
           Log interaction
@@ -139,7 +139,7 @@ export function InteractionLogSection({ basePath }: { basePath: string }) {
         <div className="divide-y divide-black/5">
           {entries.map((entry) => (
             <div key={entry.id} className="flex items-start justify-between py-2 gap-2">
-              <div className="text-sm">
+              <div className="text-sm min-w-0 break-words">
                 <div className="font-medium text-ink">
                   <span className="text-xs px-1.5 py-0.5 rounded bg-black/5 text-ink/70 mr-1.5">{typeLabel(entry.type)}</span>
                   {entry.subject || <span className="text-muted">(no subject)</span>}

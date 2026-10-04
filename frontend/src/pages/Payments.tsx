@@ -85,7 +85,7 @@ export default function Payments() {
         subtitle="Every payment recorded across Invoices, Suppliers, Payroll, Reimbursements, Tax and Cash & Bank, in one place"
       />
 
-      <div className="grid grid-cols-3 gap-4 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-5">
         <StatCard icon={ArrowDownCircle} label="Total received" value={`${totalIn.toFixed(3)} OMR`} sub="invoice payments" />
         <StatCard icon={ArrowUpCircle} label="Total paid out" value={`${totalOut.toFixed(3)} OMR`} sub="supplier, salary, reimbursement, tax" />
         <StatCard icon={ArrowLeftRight} label="Internal transfers" value={`${totalInternal.toFixed(3)} OMR`} sub="between own accounts" />
@@ -94,7 +94,7 @@ export default function Payments() {
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <Pill options={FILTERS} value={filter} onChange={(v) => setFilter(v as 'all' | PaymentRowType)} />
         <input
-          className="px-3 py-1.5 rounded-lg border border-black/10 text-sm w-64"
+          className="px-3 py-1.5 rounded-lg border border-black/10 text-sm w-full sm:w-64"
           placeholder="Search party, reference, note…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}

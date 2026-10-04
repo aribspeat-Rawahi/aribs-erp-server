@@ -129,10 +129,10 @@ export default function AccountsPanel() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div className="text-sm font-semibold text-ink">Cash, Bank and Transfer Fund</div>
         {canManage && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <SecondaryButton icon={ArrowLeftRight} requires="edit" onClick={() => setShowAddTransfer(true)}>
               Transfer fund
             </SecondaryButton>
@@ -154,15 +154,15 @@ export default function AccountsPanel() {
       ) : accounts.length === 0 ? (
         <EmptyState>No bank or cash accounts yet.</EmptyState>
       ) : (
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           {accounts.map((a) => (
             <Card key={a.id} className="p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-8 h-8 shrink-0 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center">
                     {a.type === 'cash' ? <Wallet size={16} /> : <Landmark size={16} />}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-sm font-medium text-ink">{a.name}</div>
                     <div className="text-xs text-muted">{a.bankName || (a.type === 'cash' ? 'Cash' : '-')}</div>
                   </div>
@@ -198,9 +198,9 @@ export default function AccountsPanel() {
         <Card>
           <div className="divide-y divide-black/5">
             {transfers.map((t) => (
-              <div key={t.id} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <div className="text-sm font-medium text-ink flex items-center gap-1.5">
+              <div key={t.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-ink flex flex-wrap items-center gap-1.5">
                     {accountName(t.fromAccountId)}
                     <ArrowLeftRight size={12} className="text-muted" />
                     {accountName(t.toAccountId)}
@@ -217,13 +217,13 @@ export default function AccountsPanel() {
                     )}
                   </div>
                   <div className="text-xs text-muted">
-                    {t.transferNumber} · {t.date}
+                    <span className="whitespace-nowrap">{t.transferNumber}</span> · {t.date}
                     {t.note ? ` · ${t.note}` : ''}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-sm font-semibold text-ink">{Number(t.amount).toFixed(3)} OMR</div>
-                  <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
+                  <div className="text-sm font-semibold text-ink whitespace-nowrap">{Number(t.amount).toFixed(3)} OMR</div>
+                  <div className="flex flex-wrap items-center gap-1.5">
                     {canManage && t.status === 'in_transit' && (
                       <SecondaryButton icon={CheckCircle2} requires="edit" onClick={() => clearTransfer(t.id)}>
                         Mark Received
@@ -453,7 +453,7 @@ function TransactionsModal({
   return (
     <Modal title={`${account.name} — transactions`} onClose={onClose} wide>
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-sm text-muted">
             Current balance: <span className="font-semibold text-ink">{Number(account.currentBalance).toFixed(3)} OMR</span>
           </div>
@@ -520,15 +520,15 @@ function TransactionsModal({
         ) : (
           <div className="divide-y divide-black/5 border border-black/10 rounded-lg overflow-hidden">
             {transactions.map((t) => (
-              <div key={t.id} className="flex items-center justify-between px-3 py-2">
-                <div>
+              <div key={t.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                <div className="min-w-0">
                   <div className="text-sm text-ink">{t.note || (t.type === 'deposit' ? 'Deposit' : 'Withdrawal')}</div>
                   <div className="text-xs text-muted">
                     {new Date(t.date).toLocaleDateString()}
                     {t.category ? ` · ${CATEGORY_LABEL[t.category] || t.category}` : ''}
                   </div>
                 </div>
-                <div className={`text-sm font-medium ${t.type === 'deposit' ? 'text-brand-700' : 'text-red-600'}`}>
+                <div className={`text-sm font-medium whitespace-nowrap ${t.type === 'deposit' ? 'text-brand-700' : 'text-red-600'}`}>
                   {t.type === 'deposit' ? '+' : '-'}
                   {Number(t.amount).toFixed(3)} OMR
                 </div>
@@ -611,7 +611,7 @@ function TransferModal({
   return (
     <Modal title={transfer ? 'Edit fund transfer' : 'Transfer fund'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="From account">
             <select className={inputClass} value={fromAccountId} onChange={(e) => setFromAccountId(e.target.value)} required>
               {accounts.map((a) => (

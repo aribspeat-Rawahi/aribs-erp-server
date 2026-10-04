@@ -155,7 +155,7 @@ export default function JournalsPanel() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <Pill
           value={subTab}
           onChange={(v) => setSubTab(v as JournalsTab)}
@@ -190,20 +190,20 @@ export default function JournalsPanel() {
                   const total = entry.lines.reduce((sum, l) => sum + Number(l.debit), 0);
                   return (
                     <div key={entry.id} className="px-4 py-3">
-                      <div className="flex items-center justify-between">
-                        <div>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
                           <div className="text-sm font-medium text-ink flex items-center gap-1.5">
                             <BookOpen size={14} className="text-muted" />
                             {entry.memo}
                           </div>
                           <div className="text-xs text-muted">
-                            {entry.entryNumber} · {entry.date}
+                            <span className="whitespace-nowrap">{entry.entryNumber}</span> · {entry.date}
                             {entry.reference ? ` · Ref: ${entry.reference}` : ''}
                             {entry.autoPosted ? ` · Auto-posted from ${entry.sourceType?.replace('_', ' ') || 'another record'}` : ''}
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-sm font-semibold text-ink">{total.toFixed(3)} OMR</div>
+                        <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+                          <div className="text-sm font-semibold text-ink whitespace-nowrap">{total.toFixed(3)} OMR</div>
                           {entry.autoPosted ? (
                             <span className="text-xs px-2 py-1 rounded-full font-medium bg-black/5 text-ink/70">Auto-posted</span>
                           ) : (
@@ -211,14 +211,14 @@ export default function JournalsPanel() {
                           )}
                         </div>
                       </div>
-                      <div className="mt-2 ml-5 space-y-1">
+                      <div className="mt-2 ml-0 sm:ml-5 space-y-1">
                         {entry.lines.map((line, idx) => (
-                          <div key={line.id || idx} className="flex items-center justify-between text-xs text-ink/70">
-                            <span>
+                          <div key={line.id || idx} className="flex items-center justify-between gap-3 text-xs text-ink/70">
+                            <span className="min-w-0">
                               {accountLabel(line.accountId)}
                               {line.description ? ` — ${line.description}` : ''}
                             </span>
-                            <span className="font-mono">
+                            <span className="font-mono whitespace-nowrap">
                               {Number(line.debit) > 0 ? `Dr ${Number(line.debit).toFixed(3)}` : `Cr ${Number(line.credit).toFixed(3)}`}
                             </span>
                           </div>
@@ -254,9 +254,9 @@ export default function JournalsPanel() {
             <Card>
               <div className="divide-y divide-black/5">
                 {accounts.map((acc) => (
-                  <div key={acc.id} className={`flex items-center justify-between px-4 py-3 ${!acc.active ? 'opacity-50' : ''}`}>
-                    <div>
-                      <div className="text-sm font-medium text-ink flex items-center gap-1.5">
+                  <div key={acc.id} className={`flex items-center justify-between gap-3 px-4 py-3 ${!acc.active ? 'opacity-50' : ''}`}>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-ink flex flex-wrap items-center gap-1.5">
                         <Landmark size={14} className="text-muted" />
                         {acc.code} · {acc.name}
                         {!acc.active && <span className="text-xs text-muted">(inactive)</span>}
@@ -266,7 +266,7 @@ export default function JournalsPanel() {
                         {acc.description ? ` · ${acc.description}` : ''}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex shrink-0 items-center gap-1.5">
                       <IconButton icon={Pencil} requires="edit" title="Edit account" onClick={() => setEditAccount(acc)} />
                       {acc.active && (
                         <IconButton icon={Ban} tone="danger" requires="full" title="Deactivate account" onClick={() => deactivateAccount(acc.id)} />
@@ -308,7 +308,7 @@ export default function JournalsPanel() {
             <EmptyState>No journal entries posted yet — the Trial Balance will fill in as entries are added.</EmptyState>
           ) : (
             <Card className="p-4">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-1.5 text-sm font-semibold text-ink">
                   <Scale size={15} />
                   Trial Balance
@@ -318,14 +318,14 @@ export default function JournalsPanel() {
                 </span>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[640px] text-sm">
                   <thead>
                     <tr className="text-left text-xs text-muted border-b border-black/10">
                       <th className="py-2 pr-3 font-medium">Account</th>
                       <th className="py-2 px-3 font-medium">Type</th>
-                      <th className="py-2 px-3 font-medium text-right">Debit</th>
-                      <th className="py-2 px-3 font-medium text-right">Credit</th>
-                      <th className="py-2 pl-3 font-medium text-right">Balance</th>
+                      <th className="py-2 px-3 font-medium text-right whitespace-nowrap">Debit</th>
+                      <th className="py-2 px-3 font-medium text-right whitespace-nowrap">Credit</th>
+                      <th className="py-2 pl-3 font-medium text-right whitespace-nowrap">Balance</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-black/5">
@@ -333,18 +333,18 @@ export default function JournalsPanel() {
                       <tr key={r.accountId}>
                         <td className="py-2 pr-3 text-ink font-medium">{r.code} · {r.name}</td>
                         <td className="py-2 px-3 text-ink/70">{labelFor(ACCOUNT_TYPE_OPTIONS, r.type)}</td>
-                        <td className="py-2 px-3 text-right text-ink/70">{r.debit > 0 ? r.debit.toFixed(3) : '-'}</td>
-                        <td className="py-2 px-3 text-right text-ink/70">{r.credit > 0 ? r.credit.toFixed(3) : '-'}</td>
-                        <td className="py-2 pl-3 text-right font-semibold text-ink">{r.balance.toFixed(3)}</td>
+                        <td className="py-2 px-3 text-right whitespace-nowrap text-ink/70">{r.debit > 0 ? r.debit.toFixed(3) : '-'}</td>
+                        <td className="py-2 px-3 text-right whitespace-nowrap text-ink/70">{r.credit > 0 ? r.credit.toFixed(3) : '-'}</td>
+                        <td className="py-2 pl-3 text-right whitespace-nowrap font-semibold text-ink">{r.balance.toFixed(3)}</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr className="border-t border-black/10 font-semibold text-ink">
                       <td className="py-2 pr-3" colSpan={2}>Total</td>
-                      <td className="py-2 px-3 text-right">{trialBalance.totalDebit.toFixed(3)}</td>
-                      <td className="py-2 px-3 text-right">{trialBalance.totalCredit.toFixed(3)}</td>
-                      <td className="py-2 pl-3 text-right">—</td>
+                      <td className="py-2 px-3 text-right whitespace-nowrap">{trialBalance.totalDebit.toFixed(3)}</td>
+                      <td className="py-2 px-3 text-right whitespace-nowrap">{trialBalance.totalCredit.toFixed(3)}</td>
+                      <td className="py-2 pl-3 text-right whitespace-nowrap">—</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -514,9 +514,9 @@ function JournalEntryModal({
           <span className="block text-xs font-medium text-muted mb-1">Lines</span>
           <div className="space-y-2">
             {lines.map((line, idx) => (
-              <div key={idx} className="flex items-center gap-2">
+              <div key={idx} className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
                 <select
-                  className={`${inputClass} flex-1`}
+                  className={`${inputClass} flex-1 min-w-full sm:min-w-0`}
                   value={line.accountId}
                   onChange={(e) => updateLine(idx, { accountId: e.target.value })}
                   required
@@ -546,7 +546,7 @@ function JournalEntryModal({
                   required
                 />
                 <input
-                  className={`${inputClass} flex-1`}
+                  className={`${inputClass} flex-1 min-w-[calc(100%-2.75rem)] sm:min-w-0`}
                   placeholder="Description (optional)"
                   value={line.description}
                   onChange={(e) => updateLine(idx, { description: e.target.value })}
@@ -565,7 +565,7 @@ function JournalEntryModal({
           </SecondaryButton>
         </div>
 
-        <div className={`text-sm rounded-lg p-3 flex items-center justify-between ${balanced ? 'bg-brand-50 text-brand-700' : 'bg-amber-50 text-amber-700'}`}>
+        <div className={`text-sm rounded-lg p-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 ${balanced ? 'bg-brand-50 text-brand-700' : 'bg-amber-50 text-amber-700'}`}>
           <span>Total Debit: {totalDebit.toFixed(3)} OMR</span>
           <span>Total Credit: {totalCredit.toFixed(3)} OMR</span>
           <span className="font-medium">{balanced ? 'Balanced' : 'Not balanced'}</span>

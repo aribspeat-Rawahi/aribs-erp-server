@@ -90,7 +90,7 @@ export default function Pending() {
         subtitle="Everything still owed or waiting — unpaid invoices, unpaid bills, unpaid salary, and requests waiting on approval or payout"
       />
 
-      <div className="grid grid-cols-3 gap-4 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-5">
         <StatCard icon={ArrowDownCircle} label="Owed to us" value={`${totalIn.toFixed(3)} OMR`} sub="unpaid invoices" />
         <StatCard icon={ArrowUpCircle} label="We owe / to pay out" value={`${totalOut.toFixed(3)} OMR`} sub="bills, salary, reimbursement, advance" />
         <StatCard icon={Hourglass} label="Awaiting approval" value={String(awaitingApprovalCount)} sub="reimbursement / salary advance requests" />
@@ -99,7 +99,7 @@ export default function Pending() {
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <Pill options={FILTERS} value={filter} onChange={(v) => setFilter(v as 'all' | PendingRowType)} />
         <input
-          className="px-3 py-1.5 rounded-lg border border-black/10 text-sm w-64"
+          className="px-3 py-1.5 rounded-lg border border-black/10 text-sm w-full sm:w-64"
           placeholder="Search party, reference, note…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}

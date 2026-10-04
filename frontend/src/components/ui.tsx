@@ -50,7 +50,7 @@ export function PrimaryButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex items-center gap-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-ink text-sm font-medium px-4 py-2 rounded-lg transition-colors ${className}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-ink text-sm font-medium px-4 py-2 rounded-lg transition-colors ${className}`}
     >
       {Icon && <Icon size={16} />}
       {children}
@@ -80,7 +80,7 @@ export function SecondaryButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex items-center gap-1.5 bg-white border border-black/10 hover:bg-black/5 disabled:opacity-50 text-ink text-sm font-medium px-4 py-2 rounded-lg transition-colors ${className}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap bg-white border border-black/10 hover:bg-black/5 disabled:opacity-50 text-ink text-sm font-medium px-4 py-2 rounded-lg transition-colors ${className}`}
     >
       {Icon && <Icon size={16} />}
       {children}
@@ -130,12 +130,15 @@ export function Pill({
   onChange: (v: string) => void;
 }) {
   return (
-    <div className="inline-flex gap-2">
+    // On a phone the row scrolls sideways instead of squeezing the labels
+    // onto two lines and pushing the whole page wider than the screen.
+    <div className="inline-flex max-w-full gap-2 overflow-x-auto no-scrollbar">
       {options.map((opt) => (
         <button
           key={opt.value}
+          type="button"
           onClick={() => onChange(opt.value)}
-          className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+          className={`shrink-0 whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
             value === opt.value
               ? 'bg-brand-500 text-ink'
               : 'bg-white border border-black/10 text-ink/70 hover:bg-black/5'

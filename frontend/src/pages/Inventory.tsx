@@ -302,7 +302,7 @@ export default function Inventory() {
             title={tab === 'finished' ? 'Finished Goods' : 'Raw Materials'}
             subtitle={tab === 'finished' ? 'Manufactured products ready for sale' : 'Materials used to manufacture finished goods'}
             action={
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {tab === 'finished' && <SecondaryButton icon={ScanLine} requires="edit" onClick={() => setShowScan(true)}>Scan stock</SecondaryButton>}
                 {items.length > 0 && (
                   <SecondaryButton icon={PackagePlus} requires="edit" onClick={() => setShowAddStock(true)}>Add stock</SecondaryButton>
@@ -322,10 +322,10 @@ export default function Inventory() {
                 {items.map((item) => {
                   const low = Number(item.quantityInStock) <= Number(item.lowStockThreshold);
                   return (
-                    <div key={item.id} className="flex items-center justify-between px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        {low && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
-                        <div>
+                    <div key={item.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        {low && <span className="w-1.5 h-1.5 shrink-0 rounded-full bg-amber-500" />}
+                        <div className="min-w-0">
                           <div className="text-sm font-medium text-ink">{item.name}</div>
                           <div className="text-xs text-muted">
                             {item.barcode || item.sku || '-'}
@@ -333,9 +333,9 @@ export default function Inventory() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <div className="text-sm font-semibold text-ink">
+                      <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+                        <div className="sm:text-right">
+                          <div className="text-sm font-semibold text-ink whitespace-nowrap">
                             {formatQuantity(item.quantityInStock, item.unit)} {item.unit}
                           </div>
                           {low && <div className="text-xs text-amber-600">Low stock</div>}
@@ -428,14 +428,14 @@ export default function Inventory() {
             <Card>
               <div className="divide-y divide-black/5">
                 {orders.map((o) => (
-                  <div key={o.id} className="flex items-center justify-between px-4 py-3">
-                    <div>
+                  <div key={o.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
                       <div className="text-sm font-medium text-ink">{fgName(o.finishedGoodId)}</div>
                       <div className="text-xs text-muted">
                         {formatQuantity(o.quantityToProduce, finishedGoods.find((f) => f.id === o.finishedGoodId)?.unit)} units
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusTone[o.status] || 'bg-black/5 text-ink/70'}`}>
                         {o.status}
                       </span>
@@ -517,10 +517,10 @@ export default function Inventory() {
             <Card>
               <div className="divide-y divide-black/5">
                 {bomLines.map((line) => (
-                  <div key={line.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                    <span>{rmName(line.rawMaterialId)}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-muted">{Number(line.quantityPerUnit).toFixed(4)} per unit</span>
+                  <div key={line.id} className="flex flex-col gap-2 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                    <span className="min-w-0">{rmName(line.rawMaterialId)}</span>
+                    <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+                      <span className="text-muted whitespace-nowrap">{Number(line.quantityPerUnit).toFixed(4)} per unit</span>
                       <div className="flex items-center gap-1.5">
                         <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => setEditingLine(line)} />
                         <IconButton icon={Trash2} tone="danger" title="Remove" requires="full" onClick={() => removeBomLine(line.id)} />
@@ -583,9 +583,9 @@ export default function Inventory() {
             <Card>
               <div className="divide-y divide-black/5">
                 {rawBatches.map((b) => (
-                  <div key={b.id} className="flex items-center justify-between px-4 py-3">
-                    <div>
-                      <div className="text-sm font-medium text-ink">{b.batchNumber}</div>
+                  <div key={b.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-ink whitespace-nowrap">{b.batchNumber}</div>
                       <div className="text-xs text-muted">
                         {rmName(b.rawMaterialId)}
                         {supplierName(b.supplierId) && ` · ${supplierName(b.supplierId)}`}
@@ -593,12 +593,12 @@ export default function Inventory() {
                         {b.receivedDate}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${sourceTone[b.source] || 'bg-black/5 text-ink/70'}`}>
                         {sourceLabel[b.source] || b.source}
                       </span>
-                      <div className="text-right">
-                        <div className="text-sm font-semibold text-ink">
+                      <div className="sm:text-right">
+                        <div className="text-sm font-semibold text-ink whitespace-nowrap">
                           {formatQuantity(b.quantityRemaining, rmUnit(b.rawMaterialId))} / {formatQuantity(b.quantityReceived, rmUnit(b.rawMaterialId))}
                         </div>
                         <div className="text-xs text-muted">remaining</div>
@@ -649,19 +649,19 @@ export default function Inventory() {
             <Card>
               <div className="divide-y divide-black/5">
                 {finishedBatches.map((b) => (
-                  <div key={b.id} className="flex items-center justify-between px-4 py-3">
-                    <div>
-                      <div className="text-sm font-medium text-ink">{b.batchNumber}</div>
+                  <div key={b.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-ink whitespace-nowrap">{b.batchNumber}</div>
                       <div className="text-xs text-muted">
                         {fgName(b.finishedGoodId)} · {b.producedDate}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${sourceTone[b.source] || 'bg-black/5 text-ink/70'}`}>
                         {sourceLabel[b.source] || b.source}
                       </span>
-                      <div className="text-right">
-                        <div className="text-sm font-semibold text-ink">
+                      <div className="sm:text-right">
+                        <div className="text-sm font-semibold text-ink whitespace-nowrap">
                           {formatQuantity(b.quantityRemaining, fgUnit(b.finishedGoodId))} / {formatQuantity(b.quantityProduced, fgUnit(b.finishedGoodId))}
                         </div>
                         <div className="text-xs text-muted">remaining</div>
@@ -778,7 +778,7 @@ function AddProductModal({
             <input className={inputClass} value={sku} onChange={(e) => setSku(e.target.value)} />
           </Field>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Unit">
             <input className={inputClass} value={unit} onChange={(e) => setUnit(e.target.value)} required />
           </Field>
@@ -832,7 +832,7 @@ function AddProductModal({
           </p>
         )}
         {kind === 'raw' && (
-          <div className="grid grid-cols-2 gap-3 border-t border-black/10 pt-3">
+          <div className="grid grid-cols-1 gap-3 border-t border-black/10 pt-3 sm:grid-cols-2">
             <Field label="Preferred supplier (optional)">
               <select className={inputClass} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
                 <option value="">— None —</option>
@@ -883,41 +883,41 @@ function StockItemDetailModal({
   return (
     <Modal title={item.name} onClose={onClose}>
       <div className="space-y-1.5 text-sm">
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-3">
           <span className="text-muted">SKU</span>
-          <span className="font-medium text-ink">{item.sku || '-'}</span>
+          <span className="font-medium text-ink text-right">{item.sku || '-'}</span>
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-3">
           <span className="text-muted">Barcode</span>
-          <span className="font-medium text-ink">{item.barcode || '-'}</span>
+          <span className="font-medium text-ink text-right">{item.barcode || '-'}</span>
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-3">
           <span className="text-muted">Unit</span>
-          <span className="font-medium text-ink">{item.unit}</span>
+          <span className="font-medium text-ink text-right">{item.unit}</span>
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-3">
           <span className="text-muted">In stock</span>
-          <span className="font-medium text-ink">{formatQuantity(item.quantityInStock, item.unit)} {item.unit}</span>
+          <span className="font-medium text-ink text-right">{formatQuantity(item.quantityInStock, item.unit)} {item.unit}</span>
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-3">
           <span className="text-muted">Low stock alert at</span>
-          <span className="font-medium text-ink">{formatQuantity(item.lowStockThreshold, item.unit)} {item.unit}</span>
+          <span className="font-medium text-ink text-right">{formatQuantity(item.lowStockThreshold, item.unit)} {item.unit}</span>
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-3">
           <span className="text-muted">{kind === 'finished' ? 'Selling price' : 'Cost per unit'}</span>
-          <span className="font-medium text-ink">
+          <span className="font-medium text-ink text-right">
             {Number(kind === 'finished' ? item.sellingPrice : item.costPerUnit || 0).toFixed(3)} OMR
           </span>
         </div>
         {kind === 'raw' && (
           <>
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-3">
               <span className="text-muted">Preferred supplier</span>
-              <span className="font-medium text-ink">{supplierName || '-'}</span>
+              <span className="font-medium text-ink text-right">{supplierName || '-'}</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-3">
               <span className="text-muted">Reorder quantity</span>
-              <span className="font-medium text-ink">
+              <span className="font-medium text-ink text-right">
                 {item.reorderQuantity !== undefined && item.reorderQuantity !== null && item.reorderQuantity !== ''
                   ? `${formatQuantity(item.reorderQuantity, item.unit)} ${item.unit}`
                   : 'Auto-suggested'}
@@ -1195,25 +1195,25 @@ function ProductionOrderDetailModal({
     <Modal title="Production order" onClose={onClose}>
       <div className="space-y-4">
         <div className="text-sm space-y-1.5">
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-3">
             <span className="text-muted">Finished good</span>
-            <span className="font-medium text-ink">{finishedGoodName}</span>
+            <span className="font-medium text-ink text-right">{finishedGoodName}</span>
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-3">
             <span className="text-muted">Quantity to produce</span>
-            <span className="font-medium text-ink">
+            <span className="font-medium text-ink text-right">
               {formatQuantity(order.quantityToProduce, finishedGoodUnit)}
               {finishedGoodUnit ? ` ${finishedGoodUnit}` : ''}
             </span>
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-3">
             <span className="text-muted">Status</span>
-            <span className="font-medium text-ink">{order.status}</span>
+            <span className="font-medium text-ink text-right">{order.status}</span>
           </div>
           {order.notes && (
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-3">
               <span className="text-muted">Notes</span>
-              <span className="font-medium text-ink">{order.notes}</span>
+              <span className="font-medium text-ink text-right">{order.notes}</span>
             </div>
           )}
         </div>
@@ -1228,8 +1228,8 @@ function ProductionOrderDetailModal({
           ) : (
             <div className="divide-y divide-black/5 border border-black/10 rounded-lg">
               {lines.map((line) => (
-                <div key={line.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                  <span>{rmName(line.rawMaterialId)}</span>
+                <div key={line.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2 text-sm">
+                  <span className="min-w-0">{rmName(line.rawMaterialId)}</span>
                   <span className="text-muted">
                     {(Number(line.quantityPerUnit) * Number(order.quantityToProduce)).toFixed(3)} total (
                     {Number(line.quantityPerUnit).toFixed(4)}/unit)
@@ -1370,8 +1370,8 @@ function RawBatchTraceModal({
                 const sales = salesConsumptions.filter((s) => s.finishedGoodBatchId === c.finishedGoodBatchId);
                 return (
                   <Card key={c.id} className="p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium text-ink">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="text-sm font-medium text-ink min-w-0">
                         {Number(c.quantityConsumed).toFixed(3)} used → {fb ? `${fb.batchNumber} (${finishedGoodName(fb.finishedGoodId)})` : 'finished good batch'}
                       </div>
                       {fb && (
@@ -1462,8 +1462,8 @@ function FinishedBatchTraceModal({
                   {consumptions.map((c) => {
                     const rb = rmBatch(c.rawMaterialBatchId);
                     return (
-                      <Card key={c.id} className="p-3 flex items-center justify-between">
-                        <div className="text-sm text-ink">
+                      <Card key={c.id} className="p-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="text-sm text-ink min-w-0">
                           {Number(c.quantityConsumed).toFixed(3)} {rawMaterialName(c.rawMaterialId)}
                           {rb && <span className="text-muted"> — {rb.batchNumber}</span>}
                         </div>

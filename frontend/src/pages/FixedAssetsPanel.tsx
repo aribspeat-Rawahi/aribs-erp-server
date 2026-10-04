@@ -114,7 +114,7 @@ export default function FixedAssetsPanel() {
         action={canManage ? <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAdd(true)}>Register asset</PrimaryButton> : undefined}
       />
 
-      <div className="grid grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
         <StatCard icon={Landmark} label="Total Cost" value={`${money(totalCost)} OMR`} />
         <StatCard icon={Landmark} label="Accumulated Depreciation" value={`${money(totalAccumDep)} OMR`} />
         <StatCard icon={Landmark} label="Net Book Value" value={`${money(netBookValue)} OMR`} />
@@ -130,11 +130,11 @@ export default function FixedAssetsPanel() {
             {assets.map((a) => {
               const nbv = Number(a.cost) - Number(a.accumulatedDepreciation);
               return (
-                <div key={a.id} className="flex items-center justify-between px-4 py-3">
-                  <div>
+                <div key={a.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
                     <div className="text-sm font-medium text-ink">{a.name}</div>
                     <div className="text-xs text-muted">
-                      {a.assetNumber} · {categoryLabel(a.category)} · Purchased {a.purchaseDate}
+                      <span className="whitespace-nowrap">{a.assetNumber}</span> · {categoryLabel(a.category)} · Purchased {a.purchaseDate}
                       {bankAccountName(a.bankAccountId) ? ` · from ${bankAccountName(a.bankAccountId)}` : ''}
                       {a.status === 'disposed' ? ` · Disposed ${a.disposalDate} (proceeds ${money(a.disposalProceeds || 0)} OMR)` : ''}
                     </div>
@@ -143,10 +143,10 @@ export default function FixedAssetsPanel() {
                       {a.status === 'active' && a.lastDepreciationPeriod ? ` · Last posted ${a.lastDepreciationPeriod}` : ''}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusTone[a.status]}`}>{a.status}</span>
                     {canManage && a.status === 'active' && (
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <IconButton icon={Zap} requires="edit" title={busyId === a.id ? 'Posting…' : "Post this month's depreciation now"} onClick={() => (busyId === a.id ? undefined : depreciateNow(a.id))} />
                         <IconButton icon={Pencil} requires="edit" title="Edit" onClick={() => setEditAsset(a)} />
                         <IconButton icon={RotateCcw} requires="edit" title="Dispose" onClick={() => setDisposingAsset(a)} />

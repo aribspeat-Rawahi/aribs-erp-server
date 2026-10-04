@@ -11,3 +11,12 @@ body {
 input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(0.4);
 }
+
+/* Horizontal tab rows on phones: scrollable, without a visible scrollbar. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

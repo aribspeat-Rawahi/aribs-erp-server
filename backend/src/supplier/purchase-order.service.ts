@@ -57,8 +57,19 @@ export class PurchaseOrderService {
     return { subtotal, vatAmount, total: this.round3(subtotal + vatAmount) };
   }
 
-  findAll() {
-    return this.orderRepo.find();
+  // Each order comes with its line items (the list shows "N item(s)" and
+  // the View/Return screens read them). One extra query for all orders.
+  async findAll() {
+    const orders = await this.orderRepo.find();
+    if (orders.length === 0) return [];
+    const items = await this.itemRepo.find({ where: { purchaseOrderId: In(orders.map((o) => o.id)) } });
+    const byOrder = new Map<string, PurchaseOrderItem[]>();
+    for (const item of items) {
+      const list = byOrder.get(item.purchaseOrderId) || [];
+      list.push(item);
+      byOrder.set(item.purchaseOrderId, list);
+    }
+    return orders.map((o) => ({ ...o, items: byOrder.get(o.id) || [] }));
   }
 
   // Dashboard's "Payable Bills" list — every RECEIVED purchase order

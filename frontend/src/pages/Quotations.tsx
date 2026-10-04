@@ -119,21 +119,21 @@ export default function Quotations() {
         <Card>
           <div className="divide-y divide-black/5">
             {quotations.map((q) => (
-              <div key={q.id} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <div className="text-sm font-medium text-ink">{q.quotationNumber}</div>
+              <div key={q.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-ink whitespace-nowrap">{q.quotationNumber}</div>
                   <div className="text-xs text-muted">
                     {customerName(q.customerId)} · {labelFor(DELIVERY_METHOD_OPTIONS, q.deliveryMethod)}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
+                <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end sm:gap-3">
+                  <div className="sm:text-right">
                     <div className="text-sm font-semibold text-ink">{Number(q.total).toFixed(3)} OMR</div>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusTone[q.status] || 'bg-black/5 text-ink/70'}`}>
                       {q.status}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <IconButton icon={Eye} title="View PDF" onClick={() => viewPdf(`/quotations/${q.id}/pdf`)} />
                     <IconButton icon={Download} title="Download PDF" onClick={() => downloadPdf(`/quotations/${q.id}/pdf`, `${q.quotationNumber}.pdf`)} />
                     <IconButton icon={MessageCircle} title="Send on WhatsApp" onClick={() => openWhatsapp(`/quotations/${q.id}/whatsapp-link`)} />

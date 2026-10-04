@@ -184,7 +184,7 @@ export default function ReportsPanel() {
             </div>
 
             <Card className="p-4 mb-4">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-1.5 text-sm font-semibold text-ink">
                   <Clock size={15} />
                   Accounts Receivable Aging
@@ -197,16 +197,16 @@ export default function ReportsPanel() {
                 <EmptyState>No outstanding customer balances — everything is paid up.</EmptyState>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[720px] text-sm">
                     <thead>
                       <tr className="text-left text-xs text-muted border-b border-black/10">
                         <th className="py-2 pr-3 font-medium">Customer</th>
-                        <th className="py-2 px-3 font-medium text-right">Current</th>
-                        <th className="py-2 px-3 font-medium text-right">1-30 Days</th>
-                        <th className="py-2 px-3 font-medium text-right">31-60 Days</th>
-                        <th className="py-2 px-3 font-medium text-right">61-90 Days</th>
-                        <th className="py-2 px-3 font-medium text-right">90+ Days</th>
-                        <th className="py-2 pl-3 font-medium text-right">Total Outstanding</th>
+                        <th className="py-2 px-3 font-medium text-right whitespace-nowrap">Current</th>
+                        <th className="py-2 px-3 font-medium text-right whitespace-nowrap">1-30 Days</th>
+                        <th className="py-2 px-3 font-medium text-right whitespace-nowrap">31-60 Days</th>
+                        <th className="py-2 px-3 font-medium text-right whitespace-nowrap">61-90 Days</th>
+                        <th className="py-2 px-3 font-medium text-right whitespace-nowrap">90+ Days</th>
+                        <th className="py-2 pl-3 font-medium text-right whitespace-nowrap">Total Outstanding</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-black/5">
@@ -218,24 +218,24 @@ export default function ReportsPanel() {
                               <div className="text-xs text-red-600">{r.oldestDaysOverdue} days overdue</div>
                             )}
                           </td>
-                          <td className="py-2 px-3 text-right text-ink/70">{Number(r.current) > 0 ? Number(r.current).toFixed(3) : '-'}</td>
-                          <td className="py-2 px-3 text-right text-amber-700">{Number(r.days1to30) > 0 ? Number(r.days1to30).toFixed(3) : '-'}</td>
-                          <td className="py-2 px-3 text-right text-amber-800">{Number(r.days31to60) > 0 ? Number(r.days31to60).toFixed(3) : '-'}</td>
-                          <td className="py-2 px-3 text-right text-red-600">{Number(r.days61to90) > 0 ? Number(r.days61to90).toFixed(3) : '-'}</td>
-                          <td className="py-2 px-3 text-right text-red-700 font-medium">{Number(r.days90plus) > 0 ? Number(r.days90plus).toFixed(3) : '-'}</td>
-                          <td className="py-2 pl-3 text-right font-semibold text-ink">{Number(r.totalOutstanding).toFixed(3)}</td>
+                          <td className="py-2 px-3 text-right whitespace-nowrap text-ink/70">{Number(r.current) > 0 ? Number(r.current).toFixed(3) : '-'}</td>
+                          <td className="py-2 px-3 text-right whitespace-nowrap text-amber-700">{Number(r.days1to30) > 0 ? Number(r.days1to30).toFixed(3) : '-'}</td>
+                          <td className="py-2 px-3 text-right whitespace-nowrap text-amber-800">{Number(r.days31to60) > 0 ? Number(r.days31to60).toFixed(3) : '-'}</td>
+                          <td className="py-2 px-3 text-right whitespace-nowrap text-red-600">{Number(r.days61to90) > 0 ? Number(r.days61to90).toFixed(3) : '-'}</td>
+                          <td className="py-2 px-3 text-right whitespace-nowrap text-red-700 font-medium">{Number(r.days90plus) > 0 ? Number(r.days90plus).toFixed(3) : '-'}</td>
+                          <td className="py-2 pl-3 text-right whitespace-nowrap font-semibold text-ink">{Number(r.totalOutstanding).toFixed(3)}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
                       <tr className="border-t border-black/10 font-semibold text-ink">
                         <td className="py-2 pr-3">Total</td>
-                        <td className="py-2 px-3 text-right">{Number(aging.grandTotal.current).toFixed(3)}</td>
-                        <td className="py-2 px-3 text-right">{Number(aging.grandTotal.days1to30).toFixed(3)}</td>
-                        <td className="py-2 px-3 text-right">{Number(aging.grandTotal.days31to60).toFixed(3)}</td>
-                        <td className="py-2 px-3 text-right">{Number(aging.grandTotal.days61to90).toFixed(3)}</td>
-                        <td className="py-2 px-3 text-right">{Number(aging.grandTotal.days90plus).toFixed(3)}</td>
-                        <td className="py-2 pl-3 text-right">{Number(aging.grandTotal.totalOutstanding).toFixed(3)} OMR</td>
+                        <td className="py-2 px-3 text-right whitespace-nowrap">{Number(aging.grandTotal.current).toFixed(3)}</td>
+                        <td className="py-2 px-3 text-right whitespace-nowrap">{Number(aging.grandTotal.days1to30).toFixed(3)}</td>
+                        <td className="py-2 px-3 text-right whitespace-nowrap">{Number(aging.grandTotal.days31to60).toFixed(3)}</td>
+                        <td className="py-2 px-3 text-right whitespace-nowrap">{Number(aging.grandTotal.days61to90).toFixed(3)}</td>
+                        <td className="py-2 px-3 text-right whitespace-nowrap">{Number(aging.grandTotal.days90plus).toFixed(3)}</td>
+                        <td className="py-2 pl-3 text-right whitespace-nowrap">{Number(aging.grandTotal.totalOutstanding).toFixed(3)} OMR</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -261,12 +261,12 @@ export default function ReportsPanel() {
               ) : (
                 <div className="divide-y divide-black/5">
                   {customerSales.map((c) => (
-                    <div key={c.customerId} className="flex items-center justify-between py-2 text-sm">
-                      <div>
+                    <div key={c.customerId} className="flex items-center justify-between gap-3 py-2 text-sm">
+                      <div className="min-w-0">
                         <div className="text-ink font-medium">{c.customerName}</div>
                         <div className="text-xs text-muted">{c.count} invoice(s)</div>
                       </div>
-                      <div className="font-semibold text-ink">{Number(c.total).toFixed(3)} OMR</div>
+                      <div className="font-semibold text-ink whitespace-nowrap">{Number(c.total).toFixed(3)} OMR</div>
                     </div>
                   ))}
                 </div>
@@ -283,9 +283,9 @@ export default function ReportsPanel() {
               ) : (
                 <div className="divide-y divide-black/5">
                   {lowStockItems.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between py-2 text-sm">
-                      <span className="text-ink">{item.name}</span>
-                      <span className="text-amber-700 font-medium">
+                    <div key={item.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                      <span className="text-ink min-w-0">{item.name}</span>
+                      <span className="text-amber-700 font-medium whitespace-nowrap">
                         {formatQuantity(item.quantityInStock, item.unit)} {item.unit}
                       </span>
                     </div>

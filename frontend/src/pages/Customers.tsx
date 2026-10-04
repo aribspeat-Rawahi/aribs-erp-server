@@ -85,12 +85,12 @@ export default function Customers() {
         <Card>
           <div className="divide-y divide-black/5">
             {customers.map((c) => (
-              <div key={c.id} className="flex items-center justify-between px-4 py-3">
-                <div>
+              <div key={c.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
                   <div className="text-sm font-medium text-ink">{c.name}</div>
-                  <div className="text-xs text-muted">{c.phone || c.email || '-'}</div>
+                  <div className="text-xs text-muted break-words">{c.phone || c.email || '-'}</div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex shrink-0 items-center gap-3">
                   {c.vatApplicable && <span className="text-xs px-2 py-1 rounded-full bg-brand-50 text-brand-700 font-medium">VAT</span>}
                   <div className="flex items-center gap-1.5">
                     <IconButton icon={Eye} title="View customer data & history" onClick={() => setViewing(c)} />
@@ -217,7 +217,7 @@ function CustomerModal({
         <Field label="Name">
           <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} required />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Phone">
             <input className={inputClass} value={phone} onChange={(e) => setPhone(e.target.value)} />
           </Field>
@@ -228,7 +228,7 @@ function CustomerModal({
         <Field label="Address">
           <input className={inputClass} value={address} onChange={(e) => setAddress(e.target.value)} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="CR Number">
             <input className={inputClass} value={crNumber} onChange={(e) => setCrNumber(e.target.value)} />
           </Field>
@@ -236,7 +236,7 @@ function CustomerModal({
             <input className={inputClass} value={vatin} onChange={(e) => setVatin(e.target.value)} />
           </Field>
         </div>
-        <div className="grid grid-cols-2 gap-3 items-end">
+        <div className="grid grid-cols-1 gap-3 items-end sm:grid-cols-2">
           <label className="flex items-center gap-2 text-sm text-ink/80">
             <input type="checkbox" checked={vatApplicable} onChange={(e) => setVatApplicable(e.target.checked)} />
             VAT applies to this customer
@@ -316,7 +316,7 @@ function CustomerDetailModal({ customer, onClose }: { customer: Customer; onClos
   return (
     <Modal title={`Customer: ${customer.name}`} onClose={onClose} wide>
       <div className="space-y-5">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+        <div className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm break-words sm:grid-cols-2">
           <div><span className="text-muted">Phone:</span> {customer.phone || '-'}</div>
           <div><span className="text-muted">Email:</span> {customer.email || '-'}</div>
           <div><span className="text-muted">Address:</span> {customer.address || '-'}</div>
@@ -344,15 +344,15 @@ function CustomerDetailModal({ customer, onClose }: { customer: Customer; onClos
               ) : (
                 <div className="divide-y divide-black/5 border border-black/10 rounded-lg overflow-hidden">
                   {section.docs.map((d) => (
-                    <div key={d.id} className="flex items-center justify-between px-3 py-2">
-                      <div className="text-sm">
-                        <div className="font-medium text-ink">{section.number(d)}</div>
+                    <div key={d.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                      <div className="text-sm min-w-0">
+                        <div className="font-medium text-ink whitespace-nowrap">{section.number(d)}</div>
                         <div className="text-xs text-muted">
                           {new Date(d.createdAt).toLocaleDateString()}
                           {d.total !== undefined ? ` · ${Number(d.total).toFixed(3)} OMR` : ''}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex shrink-0 items-center gap-1.5">
                         <IconButton icon={Eye} title="View PDF" onClick={() => viewPdf(`/${section.endpoint}/${d.id}/pdf`)} />
                         <IconButton
                           icon={Download}

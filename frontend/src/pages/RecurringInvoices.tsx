@@ -130,9 +130,9 @@ export default function RecurringInvoices() {
         <Card>
           <div className="divide-y divide-black/5">
             {items.map((item) => (
-              <div key={item.id} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <div className="text-sm font-medium text-ink flex items-center gap-2">
+              <div key={item.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-ink flex flex-wrap items-center gap-2">
                     {item.label}
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${item.active ? 'bg-brand-50 text-brand-700' : 'bg-black/5 text-ink/60'}`}>
                       {item.active ? 'Active' : 'Paused'}
@@ -143,7 +143,7 @@ export default function RecurringInvoices() {
                     {item.lastRunAt ? ` · Last run: ${item.lastRunAt}` : ''}
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                   {item.lastGeneratedInvoiceId && (
                     <IconButton icon={Eye} title="View last generated invoice" onClick={() => viewPdf(`/invoices/${item.lastGeneratedInvoiceId}/pdf`)} />
                   )}
@@ -285,7 +285,7 @@ function RecurringInvoiceModal({
   return (
     <Modal title={`${isEdit ? 'Edit' : 'New'} recurring invoice`} onClose={onClose} wide>
       <form onSubmit={onSubmit} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Label">
             <input className={inputClass} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Warehouse rent" required />
           </Field>
@@ -303,9 +303,9 @@ function RecurringInvoiceModal({
         <div className="space-y-2">
           <span className="block text-xs font-medium text-muted">Items</span>
           {items.map((item, i) => (
-            <div key={item._key} className="grid grid-cols-[1fr_80px_100px_24px] gap-2 items-center">
+            <div key={item._key} className="grid grid-cols-[1fr_1fr_24px] gap-2 items-center border-b border-black/5 pb-2 sm:grid-cols-[1fr_80px_100px_24px] sm:border-0 sm:pb-0">
               <select
-                className={inputClass}
+                className={`${inputClass} col-span-3 sm:col-span-1`}
                 value={item.finishedGoodId}
                 onChange={(e) => {
                   const fg = finishedGoods.find((f) => f.id === e.target.value);
@@ -342,7 +342,7 @@ function RecurringInvoiceModal({
           <SecondaryButton onClick={addItem}>+ Add item</SecondaryButton>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Frequency">
             <select className={inputClass} value={frequency} onChange={(e) => setFrequency(e.target.value as any)}>
               {FREQUENCY_OPTIONS.map((f) => (
@@ -366,7 +366,7 @@ function RecurringInvoiceModal({
           </Field>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Discount (OMR)">
             <input className={inputClass} type="number" step="0.001" min="0" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} />
           </Field>

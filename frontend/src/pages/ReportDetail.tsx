@@ -133,9 +133,12 @@ function ReportTable({
   footer?: ReactNode;
   children: ReactNode;
 }) {
+  // On a phone, tables with 3+ columns keep a sensible minimum width and
+  // scroll sideways instead of crushing each column to one word per line.
+  const phoneMinWidth = isEmpty ? '' : columns.length > 6 ? 'min-w-[800px] sm:min-w-0' : columns.length > 2 ? 'min-w-[600px] sm:min-w-0' : '';
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className={`w-full text-sm [&_td.text-right]:whitespace-nowrap ${phoneMinWidth}`}>
         <thead>
           <tr className="text-left text-xs text-muted border-b border-black/10 bg-black/[0.02]">
             {columns.map((c, i) => (
@@ -182,7 +185,7 @@ function DateRangePicker({
 }) {
   return (
     <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 w-full sm:w-auto">
         <input type="date" className={inputClass} value={startDate} onChange={(e) => onChange({ startDate: e.target.value, endDate })} />
         <span className="text-muted text-sm">to</span>
         <input type="date" className={inputClass} value={endDate} onChange={(e) => onChange({ startDate, endDate: e.target.value })} />
@@ -224,7 +227,7 @@ function TrialBalanceReport() {
 
   return (
     <Card className="p-4">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
         <div className="text-sm text-muted">All-time balance per account, across every journal entry.</div>
         <div className="flex items-center gap-2">
           <span className={`text-xs px-2 py-1 rounded-full font-medium ${data.balanced ? 'bg-brand-50 text-brand-700' : 'bg-red-50 text-red-600'}`}>
@@ -373,7 +376,7 @@ function BalanceSheetReport() {
     <>
       <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted">As of</span>
+          <span className="text-sm text-muted whitespace-nowrap">As of</span>
           <input type="date" className={inputClass} value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} />
         </div>
         <PrintButton />
@@ -382,7 +385,7 @@ function BalanceSheetReport() {
         <div className="text-sm text-muted">Loading…</div>
       ) : (
         <Card className="p-4">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between gap-2 mb-3">
             <p className="text-xs text-muted">For the period of (Transaction date): as of {asOfDate}</p>
             <span className={`text-xs px-2 py-1 rounded-full font-medium ${data.balanced ? 'bg-brand-50 text-brand-700' : 'bg-red-50 text-red-600'}`}>
               {data.balanced ? 'Balanced' : 'Not balanced'}
@@ -527,7 +530,7 @@ function SalesTaxHub() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3 print:hidden">
+      <div className="flex items-center justify-between gap-2 mb-3 print:hidden">
         <div className="text-base font-semibold text-ink">
           {SALES_TAX_CARDS.find((c) => c.key === view)?.title} Sales Tax Report
         </div>
@@ -620,9 +623,9 @@ function SalesTaxTransactionView() {
           >
             {data.rows.map((r) => (
               <tr key={r.id}>
-                <td className="py-2 pl-3 text-ink">{r.invoiceNumber}</td>
+                <td className="py-2 pl-3 text-ink whitespace-nowrap">{r.invoiceNumber}</td>
                 <td className="py-2 px-3 text-ink">{r.customerName}</td>
-                <td className="py-2 px-3 text-muted">{r.issueDate}</td>
+                <td className="py-2 px-3 text-muted whitespace-nowrap">{r.issueDate}</td>
                 <td className="py-2 px-3 text-right">{money(r.subtotal)}</td>
                 <td className="py-2 px-3 text-right">{money(r.vatAmount)}</td>
                 <td className="py-2 px-3 text-right font-medium">{money(r.total)}</td>
@@ -865,7 +868,7 @@ function ReimbursementsReport() {
         <div className="text-sm text-muted">Loading…</div>
       ) : (
         <>
-          <div className="grid grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
             <Card className="p-4">
               <div className="text-xs text-muted">Claims in Range</div>
               <div className="text-lg font-semibold text-ink">{rows.length}</div>
@@ -905,8 +908,8 @@ function ReimbursementsReport() {
             >
               {rows.map((r) => (
                 <tr key={r.id}>
-                  <td className="py-2 pl-3 text-ink font-medium">{r.claimNumber}</td>
-                  <td className="py-2 px-3 text-muted">{r.date}</td>
+                  <td className="py-2 pl-3 text-ink font-medium whitespace-nowrap">{r.claimNumber}</td>
+                  <td className="py-2 px-3 text-muted whitespace-nowrap">{r.date}</td>
                   <td className="py-2 px-3 text-ink capitalize">{r.category.replace('_', ' ')}</td>
                   <td className="py-2 px-3 text-right font-medium">{money(Number(r.amount))}</td>
                   <td className="py-2 px-3 text-right">
@@ -973,9 +976,11 @@ function LedgerReport() {
               </option>
             ))}
           </select>
-          <input type="date" className={inputClass} value={range.startDate} onChange={(e) => setRange((r) => ({ ...r, startDate: e.target.value }))} />
-          <span className="text-muted text-sm">to</span>
-          <input type="date" className={inputClass} value={range.endDate} onChange={(e) => setRange((r) => ({ ...r, endDate: e.target.value }))} />
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <input type="date" className={inputClass} value={range.startDate} onChange={(e) => setRange((r) => ({ ...r, startDate: e.target.value }))} />
+            <span className="text-muted text-sm">to</span>
+            <input type="date" className={inputClass} value={range.endDate} onChange={(e) => setRange((r) => ({ ...r, endDate: e.target.value }))} />
+          </div>
         </div>
         <PrintButton />
       </div>
@@ -1010,7 +1015,7 @@ function LedgerReport() {
             }
           >
             <tr>
-              <td className="py-2 pl-3 text-muted">{range.startDate}</td>
+              <td className="py-2 pl-3 text-muted whitespace-nowrap">{range.startDate}</td>
               <td className="py-2 px-3 text-muted">-</td>
               <td className="py-2 px-3 text-muted">-</td>
               <td className="py-2 px-3 text-ink italic">Opening Balance =</td>
@@ -1020,9 +1025,9 @@ function LedgerReport() {
             </tr>
             {data.rows.map((r, i) => (
               <tr key={i}>
-                <td className="py-2 pl-3 text-muted">{r.date}</td>
+                <td className="py-2 pl-3 text-muted whitespace-nowrap">{r.date}</td>
                 <td className="py-2 px-3 text-muted">{new Date(r.createdAt).toLocaleString()}</td>
-                <td className="py-2 px-3 text-ink">{r.entryNumber}</td>
+                <td className="py-2 px-3 text-ink whitespace-nowrap">{r.entryNumber}</td>
                 <td className="py-2 px-3 text-ink">{r.memo}</td>
                 <td className="py-2 px-3 text-right">{r.debit > 0 ? money(r.debit) : '-'}</td>
                 <td className="py-2 px-3 text-right">{r.credit > 0 ? money(r.credit) : '-'}</td>
@@ -1087,7 +1092,7 @@ function PurchaseReturnReport() {
         <div className="text-sm text-muted">Loading…</div>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
             <Card className="p-4">
               <div className="text-xs text-muted">Returns in Range</div>
               <div className="text-lg font-semibold text-ink">{rows.length}</div>
@@ -1125,8 +1130,8 @@ function PurchaseReturnReport() {
               {rows.map((r) => (
                 <tr key={r.id}>
                   <td className="py-2 pl-3 text-ink font-medium">{supplierName(r.supplierId)}</td>
-                  <td className="py-2 px-3 text-ink">{r.returnNumber}</td>
-                  <td className="py-2 px-3 text-muted">{r.date}</td>
+                  <td className="py-2 px-3 text-ink whitespace-nowrap">{r.returnNumber}</td>
+                  <td className="py-2 px-3 text-muted whitespace-nowrap">{r.date}</td>
                   <td className="py-2 px-3 text-muted">{r.reason || '-'}</td>
                   <td className="py-2 px-3 text-right font-medium">{money(Number(r.total))}</td>
                   <td className="py-2 px-3 text-right">
@@ -1171,7 +1176,7 @@ function SalesReturnReport() {
         <div className="text-sm text-muted">Loading…</div>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
             <Card className="p-4">
               <div className="text-xs text-muted">Returns in Range</div>
               <div className="text-lg font-semibold text-ink">{rows.length}</div>
@@ -1209,8 +1214,8 @@ function SalesReturnReport() {
               {rows.map((r) => (
                 <tr key={r.id}>
                   <td className="py-2 pl-3 text-ink font-medium">{customerName(r.customerId)}</td>
-                  <td className="py-2 px-3 text-ink">{r.returnNumber}</td>
-                  <td className="py-2 px-3 text-muted">{r.date}</td>
+                  <td className="py-2 px-3 text-ink whitespace-nowrap">{r.returnNumber}</td>
+                  <td className="py-2 px-3 text-muted whitespace-nowrap">{r.date}</td>
                   <td className="py-2 px-3 text-muted">{r.reason || '-'}</td>
                   <td className="py-2 px-3 text-right font-medium">{money(Number(r.total))}</td>
                   <td className="py-2 px-3 text-right">
@@ -1363,7 +1368,7 @@ function InventoryReport() {
       <div className="flex justify-end mb-2">
         <PrintButton />
       </div>
-      <div className="grid grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
         <Card className="p-4">
           <div className="text-xs text-muted">Raw Materials Value</div>
           <div className="text-lg font-semibold text-ink">{money(data.totalRawValue)} OMR</div>

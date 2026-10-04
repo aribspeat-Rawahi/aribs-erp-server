@@ -273,12 +273,12 @@ export default function Suppliers() {
             <Card>
               <div className="divide-y divide-black/5">
                 {orders.map((o) => (
-                  <div key={o.id} className="flex items-center justify-between px-4 py-3">
-                    <div>
+                  <div key={o.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
                       <div className="text-sm font-medium text-ink">{supplierName(o.supplierId)}</div>
                       <div className="text-xs text-muted">{o.items?.length || 0} item(s)</div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusTone[o.status] || 'bg-black/5 text-ink/70'}`}>
                         {o.status}
                       </span>
@@ -385,12 +385,12 @@ export default function Suppliers() {
             <Card>
               <div className="divide-y divide-black/5">
                 {suppliers.map((s) => (
-                  <div key={s.id} className="flex items-center justify-between px-4 py-3">
-                    <div>
+                  <div key={s.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
                       <div className="text-sm font-medium text-ink">{s.name}</div>
                       <div className="text-xs text-muted">{s.phone || s.email || '-'}</div>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex shrink-0 items-center gap-1.5">
                       <IconButton icon={Eye} title="View supplier data & history" onClick={() => setViewingSupplier(s)} />
                       <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => setEditingSupplier(s)} />
                       {canDelete && (
@@ -443,17 +443,17 @@ export default function Suppliers() {
             <Card>
               <div className="divide-y divide-black/5">
                 {returns.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between px-4 py-3">
-                    <div>
+                  <div key={r.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
                       <div className="text-sm font-medium text-ink">{supplierName(r.supplierId)}</div>
                       <div className="text-xs text-muted">
-                        {r.returnNumber} · {r.date}
+                        <span className="whitespace-nowrap">{r.returnNumber}</span> · {r.date}
                         {r.reason ? ` · ${r.reason}` : ''}
                         {r.status === 'rejected' && r.rejectionReason ? ` · Rejected: ${r.rejectionReason}` : ''}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm font-semibold text-ink">{Number(r.total).toFixed(3)} OMR</div>
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                      <div className="text-sm font-semibold text-ink whitespace-nowrap">{Number(r.total).toFixed(3)} OMR</div>
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${returnStatusTone[r.status] || 'bg-black/5 text-ink/70'}`}>
                         {r.status}
                       </span>
@@ -517,8 +517,8 @@ export default function Suppliers() {
                 .filter((g) => g.items.length > 0)
                 .map((g) => (
                   <Card key={g.supplierId || 'unassigned'}>
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-black/5">
-                      <div className="text-sm font-semibold text-ink">
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-black/5">
+                      <div className="text-sm font-semibold text-ink min-w-0">
                         {g.supplierId ? supplierName(g.supplierId) : 'No preferred supplier set'}
                       </div>
                       <PrimaryButton
@@ -540,9 +540,9 @@ export default function Suppliers() {
                     </div>
                     <div className="divide-y divide-black/5">
                       {g.items.map((it) => (
-                        <div key={it.rawMaterialId} className="flex items-center justify-between px-4 py-2.5">
-                          <div className="text-sm text-ink">{it.name}</div>
-                          <div className="text-xs text-muted text-right">
+                        <div key={it.rawMaterialId} className="flex flex-col gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="text-sm text-ink min-w-0">{it.name}</div>
+                          <div className="text-xs text-muted sm:text-right">
                             <div>
                               {formatQuantity(it.quantityInStock, it.unit)} {it.unit} in stock (alert at {formatQuantity(it.lowStockThreshold, it.unit)})
                             </div>
@@ -609,7 +609,7 @@ function SupplierDetailModal({
   return (
     <Modal title={`Supplier: ${supplier.name}`} onClose={onClose} wide>
       <div className="space-y-5">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+        <div className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
           <div><span className="text-muted">Contact person:</span> {supplier.contactPerson || '-'}</div>
           <div><span className="text-muted">Phone:</span> {supplier.phone || '-'}</div>
           <div><span className="text-muted">Email:</span> {supplier.email || '-'}</div>
@@ -630,14 +630,14 @@ function SupplierDetailModal({
             <div className="divide-y divide-black/5 border border-black/10 rounded-lg overflow-hidden">
               {history.purchaseOrders.map((o) => (
                 <div key={o.id} className="px-3 py-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                     <div className="text-sm">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium mr-2 ${statusTone[o.status] || 'bg-black/5 text-ink/70'}`}>
                         {o.status}
                       </span>
                       <span className="text-xs text-muted">{new Date(o.createdAt).toLocaleDateString()}</span>
                     </div>
-                    <div className="text-sm font-medium text-ink">{orderTotal(o).toFixed(3)} OMR</div>
+                    <div className="text-sm font-medium text-ink whitespace-nowrap">{orderTotal(o).toFixed(3)} OMR</div>
                   </div>
                   <div className="text-xs text-muted mt-1">
                     {o.items.map((it) => `${materialName(it.rawMaterialId)} × ${Number(it.quantity)}`).join(', ')}
@@ -824,8 +824,8 @@ function PurchaseOrderDetailModal({
           <div><span className="text-muted">Date:</span> {new Date(order.createdAt).toLocaleDateString()}</div>
           {order.notes && <div className="col-span-2"><span className="text-muted">Notes:</span> {order.notes}</div>}
         </div>
-        <div className="border border-black/10 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="border border-black/10 rounded-lg overflow-x-auto">
+          <table className="w-full min-w-[480px] text-sm">
             <thead className="bg-black/5 text-xs text-muted">
               <tr>
                 <th className="text-left px-3 py-2">Material</th>
@@ -940,7 +940,7 @@ function PayBillModal({
   return (
     <Modal title={`Pay bill — ${supplierName}`} onClose={onClose} wide>
       <div className="space-y-4">
-        <div className="grid grid-cols-3 gap-3 text-sm">
+        <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
           <div className="rounded-lg border border-black/10 p-3">
             <div className="text-xs text-muted">Order Total</div>
             <div className="font-semibold text-ink">{total.toFixed(3)} OMR</div>
@@ -964,8 +964,8 @@ function PayBillModal({
           ) : (
             <div className="divide-y divide-black/5 border border-black/10 rounded-lg overflow-hidden">
               {payments.map((p) => (
-                <div key={p.id} className="flex items-center justify-between px-3 py-2">
-                  <div className="text-sm">
+                <div key={p.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <div className="text-sm min-w-0">
                     <div className="font-medium text-ink">{Number(p.amount).toFixed(3)} OMR</div>
                     <div className="text-xs text-muted">
                       {p.paymentDate} · {labelFor(PAYMENT_TYPE_OPTIONS, p.paymentType)}
@@ -999,7 +999,7 @@ function PayBillModal({
                 <input className={inputClass} type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Payment Type">
                 <select className={inputClass} value={paymentType} onChange={(e) => setPaymentType(e.target.value)}>
                   {PAYMENT_TYPE_OPTIONS.map((o) => (
@@ -1110,8 +1110,8 @@ function NewPurchaseOrderModal({
         </Field>
         <div className="space-y-2">
           {items.map((item, i) => (
-            <div key={item._key} className="grid grid-cols-[1fr_100px_120px] gap-2">
-              <select className={inputClass} value={item.rawMaterialId} onChange={(e) => updateItem(i, { rawMaterialId: e.target.value })}>
+            <div key={item._key} className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_100px_120px]">
+              <select className={`${inputClass} col-span-2 sm:col-span-1`} value={item.rawMaterialId} onChange={(e) => updateItem(i, { rawMaterialId: e.target.value })}>
                 {rawMaterials.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}
@@ -1222,8 +1222,8 @@ function NewPurchaseReturnModal({
   return (
     <Modal title="Return items to supplier" onClose={onClose} wide>
       <form onSubmit={onSubmit} className="space-y-3">
-        <div className="border border-black/10 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="border border-black/10 rounded-lg overflow-x-auto">
+          <table className="w-full min-w-[420px] text-sm">
             <thead className="bg-black/5 text-xs text-muted">
               <tr>
                 <th className="text-left px-3 py-2">Material</th>

@@ -559,7 +559,7 @@ export default function Settings() {
           Download a full snapshot of the database (every customer, invoice, payment, and setting) as a .sql file —
           take one before any update or deployment.
         </p>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <PrimaryButton onClick={onDownloadBackup} disabled={backingUp}>
             {backingUp ? 'Preparing backup…' : 'Download Backup'}
           </PrimaryButton>
@@ -579,7 +579,7 @@ export default function Settings() {
           ) : (
             <div className="space-y-1.5">
               {scheduledBackups.map((b) => (
-                <div key={b.filename} className="flex items-center justify-between text-xs bg-black/[0.03] rounded-lg px-3 py-2">
+                <div key={b.filename} className="flex items-center justify-between gap-3 text-xs bg-black/[0.03] rounded-lg px-3 py-2">
                   <div className="flex flex-col">
                     <span className="font-medium text-ink">{new Date(b.createdAt).toLocaleString()}</span>
                     <span className="text-muted">{formatBackupSize(b.sizeBytes)}</span>

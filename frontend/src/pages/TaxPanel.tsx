@@ -96,7 +96,7 @@ export default function TaxPanel() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <Pill
           value={subTab}
           onChange={(v) => setSubTab(v as TaxTab)}
@@ -123,8 +123,8 @@ export default function TaxPanel() {
             <Card>
               <div className="divide-y divide-black/5">
                 {rates.map((r) => (
-                  <div key={r.id} className={`flex items-center justify-between px-4 py-3 ${!r.active ? 'opacity-50' : ''}`}>
-                    <div>
+                  <div key={r.id} className={`flex items-center justify-between gap-3 px-4 py-3 ${!r.active ? 'opacity-50' : ''}`}>
+                    <div className="min-w-0">
                       <div className="text-sm font-medium text-ink flex items-center gap-1.5">
                         <Percent size={14} className="text-muted" />
                         {r.name}
@@ -132,8 +132,8 @@ export default function TaxPanel() {
                       </div>
                       {r.description && <div className="text-xs text-muted">{r.description}</div>}
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-sm font-semibold text-ink">{Number(r.rate).toFixed(2)}%</div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <div className="text-sm font-semibold text-ink whitespace-nowrap">{Number(r.rate).toFixed(2)}%</div>
                       {canManage && (
                         <div className="flex items-center gap-1.5">
                           <IconButton icon={Pencil} requires="edit" title="Edit rate" onClick={() => setEditRate(r)} />
@@ -181,21 +181,21 @@ export default function TaxPanel() {
             <Card>
               <div className="divide-y divide-black/5">
                 {payments.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between px-4 py-3">
-                    <div>
+                  <div key={p.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
                       <div className="text-sm font-medium text-ink flex items-center gap-1.5">
                         <Receipt size={14} className="text-muted" />
                         {p.period}
                       </div>
                       <div className="text-xs text-muted">
-                        {p.paymentNumber} · {p.datePaid}
+                        <span className="whitespace-nowrap">{p.paymentNumber}</span> · {p.datePaid}
                         {p.reference ? ` · Ref: ${p.reference}` : ''}
                         {accountName(p.bankAccountId) ? ` · Paid from ${accountName(p.bankAccountId)}` : ''}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm font-semibold text-ink">{Number(p.amount).toFixed(3)} OMR</div>
-                      <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
+                      <div className="text-sm font-semibold text-ink whitespace-nowrap">{Number(p.amount).toFixed(3)} OMR</div>
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <IconButton icon={Eye} title="View" onClick={() => setViewPayment(p)} />
                         {p.documentFilePath && (
                           <IconButton icon={Upload} title="View document" onClick={() => viewFile(`/tax-payments/${p.id}/document`)} />

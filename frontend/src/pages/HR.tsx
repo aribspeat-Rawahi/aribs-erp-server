@@ -529,8 +529,8 @@ export default function HR() {
             <Card>
               <div className="divide-y divide-black/5">
                 {records.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between px-4 py-3">
-                    <div>
+                  <div key={r.id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 py-3">
+                    <div className="min-w-0">
                       <div className="text-sm font-medium text-ink flex items-center gap-1.5">
                         {employeeName(r.employeeId)}
                         {r.source === 'device' && (
@@ -591,8 +591,8 @@ export default function HR() {
             subtitle="Everyone on payroll"
             action={
               employeeSubTab === 'active' ? (
-                <div className="flex items-center gap-2">
-                  <div className="relative w-56">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative w-full sm:w-56">
                     <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
                     <input
                       className={`${inputClass} pl-8`}
@@ -610,7 +610,7 @@ export default function HR() {
 
           {/* Old/Temporary Employees live here as a sub-view instead of
               their own top-level tabs. */}
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex flex-wrap items-center gap-2 mb-4">
             {(
               [
                 { value: 'active', label: 'Employees' },
@@ -643,11 +643,11 @@ export default function HR() {
                 <Card>
                   <div className="divide-y divide-black/5">
                     {filteredEmployees.map((e) => (
-                      <div key={e.id} className="flex items-center justify-between px-4 py-3">
-                        <div>
-                          <div className="text-sm font-medium text-ink flex items-center gap-1.5">
+                      <div key={e.id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 py-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-ink flex flex-wrap items-center gap-1.5">
                             {e.name}
-                            {e.staffId ? ` · ${e.staffId}` : ''}
+                            {e.staffId ? <span className="whitespace-nowrap">{` · ${e.staffId}`}</span> : ''}
                             {e.biometricId && (
                               <span title="Fingerprint enrolled" className="text-brand-600">
                                 <Fingerprint size={13} />
@@ -670,7 +670,7 @@ export default function HR() {
                             {e.status && e.status !== 'working' ? ` · ${labelFor(EMPLOYEE_STATUS_OPTIONS, e.status)}` : ''}
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3 sm:flex-nowrap sm:shrink-0">
                           <CountryFlag code={e.nationality} size={22} />
                           <EmployeePhoto employeeId={e.id} hasPhoto={!!e.photoPath} />
                           {!e.active && <span className="text-xs px-2 py-1 rounded-full bg-black/5 text-ink/60 font-medium">Inactive</span>}
@@ -837,7 +837,7 @@ function DepartmentTab() {
           <EmptyState>No departments added yet.</EmptyState>
         ) : (
           <>
-            <div className="grid grid-cols-[60px_1fr_140px_100px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02]">
+            <div className="grid grid-cols-[36px_1fr_92px_76px] sm:grid-cols-[60px_1fr_140px_100px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02]">
               <span>No.</span>
               <span>Name</span>
               <span>Default OT Rate</span>
@@ -845,7 +845,7 @@ function DepartmentTab() {
             </div>
             <div className="divide-y divide-black/5">
               {departments.map((d, i) => (
-                <div key={d.id} className="grid grid-cols-[60px_1fr_140px_100px] items-center px-4 py-3">
+                <div key={d.id} className="grid grid-cols-[36px_1fr_92px_76px] sm:grid-cols-[60px_1fr_140px_100px] items-center px-4 py-3">
                   <span className="text-sm text-muted">{i + 1}.</span>
                   <span className="text-sm text-ink">{d.name}</span>
                   <span className="text-sm text-muted">{d.otRatePerHour != null ? Number(d.otRatePerHour).toFixed(2) + '/hr' : '-'}</span>
@@ -1004,8 +1004,8 @@ function DesignationTab({ onViewDepartment }: { onViewDepartment: () => void }) 
         ) : designations.length === 0 ? (
           <EmptyState>No designations added yet.</EmptyState>
         ) : (
-          <>
-            <div className="grid grid-cols-[50px_1.2fr_1fr_110px_90px_100px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02]">
+          <div className="overflow-x-auto">
+            <div className="grid grid-cols-[50px_1.2fr_1fr_110px_90px_100px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02] min-w-[720px]">
               <span>No.</span>
               <span>Name</span>
               <span>Department</span>
@@ -1013,7 +1013,7 @@ function DesignationTab({ onViewDepartment }: { onViewDepartment: () => void }) 
               <span>Status</span>
               <span className="text-right">Action</span>
             </div>
-            <div className="divide-y divide-black/5">
+            <div className="divide-y divide-black/5 min-w-[720px]">
               {designations.map((d, i) => (
                 <div key={d.id} className="grid grid-cols-[50px_1.2fr_1fr_110px_90px_100px] items-center px-4 py-3">
                   <span className="text-sm text-muted">{i + 1}.</span>
@@ -1041,7 +1041,7 @@ function DesignationTab({ onViewDepartment }: { onViewDepartment: () => void }) 
                 </div>
               ))}
             </div>
-          </>
+          </div>
         )}
       </Card>
 
@@ -1216,8 +1216,8 @@ function ShiftTab() {
         ) : shifts.length === 0 ? (
           <EmptyState>No shifts added yet.</EmptyState>
         ) : (
-          <>
-            <div className="grid grid-cols-[50px_1.3fr_1fr_1fr_1fr_80px_90px_100px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02]">
+          <div className="overflow-x-auto">
+            <div className="grid grid-cols-[50px_1.3fr_1fr_1fr_1fr_80px_90px_100px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02] min-w-[820px]">
               <span>No.</span>
               <span>Name</span>
               <span>Start Time</span>
@@ -1227,7 +1227,7 @@ function ShiftTab() {
               <span>Status</span>
               <span className="text-right">Action</span>
             </div>
-            <div className="divide-y divide-black/5">
+            <div className="divide-y divide-black/5 min-w-[820px]">
               {shifts.map((s, i) => (
                 <div key={s.id} className="grid grid-cols-[50px_1.3fr_1fr_1fr_1fr_80px_90px_100px] items-center px-4 py-3">
                   <span className="text-sm text-muted">{i + 1}.</span>
@@ -1250,7 +1250,7 @@ function ShiftTab() {
                 </div>
               ))}
             </div>
-          </>
+          </div>
         )}
       </Card>
 
@@ -1413,7 +1413,7 @@ function ProjectTab({ employees }: { employees: Employee[] }) {
           <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)} requires="edit">Add Project</PrimaryButton>
         </div>
 
-        <div className="flex items-center justify-between px-4 py-2 border-b border-black/10 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 border-b border-black/10 text-sm">
           <label className="flex items-center gap-2 text-muted">
             Show
             <select
@@ -1429,7 +1429,7 @@ function ProjectTab({ employees }: { employees: Employee[] }) {
             </select>
             entries
           </label>
-          <div className="relative w-56">
+          <div className="relative w-full sm:w-56">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
             <input
               className={`${inputClass} pl-8`}
@@ -1446,7 +1446,8 @@ function ProjectTab({ employees }: { employees: Employee[] }) {
           <EmptyState>{projects.length === 0 ? 'No projects added yet.' : `No projects match "${search}".`}</EmptyState>
         ) : (
           <>
-            <div className="grid grid-cols-[50px_2fr_1fr_1.3fr_1fr_90px_120px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02]">
+            <div className="overflow-x-auto">
+            <div className="grid grid-cols-[50px_2fr_1fr_1.3fr_1fr_90px_120px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02] min-w-[860px]">
               <span>No.</span>
               <span>Name</span>
               <span>Started On</span>
@@ -1455,7 +1456,7 @@ function ProjectTab({ employees }: { employees: Employee[] }) {
               <span>Status</span>
               <span className="text-right">Actions</span>
             </div>
-            <div className="divide-y divide-black/5">
+            <div className="divide-y divide-black/5 min-w-[860px]">
               {paged.map((p, i) => (
                 <div key={p.id} className="grid grid-cols-[50px_2fr_1fr_1.3fr_1fr_90px_120px] items-center px-4 py-3">
                   <span className="text-sm text-muted">{(currentPage - 1) * pageSize + i + 1}.</span>
@@ -1491,6 +1492,7 @@ function ProjectTab({ employees }: { employees: Employee[] }) {
                   </div>
                 </div>
               ))}
+            </div>
             </div>
             <div className="flex items-center justify-between px-4 py-3 text-xs text-muted">
               <span>
@@ -2196,7 +2198,7 @@ function AttendanceReportsTab({ employees, departments }: { employees: Employee[
 
       <Card className="p-4 mb-5">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <Field label="Staff Member">
               <select className={inputClass} value={staffId} onChange={(e) => setStaffId(e.target.value)}>
                 <option value="">Select Staff member</option>
@@ -2208,12 +2210,12 @@ function AttendanceReportsTab({ employees, departments }: { employees: Employee[
               </select>
             </Field>
           </div>
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <Field label="Date Range">
               <input className={inputClass} type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
             </Field>
           </div>
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <Field label="Attendance Days">
               <select className={inputClass} value={dayFilter} onChange={(e) => setDayFilter(e.target.value)}>
                 <option value="all">All Days</option>
@@ -2225,7 +2227,7 @@ function AttendanceReportsTab({ employees, departments }: { employees: Employee[
               </select>
             </Field>
           </div>
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex flex-wrap items-center gap-2 ml-auto">
             <PrimaryButton icon={FileText} onClick={onGenerate}>
               {generating ? 'Generating…' : 'Generate'}
             </PrimaryButton>
@@ -2236,9 +2238,9 @@ function AttendanceReportsTab({ employees, departments }: { employees: Employee[
       </Card>
 
       <Card className="mb-5">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-black/10">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-black/10">
           <h3 className="text-sm font-semibold text-brand-700">Report Logs</h3>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <SecondaryButton icon={ChevronsDown} onClick={() => setExpanded(new Set(rows.map((r) => r.id)))}>Expand All</SecondaryButton>
             <SecondaryButton icon={ChevronsUp} onClick={() => setExpanded(new Set())}>Collapse All</SecondaryButton>
           </div>
@@ -2256,11 +2258,11 @@ function AttendanceReportsTab({ employees, departments }: { employees: Employee[
           </div>
           <div className="divide-y divide-black/5 min-w-[900px]">
             {!hasGenerated ? (
-              <div className="px-4 py-6 text-sm text-muted text-center">Pick your filters and click Generate to load a report.</div>
+              <div className="px-4 py-6 text-sm text-muted text-center max-w-[calc(100vw-2rem)] sm:max-w-none">Pick your filters and click Generate to load a report.</div>
             ) : generating ? (
-              <div className="px-4 py-6 text-sm text-muted text-center">Loading…</div>
+              <div className="px-4 py-6 text-sm text-muted text-center max-w-[calc(100vw-2rem)] sm:max-w-none">Loading…</div>
             ) : rows.length === 0 ? (
-              <div className="px-4 py-6 text-sm text-muted text-center">No data found</div>
+              <div className="px-4 py-6 text-sm text-muted text-center max-w-[calc(100vw-2rem)] sm:max-w-none">No data found</div>
             ) : (
               rows.map((r) => (
                 <div key={r.id}>
@@ -2614,7 +2616,7 @@ function PayrollTab({ employees }: { employees: Employee[] }) {
           <h3 className="text-sm font-semibold text-brand-700">Salary Pay Roll</h3>
         </div>
 
-        <div className="flex items-center justify-between px-4 py-2 border-b border-black/10 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 border-b border-black/10 text-sm">
           <label className="flex items-center gap-2 text-muted">
             Show
             <select
@@ -2630,7 +2632,7 @@ function PayrollTab({ employees }: { employees: Employee[] }) {
             </select>
             entries
           </label>
-          <div className="relative w-56">
+          <div className="relative w-full sm:w-56">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
             <input className={`${inputClass} pl-8`} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search" />
           </div>
@@ -3113,9 +3115,9 @@ function EventTab() {
       <PageHeader title="Events" subtitle="Plan, schedule, and track upcoming company milestones and employee events." />
 
       <Card>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-black/10">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-black/10">
           <h3 className="text-sm font-semibold text-brand-700">Active Events Log</h3>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <SecondaryButton icon={Upload} onClick={() => setShowImport(true)} requires="edit">Import</SecondaryButton>
             <SecondaryButton icon={Download} onClick={onExport}>Export</SecondaryButton>
             <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)} requires="edit">Add Event</PrimaryButton>
@@ -3127,8 +3129,8 @@ function EventTab() {
         ) : events.length === 0 ? (
           <EmptyState>No events added yet.</EmptyState>
         ) : (
-          <>
-            <div className="grid grid-cols-[50px_1.3fr_1.6fr_130px_100px_100px_120px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02]">
+          <div className="overflow-x-auto">
+            <div className="grid grid-cols-[50px_1.3fr_1.6fr_130px_100px_100px_120px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02] min-w-[960px]">
               <span>No.</span>
               <span>Name</span>
               <span>Description</span>
@@ -3137,7 +3139,7 @@ function EventTab() {
               <span>Status</span>
               <span className="text-right">Action</span>
             </div>
-            <div className="divide-y divide-black/5">
+            <div className="divide-y divide-black/5 min-w-[960px]">
               {events.map((e, i) => (
                 <div key={e.id} className="grid grid-cols-[50px_1.3fr_1.6fr_130px_100px_100px_120px] items-center px-4 py-3">
                   <span className="text-sm text-muted">{i + 1}.</span>
@@ -3163,7 +3165,7 @@ function EventTab() {
                 </div>
               ))}
             </div>
-          </>
+          </div>
         )}
       </Card>
 
@@ -3334,8 +3336,8 @@ function NoticeTab() {
         ) : notices.length === 0 ? (
           <EmptyState>No notices published yet.</EmptyState>
         ) : (
-          <>
-            <div className="grid grid-cols-[50px_1.3fr_130px_2fr_100px_120px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02]">
+          <div className="overflow-x-auto">
+            <div className="grid grid-cols-[50px_1.3fr_130px_2fr_100px_120px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02] min-w-[780px]">
               <span>No.</span>
               <span>Title</span>
               <span>Date</span>
@@ -3343,7 +3345,7 @@ function NoticeTab() {
               <span>Status</span>
               <span className="text-right">Action</span>
             </div>
-            <div className="divide-y divide-black/5">
+            <div className="divide-y divide-black/5 min-w-[780px]">
               {notices.map((n, i) => (
                 <div key={n.id} className="grid grid-cols-[50px_1.3fr_130px_2fr_100px_120px] items-center px-4 py-3">
                   <span className="text-sm text-muted">{i + 1}.</span>
@@ -3368,7 +3370,7 @@ function NoticeTab() {
                 </div>
               ))}
             </div>
-          </>
+          </div>
         )}
       </Card>
 
@@ -3514,9 +3516,9 @@ function HolidayTab() {
       <PageHeader title="Holidays" subtitle="Track official non-working days, festival vacations, and organizational leaves." />
 
       <Card>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-black/10">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-black/10">
           <h3 className="text-sm font-semibold text-brand-700">Scheduled Holidays</h3>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <SecondaryButton icon={Upload} onClick={() => setShowImport(true)} requires="edit">Import</SecondaryButton>
             <SecondaryButton icon={Download} onClick={onExport}>Export</SecondaryButton>
             <PrimaryButton icon={Plus} onClick={() => setShowAdd(true)} requires="edit">Add Holiday</PrimaryButton>
@@ -3528,8 +3530,8 @@ function HolidayTab() {
         ) : holidays.length === 0 ? (
           <EmptyState>No holidays scheduled yet.</EmptyState>
         ) : (
-          <>
-            <div className="grid grid-cols-[50px_1.2fr_2fr_100px_100px_120px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02]">
+          <div className="overflow-x-auto">
+            <div className="grid grid-cols-[50px_1.2fr_2fr_100px_100px_120px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02] min-w-[860px]">
               <span>No.</span>
               <span>Name</span>
               <span>Date(s)</span>
@@ -3537,7 +3539,7 @@ function HolidayTab() {
               <span>Status</span>
               <span className="text-right">Action</span>
             </div>
-            <div className="divide-y divide-black/5">
+            <div className="divide-y divide-black/5 min-w-[860px]">
               {holidays.map((h, i) => (
                 <div key={h.id} className="grid grid-cols-[50px_1.2fr_2fr_100px_100px_120px] items-center px-4 py-3">
                   <span className="text-sm text-muted">{i + 1}.</span>
@@ -3566,7 +3568,7 @@ function HolidayTab() {
                 </div>
               ))}
             </div>
-          </>
+          </div>
         )}
       </Card>
 
@@ -3800,7 +3802,7 @@ function DashboardTab({ employees, shifts }: { employees: Employee[]; shifts: Sh
         <div className="px-4 py-3 border-b border-black/10">
           <h3 className="text-sm font-semibold text-brand-700">Staff's Live Status</h3>
         </div>
-        <div className="flex items-center justify-between px-4 py-2 border-b border-black/10 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 border-b border-black/10 text-sm">
           <label className="flex items-center gap-2 text-muted">
             Show
             <select
@@ -3816,7 +3818,7 @@ function DashboardTab({ employees, shifts }: { employees: Employee[]; shifts: Sh
             </select>
             entries
           </label>
-          <div className="relative w-56">
+          <div className="relative w-full sm:w-56">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
             <input className={`${inputClass} pl-8`} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search" />
           </div>
@@ -3829,7 +3831,7 @@ function DashboardTab({ employees, shifts }: { employees: Employee[]; shifts: Sh
         ) : (
           <>
             <div className="overflow-x-auto">
-              <div className="grid grid-cols-[45px_90px_1.2fr_100px_100px_90px_90px_90px_120px_120px_110px_110px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02] min-w-[1200px]">
+              <div className="grid grid-cols-[45px_90px_1.2fr_100px_100px_90px_90px_90px_120px_120px_110px_110px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02] min-w-[1320px] sm:min-w-[1200px]">
                 <span>No.</span>
                 <span>Staff ID</span>
                 <span>Name</span>
@@ -3843,7 +3845,7 @@ function DashboardTab({ employees, shifts }: { employees: Employee[]; shifts: Sh
                 <span>Status</span>
                 <span className="text-right">Action</span>
               </div>
-              <div className="divide-y divide-black/5 min-w-[1200px]">
+              <div className="divide-y divide-black/5 min-w-[1320px] sm:min-w-[1200px]">
                 {paged.map((emp, i) => {
                   const rec = recordFor(emp.id);
                   const loggedIn = !!rec?.checkIn && !rec?.checkOut;
