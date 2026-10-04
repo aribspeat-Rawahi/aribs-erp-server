@@ -22,6 +22,11 @@ export class QuotationItem {
   @Column('decimal', { precision: 12, scale: 3 })
   quantity: number;
 
+  // pcs | bags | kg | litre | ton (see units/units.ts) - copied from the
+  // product when the line is saved, so old documents keep their unit.
+  @Column({ length: 10, default: 'pcs' })
+  unit: string;
+
   // Manually adjustable — a quotation price does not have to match the
   // product's default selling price (bulk discounts, negotiation, etc.)
   @Column('decimal', { precision: 12, scale: 3 })

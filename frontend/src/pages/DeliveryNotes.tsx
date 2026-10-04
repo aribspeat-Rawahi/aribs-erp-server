@@ -27,7 +27,7 @@ interface DeliveryNote {
   deliveryMethod?: string;
   discountAmount?: number;
   deliveryDate?: string;
-  items?: { finishedGoodId?: string; description: string; quantity: number; unitPrice: number }[];
+  items?: { finishedGoodId?: string; description: string; quantity: number; unit?: string; unitPrice: number }[];
 }
 
 const statusTone: Record<string, string> = {

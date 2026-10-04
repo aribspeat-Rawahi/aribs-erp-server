@@ -9,6 +9,7 @@ import { CustomerService } from '../customer/customer.service';
 import { InvoiceService } from '../invoice/invoice.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { CreateInvoiceDto } from '../invoice/dto/invoice.dto';
+import { UnitService } from '../units/unit.service';
 
 @Injectable()
 export class RecurringInvoiceService {
@@ -24,6 +25,7 @@ export class RecurringInvoiceService {
     private invoiceService: InvoiceService,
     private activityLog: ActivityLogService,
     private config: ConfigService,
+    private units: UnitService,
   ) {}
 
   private todayStr() {
@@ -97,7 +99,7 @@ export class RecurringInvoiceService {
     const item = this.repo.create({
       customerId: dto.customerId,
       label: dto.label,
-      items: JSON.stringify(dto.items),
+      items: JSON.stringify(await this.units.resolveProductLines(dto.items)),
       discountAmount: dto.discountAmount ?? 0,
       paymentType: dto.paymentType,
       deliveryMethod: dto.deliveryMethod,
@@ -121,7 +123,7 @@ export class RecurringInvoiceService {
       item.customerId = dto.customerId;
     }
     if (dto.label !== undefined) item.label = dto.label;
-    if (dto.items !== undefined) item.items = JSON.stringify(dto.items);
+    if (dto.items !== undefined) item.items = JSON.stringify(await this.units.resolveProductLines(dto.items));
     if (dto.discountAmount !== undefined) item.discountAmount = dto.discountAmount;
     if (dto.paymentType !== undefined) item.paymentType = dto.paymentType;
     if (dto.deliveryMethod !== undefined) item.deliveryMethod = dto.deliveryMethod;

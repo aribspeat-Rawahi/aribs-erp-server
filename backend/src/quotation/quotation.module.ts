@@ -1,3 +1,4 @@
+import { EmailService } from '../common/email.service';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Quotation } from './quotation.entity';
@@ -21,7 +22,7 @@ import { ApprovalModule } from '../approval/approval.module';
     ApprovalModule,
   ],
   controllers: [QuotationController],
-  providers: [QuotationService],
+  providers: [QuotationService, EmailService],
   exports: [QuotationService],
 })
 export class QuotationModule {}

@@ -8,6 +8,7 @@ import { CustomerService } from '../customer/customer.service';
 import { SettingsService } from '../settings/settings.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { generateInvoicePdf, InvoicePdfItem } from '../common/invoice-pdf.util';
+import { UnitService } from '../units/unit.service';
 import { DocumentLinkService } from '../document-link/document-link.service';
 import { buildWhatsappLinks, toWhatsappPhone } from '../common/whatsapp-phone.util';
 
@@ -22,6 +23,7 @@ export class DeliveryNoteService {
     private settingsService: SettingsService,
     private activityLog: ActivityLogService,
     private documentLinks: DocumentLinkService,
+    private units: UnitService,
   ) {}
 
   private round3(n: number) {
@@ -40,7 +42,7 @@ export class DeliveryNoteService {
   // rounding remainder so the allocated discount always sums exactly to
   // `discount`.
   private calcTotals(
-    items: { finishedGoodId?: string; description?: string; quantity: number; unitPrice?: number; vatRate?: number }[],
+    items: { finishedGoodId?: string; description?: string; quantity: number; unit?: string; unitPrice?: number; vatRate?: number }[],
     discountAmount = 0,
   ) {
     let subtotal = 0;
@@ -82,7 +84,7 @@ export class DeliveryNoteService {
 
   async create(dto: CreateDeliveryNoteDto) {
     const { computed, subtotal, discountAmount, vatAmount, total } = this.calcTotals(
-      dto.items,
+      await this.units.resolveProductLines(dto.items),
       dto.discountAmount ?? 0,
     );
 
@@ -114,6 +116,7 @@ export class DeliveryNoteService {
           finishedGoodId: i.finishedGoodId,
           description: i.description,
           quantity: i.quantity,
+          unit: i.unit,
           unitPrice: i.unitPrice || 0,
           vatRate: i.vatRate ?? 5,
           lineTotal: i.lineTotal,
@@ -156,10 +159,11 @@ export class DeliveryNoteService {
       const existing = await this.itemRepo.find({ where: { deliveryNoteId: id } });
       // DB decimal columns come back as strings — cast explicitly when
       // recomputing from existing rows (discount-only change, no dto.items).
-      const sourceItems = dto.items || existing.map((i) => ({
+      const sourceItems = dto.items ? await this.units.resolveProductLines(dto.items) : existing.map((i) => ({
         finishedGoodId: i.finishedGoodId,
         description: i.description,
         quantity: Number(i.quantity),
+        unit: i.unit,
         unitPrice: Number(i.unitPrice),
         vatRate: Number(i.vatRate),
       }));
@@ -180,6 +184,7 @@ export class DeliveryNoteService {
               finishedGoodId: i['finishedGoodId'],
               description: i['description'],
               quantity: i.quantity,
+              unit: i['unit'],
               unitPrice: i.unitPrice || 0,
               vatRate: i['vatRate'] ?? 5,
               lineTotal: i.lineTotal,
@@ -209,6 +214,7 @@ export class DeliveryNoteService {
     const pdfItems: InvoicePdfItem[] = items.map((i) => ({
       description: i.description,
       quantity: Number(i.quantity),
+      unit: i.unit,
       unitPrice: Number(i.unitPrice),
       vatRate: Number(i.vatRate),
       lineTotal: Number(i.lineTotal),

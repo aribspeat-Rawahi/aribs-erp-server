@@ -3,6 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { ArrowLeft, Printer, Landmark, Receipt, Users, Tags } from 'lucide-react';
 import api from '../api/client';
 import { PageHeader, Card, EmptyState, inputClass } from '../components/ui';
+import { formatQuantityWithUnit } from '../utils/formatQuantity';
 
 function monthRange() {
   const now = new Date();
@@ -1244,10 +1245,26 @@ interface ProductSalesRow {
 function ProductSalesReport() {
   const [range, setRange] = useState(monthRange());
   const [rows, setRows] = useState<ProductSalesRow[] | null>(null);
+  // Product sales rows carry no unit - take it from the product.
+  const [productUnits, setProductUnits] = useState<Record<string, string>>({});
 
   useEffect(() => {
     api.get('/reports/product-sales', { params: range }).then((res) => setRows(res.data));
   }, [range]);
+
+  useEffect(() => {
+    api.get('/finished-goods').then((res) => {
+      const map: Record<string, string> = {};
+      for (const f of res.data as { id: string; unit: string }[]) map[f.id] = f.unit;
+      setProductUnits(map);
+    });
+  }, []);
+
+  // A custom line (no product) has no unit - plain number.
+  function quantityLabel(r: ProductSalesRow) {
+    const unit = r.finishedGoodId ? productUnits[r.finishedGoodId] : undefined;
+    return unit ? formatQuantityWithUnit(r.quantity, unit) : String(Math.round(Number(r.quantity) * 1000) / 1000);
+  }
 
   const total = (rows || []).reduce((sum, r) => sum + Number(r.total), 0);
 
@@ -1273,7 +1290,7 @@ function ProductSalesReport() {
             {rows.map((r, i) => (
               <tr key={i}>
                 <td className="py-2 pl-3 text-ink">{r.productName}</td>
-                <td className="py-2 px-3 text-right">{money(Number(r.quantity))}</td>
+                <td className="py-2 px-3 text-right whitespace-nowrap">{quantityLabel(r)}</td>
                 <td className="py-2 px-3 text-right font-medium">{money(Number(r.total))}</td>
               </tr>
             ))}
@@ -1324,9 +1341,7 @@ function ProductPurchaseReport() {
             {rows.map((r) => (
               <tr key={r.rawMaterialId}>
                 <td className="py-2 pl-3 text-ink">{r.materialName}</td>
-                <td className="py-2 px-3 text-right">
-                  {money(Number(r.quantity))} {r.unit || ''}
-                </td>
+                <td className="py-2 px-3 text-right whitespace-nowrap">{formatQuantityWithUnit(r.quantity, r.unit)}</td>
                 <td className="py-2 px-3 text-right font-medium">{money(Number(r.total))}</td>
               </tr>
             ))}
@@ -1402,9 +1417,7 @@ function InventoryReport() {
                 {m.name}
                 {m.lowStock ? <span className="ml-1.5 text-xs font-normal">(Low stock)</span> : null}
               </td>
-              <td className="py-2 px-3 text-right">
-                {money(Number(m.quantityInStock))} {m.unit}
-              </td>
+              <td className="py-2 px-3 text-right whitespace-nowrap">{formatQuantityWithUnit(m.quantityInStock, m.unit)}</td>
               <td className="py-2 px-3 text-right font-medium">{money(Number(m.value))}</td>
             </tr>
           ))}
@@ -1430,9 +1443,7 @@ function InventoryReport() {
                 {g.name}
                 {g.lowStock ? <span className="ml-1.5 text-xs font-normal">(Low stock)</span> : null}
               </td>
-              <td className="py-2 px-3 text-right">
-                {money(Number(g.quantityInStock))} {g.unit}
-              </td>
+              <td className="py-2 px-3 text-right whitespace-nowrap">{formatQuantityWithUnit(g.quantityInStock, g.unit)}</td>
               <td className="py-2 px-3 text-right font-medium">{money(Number(g.value))}</td>
             </tr>
           ))}

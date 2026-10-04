@@ -10,6 +10,7 @@ import { BillOfMaterial } from '../manufacturing/bom.entity';
 import { ProductionOrder, ProductionOrderStatus } from '../manufacturing/production-order.entity';
 import { SalesOrder, SalesOrderStatus } from '../sales/sales-order.entity';
 import { SalesOrderItem } from '../sales/sales-order-item.entity';
+import { assertQuantityForUnit, isDecimalUnit, unitLabel } from '../units/units';
 
 @Injectable()
 export class FinishedGoodService {
@@ -49,6 +50,9 @@ export class FinishedGoodService {
   // or a manually assigned one). We also generate a QR image of it,
   // in case you want a scannable label/sticker as a backup.
   async create(dto: CreateFinishedGoodDto) {
+    if (dto.quantityInStock !== undefined) {
+      assertQuantityForUnit(dto.quantityInStock, dto.unit, dto.name, { allowZero: true });
+    }
     const item = this.repo.create(dto);
     const saved = await this.repo.save(item);
     const qrImage = await generateQrDataUrl(saved.barcode);
@@ -63,6 +67,12 @@ export class FinishedGoodService {
   async update(id: string, dto: Partial<CreateFinishedGoodDto>) {
     const item = await this.findOne(id);
     const { quantityInStock, ...safeDto } = dto;
+    // Switching to Pcs/Bags is only possible while the stock is a whole number.
+    if (safeDto.unit && !isDecimalUnit(safeDto.unit) && !Number.isInteger(Number(item.quantityInStock))) {
+      throw new BadRequestException(
+        `${item.name} has ${Number(item.quantityInStock)} in stock - ${unitLabel(safeDto.unit)} needs a whole number. Adjust the stock first.`,
+      );
+    }
     Object.assign(item, safeDto);
     return this.repo.save(item);
   }
@@ -80,6 +90,7 @@ export class FinishedGoodService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!item) throw new NotFoundException('No product matches this barcode');
+      assertQuantityForUnit(dto.quantity, item.unit, item.name);
       item.quantityInStock = Number(item.quantityInStock) + Number(dto.quantity);
       const saved = await manager.save(item);
       await this.batchTrackingService.createFinishedGoodBatch(manager, {
@@ -115,6 +126,7 @@ export class FinishedGoodService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!item) throw new NotFoundException('Finished good not found');
+      assertQuantityForUnit(quantity, item.unit, item.name);
       const newQty = Number(item.quantityInStock) - Number(quantity);
       if (newQty < 0) {
         throw new BadRequestException(

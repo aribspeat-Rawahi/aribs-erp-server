@@ -17,7 +17,15 @@ import {
   savePartyDocuments,
 } from '../components/PartyBankDetails';
 import { InteractionLogSection } from '../components/PartyInteractionLog';
-import { formatQuantity, quantityInputStep, snapQuantityToUnit } from '../utils/formatQuantity';
+import {
+  formatQuantityWithUnit,
+  normalizeUnit,
+  quantityInputMin,
+  quantityInputStep,
+  quantityInputValue,
+  snapQuantityToUnit,
+  unitLabel,
+} from '../utils/formatQuantity';
 import VendorPrepaymentsPanel from './VendorPrepaymentsPanel';
 import VendorCreditsPanel from './VendorCreditsPanel';
 
@@ -54,7 +62,8 @@ interface PurchaseOrder {
   status: string;
   notes?: string;
   createdAt: string;
-  items: { rawMaterialId: string; quantity: number; costPerUnit: number }[];
+  // `unit` is copied from the raw material onto each line by the backend.
+  items: { rawMaterialId: string; quantity: number; costPerUnit: number; unit?: string }[];
   total?: number | string;
   paidAmount?: number | string;
   paymentStatus?: string;
@@ -71,7 +80,7 @@ interface PurchaseOrderHistoryItem {
   status: string;
   createdAt: string;
   notes?: string;
-  items: { rawMaterialId: string; quantity: number | string; costPerUnit: number | string }[];
+  items: { rawMaterialId: string; quantity: number | string; costPerUnit: number | string; unit?: string }[];
 }
 interface BankAccount {
   id: string;
@@ -84,6 +93,7 @@ interface PurchaseReturnItem {
   quantity: number | string;
   costPerUnit: number | string;
   vatRate: number | string;
+  unit?: string;
 }
 interface PurchaseReturn {
   id: string;
@@ -187,6 +197,13 @@ export default function Suppliers() {
 
   function supplierName(id: string) {
     return suppliers.find((s) => s.id === id)?.name || id;
+  }
+
+  function materialName(id: string) {
+    return rawMaterials.find((r) => r.id === id)?.name || id;
+  }
+  function materialUnit(id: string) {
+    return rawMaterials.find((r) => r.id === id)?.unit;
   }
 
   function dueOf(order: PurchaseOrder) {
@@ -451,6 +468,13 @@ export default function Suppliers() {
                         {r.reason ? ` · ${r.reason}` : ''}
                         {r.status === 'rejected' && r.rejectionReason ? ` · Rejected: ${r.rejectionReason}` : ''}
                       </div>
+                      {r.items?.length > 0 && (
+                        <div className="text-xs text-muted">
+                          {r.items
+                            .map((it) => `${materialName(it.rawMaterialId)} × ${formatQuantityWithUnit(it.quantity, it.unit || materialUnit(it.rawMaterialId))}`)
+                            .join(', ')}
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                       <div className="text-sm font-semibold text-ink whitespace-nowrap">{Number(r.total).toFixed(3)} OMR</div>
@@ -529,7 +553,7 @@ export default function Suppliers() {
                             supplierId: g.supplierId || suppliers[0]?.id || '',
                             items: g.items.map((it) => ({
                               rawMaterialId: it.rawMaterialId,
-                              quantity: String(it.suggestedQuantity),
+                              quantity: quantityInputValue(it.suggestedQuantity, it.unit),
                               costPerUnit: String(it.costPerUnit),
                             })),
                           })
@@ -544,10 +568,10 @@ export default function Suppliers() {
                           <div className="text-sm text-ink min-w-0">{it.name}</div>
                           <div className="text-xs text-muted sm:text-right">
                             <div>
-                              {formatQuantity(it.quantityInStock, it.unit)} {it.unit} in stock (alert at {formatQuantity(it.lowStockThreshold, it.unit)})
+                              {formatQuantityWithUnit(it.quantityInStock, it.unit)} in stock (alert at {formatQuantityWithUnit(it.lowStockThreshold, it.unit)})
                             </div>
                             <div className="text-amber-700 font-medium">
-                              Suggested: {formatQuantity(it.suggestedQuantity, it.unit)} {it.unit}
+                              Suggested: {formatQuantityWithUnit(it.suggestedQuantity, it.unit)}
                               {!it.isExplicitReorderQuantity && ' (estimated — set a Reorder Quantity on this item for a precise suggestion)'}
                             </div>
                           </div>
@@ -602,6 +626,10 @@ function SupplierDetailModal({
     return rawMaterials.find((r) => r.id === id)?.name || id;
   }
 
+  function materialUnit(id: string) {
+    return rawMaterials.find((r) => r.id === id)?.unit;
+  }
+
   function orderTotal(order: PurchaseOrderHistoryItem) {
     return order.items.reduce((sum, it) => sum + Number(it.quantity) * Number(it.costPerUnit), 0);
   }
@@ -640,7 +668,7 @@ function SupplierDetailModal({
                     <div className="text-sm font-medium text-ink whitespace-nowrap">{orderTotal(o).toFixed(3)} OMR</div>
                   </div>
                   <div className="text-xs text-muted mt-1">
-                    {o.items.map((it) => `${materialName(it.rawMaterialId)} × ${Number(it.quantity)}`).join(', ')}
+                    {o.items.map((it) => `${materialName(it.rawMaterialId)} × ${formatQuantityWithUnit(it.quantity, it.unit || materialUnit(it.rawMaterialId))}`).join(', ')}
                   </div>
                 </div>
               ))}
@@ -838,7 +866,7 @@ function PurchaseOrderDetailModal({
               {order.items.map((it, i) => (
                 <tr key={i}>
                   <td className="px-3 py-2">{materialName(it.rawMaterialId)}</td>
-                  <td className="px-3 py-2 text-right">{formatQuantity(it.quantity, materialUnit(it.rawMaterialId))}</td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">{formatQuantityWithUnit(it.quantity, it.unit || materialUnit(it.rawMaterialId))}</td>
                   <td className="px-3 py-2 text-right">{Number(it.costPerUnit).toFixed(3)}</td>
                   <td className="px-3 py-2 text-right">{(Number(it.quantity) * Number(it.costPerUnit)).toFixed(3)}</td>
                 </tr>
@@ -1058,17 +1086,25 @@ function NewPurchaseOrderModal({
 }) {
   const [supplierId, setSupplierId] = useState(order?.supplierId || initial?.supplierId || suppliers[0]?.id || '');
   const [notes, setNotes] = useState(order?.notes || '');
+  // Each line's unit comes from its raw material (fixed in Inventory) — it
+  // drives the Qty step/snap and is shown read-only next to the input.
+  function materialUnit(id: string): string {
+    return normalizeUnit(rawMaterials.find((r) => r.id === id)?.unit);
+  }
   const [items, setItems] = useState(
     order && order.items.length > 0
-      ? order.items.map((it) => ({ _key: newItemKey(), rawMaterialId: it.rawMaterialId, quantity: String(it.quantity), costPerUnit: String(it.costPerUnit) }))
+      ? order.items.map((it) => {
+          const unit = rawMaterials.some((r) => r.id === it.rawMaterialId) ? materialUnit(it.rawMaterialId) : normalizeUnit(it.unit);
+          return { _key: newItemKey(), rawMaterialId: it.rawMaterialId, unit, quantity: quantityInputValue(it.quantity, unit), costPerUnit: String(it.costPerUnit) };
+        })
       : initial && initial.items.length > 0
-      ? initial.items.map((it) => ({ _key: newItemKey(), rawMaterialId: it.rawMaterialId, quantity: it.quantity, costPerUnit: it.costPerUnit }))
-      : [{ _key: newItemKey(), rawMaterialId: rawMaterials[0]?.id || '', quantity: '1', costPerUnit: '0' }],
+      ? initial.items.map((it) => ({ _key: newItemKey(), rawMaterialId: it.rawMaterialId, unit: materialUnit(it.rawMaterialId), quantity: it.quantity, costPerUnit: it.costPerUnit }))
+      : [{ _key: newItemKey(), rawMaterialId: rawMaterials[0]?.id || '', unit: materialUnit(rawMaterials[0]?.id || ''), quantity: '1', costPerUnit: '0' }],
   );
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  function updateItem(i: number, patch: Partial<{ rawMaterialId: string; quantity: string; costPerUnit: string }>) {
+  function updateItem(i: number, patch: Partial<{ rawMaterialId: string; unit: string; quantity: string; costPerUnit: string }>) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   }
 
@@ -1110,8 +1146,19 @@ function NewPurchaseOrderModal({
         </Field>
         <div className="space-y-2">
           {items.map((item, i) => (
-            <div key={item._key} className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_100px_120px]">
-              <select className={`${inputClass} col-span-2 sm:col-span-1`} value={item.rawMaterialId} onChange={(e) => updateItem(i, { rawMaterialId: e.target.value })}>
+            <div key={item._key} className="grid grid-cols-[1fr_64px_1fr] gap-2 items-center sm:grid-cols-[1fr_100px_64px_120px]">
+              <select
+                className={`${inputClass} col-span-3 sm:col-span-1`}
+                value={item.rawMaterialId}
+                onChange={(e) => {
+                  const unit = materialUnit(e.target.value);
+                  updateItem(i, {
+                    rawMaterialId: e.target.value,
+                    unit,
+                    quantity: String(snapQuantityToUnit(Number(item.quantity) || 0, unit) || 1),
+                  });
+                }}
+              >
                 {rawMaterials.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}
@@ -1121,21 +1168,26 @@ function NewPurchaseOrderModal({
               <input
                 className={inputClass}
                 type="number"
-                step={quantityInputStep(rawMaterials.find((r) => r.id === item.rawMaterialId)?.unit)}
-                min={quantityInputStep(rawMaterials.find((r) => r.id === item.rawMaterialId)?.unit)}
+                step={quantityInputStep(item.unit)}
+                min={quantityInputMin(item.unit)}
                 placeholder="Qty"
+                title="Quantity"
                 value={item.quantity}
                 onChange={(e) => updateItem(i, { quantity: e.target.value })}
                 onBlur={(e) =>
                   updateItem(i, {
-                    quantity: String(snapQuantityToUnit(Number(e.target.value) || 0, rawMaterials.find((r) => r.id === item.rawMaterialId)?.unit)),
+                    quantity: String(snapQuantityToUnit(Number(e.target.value) || 0, item.unit)),
                   })
                 }
+                required
               />
+              <div className="h-full flex items-center justify-center rounded-lg bg-black/5 px-2 text-sm text-ink/70" title="Unit comes from the raw material">
+                {unitLabel(item.unit)}
+              </div>
               <input className={inputClass} type="number" step="0.001" min="0" placeholder="Cost/unit" value={item.costPerUnit} onChange={(e) => updateItem(i, { costPerUnit: e.target.value })} />
             </div>
           ))}
-          <SecondaryButton onClick={() => setItems((prev) => [...prev, { _key: newItemKey(), rawMaterialId: rawMaterials[0]?.id || '', quantity: '1', costPerUnit: '0' }])}>
+          <SecondaryButton onClick={() => setItems((prev) => [...prev, { _key: newItemKey(), rawMaterialId: rawMaterials[0]?.id || '', unit: materialUnit(rawMaterials[0]?.id || ''), quantity: '1', costPerUnit: '0' }])}>
             + Add item
           </SecondaryButton>
         </div>
@@ -1173,7 +1225,14 @@ function NewPurchaseReturnModal({
   onSaved: () => void;
 }) {
   const [items, setItems] = useState(
-    order.items.map((it) => ({ rawMaterialId: it.rawMaterialId, maxQty: it.quantity, quantity: '0' })),
+    // Return quantities follow the PO line's own unit (falls back to the
+    // raw material's unit for lines saved before units were stored).
+    order.items.map((it) => ({
+      rawMaterialId: it.rawMaterialId,
+      unit: it.unit || rawMaterials.find((r) => r.id === it.rawMaterialId)?.unit,
+      maxQty: it.quantity,
+      quantity: '0',
+    })),
   );
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState('');
@@ -1184,10 +1243,6 @@ function NewPurchaseReturnModal({
   function materialName(id: string) {
     return rawMaterials.find((r) => r.id === id)?.name || id;
   }
-  function materialUnit(id: string) {
-    return rawMaterials.find((r) => r.id === id)?.unit;
-  }
-
   function updateQty(i: number, quantity: string) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, quantity } : it)));
   }
@@ -1235,18 +1290,21 @@ function NewPurchaseReturnModal({
               {items.map((it, i) => (
                 <tr key={it.rawMaterialId}>
                   <td className="px-3 py-2">{materialName(it.rawMaterialId)}</td>
-                  <td className="px-3 py-2 text-right">{formatQuantity(it.maxQty, materialUnit(it.rawMaterialId))}</td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">{formatQuantityWithUnit(it.maxQty, it.unit)}</td>
                   <td className="px-3 py-2 text-right">
-                    <input
-                      className={`${inputClass} text-right`}
-                      type="number"
-                      step={quantityInputStep(materialUnit(it.rawMaterialId))}
-                      min="0"
-                      max={Number(it.maxQty)}
-                      value={it.quantity}
-                      onChange={(e) => updateQty(i, e.target.value)}
-                      onBlur={(e) => updateQty(i, String(snapQuantityToUnit(Number(e.target.value) || 0, materialUnit(it.rawMaterialId))))}
-                    />
+                    <div className="flex items-center justify-end gap-2">
+                      <input
+                        className={`${inputClass} text-right`}
+                        type="number"
+                        step={quantityInputStep(it.unit)}
+                        min="0"
+                        max={Number(it.maxQty)}
+                        value={it.quantity}
+                        onChange={(e) => updateQty(i, e.target.value)}
+                        onBlur={(e) => updateQty(i, String(snapQuantityToUnit(Number(e.target.value) || 0, it.unit)))}
+                      />
+                      <span className="shrink-0 text-xs text-muted">{unitLabel(it.unit)}</span>
+                    </div>
                   </td>
                 </tr>
               ))}

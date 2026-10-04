@@ -4,7 +4,7 @@ import api from '../api/client';
 import { viewPdf } from '../api/docActions';
 import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
 import { PAYMENT_TYPE_OPTIONS, DELIVERY_METHOD_OPTIONS, TEMPLATE_OPTIONS, labelFor } from '../constants';
-import { quantityInputStep, snapQuantityToUnit } from '../utils/formatQuantity';
+import { UNIT_OPTIONS, normalizeUnit, quantityInputStep, quantityInputValue, snapQuantityToUnit, unitLabel } from '../utils/formatQuantity';
 
 interface Customer {
   id: string;
@@ -20,6 +20,7 @@ interface RecurringItem {
   finishedGoodId?: string;
   description: string;
   quantity: number;
+  unit?: string;
   unitPrice: number;
 }
 interface RecurringInvoice {
@@ -194,9 +195,27 @@ export default function RecurringInvoices() {
   );
 }
 
-function blankItem(finishedGoods: FinishedGood[]): RecurringItem {
+// A line in the form. A product line always uses the product's unit; a
+// custom line picks one from the fixed list.
+interface FormItem {
+  _key: string;
+  finishedGoodId?: string;
+  description: string;
+  quantity: string;
+  unit: string;
+  unitPrice: string;
+}
+
+function blankItem(finishedGoods: FinishedGood[]): FormItem {
   const fg = finishedGoods[0];
-  return { finishedGoodId: fg?.id || '', description: fg?.name || '', quantity: 1, unitPrice: fg?.sellingPrice ?? 0 };
+  return {
+    _key: newItemKey(),
+    finishedGoodId: fg?.id || '',
+    description: fg?.name || '',
+    quantity: '1',
+    unit: normalizeUnit(fg?.unit),
+    unitPrice: String(fg?.sellingPrice ?? 0),
+  };
 }
 
 function newItemKey() {
@@ -219,10 +238,21 @@ function RecurringInvoiceModal({
   const isEdit = !!existing;
   const [customerId, setCustomerId] = useState(existing?.customerId || customers[0]?.id || '');
   const [label, setLabel] = useState(existing?.label || '');
-  const [items, setItems] = useState<{ _key: string; finishedGoodId?: string; description: string; quantity: string; unitPrice: string }[]>(
+  const [items, setItems] = useState<FormItem[]>(
     existing?.items?.length
-      ? existing.items.map((it) => ({ _key: newItemKey(), finishedGoodId: it.finishedGoodId || '', description: it.description, quantity: String(it.quantity), unitPrice: String(it.unitPrice) }))
-      : [{ _key: newItemKey(), ...blankItem(finishedGoods), quantity: '1', unitPrice: String(blankItem(finishedGoods).unitPrice) } as any],
+      ? existing.items.map((it) => {
+          const product = finishedGoods.find((f) => f.id === it.finishedGoodId);
+          const unit = normalizeUnit(product?.unit || it.unit);
+          return {
+            _key: newItemKey(),
+            finishedGoodId: it.finishedGoodId || '',
+            description: it.description,
+            quantity: quantityInputValue(it.quantity, unit),
+            unit,
+            unitPrice: String(it.unitPrice),
+          };
+        })
+      : [blankItem(finishedGoods)],
   );
   const [discountAmount, setDiscountAmount] = useState(existing?.discountAmount ? String(existing.discountAmount) : '0');
   const [paymentType, setPaymentType] = useState(existing?.paymentType || '');
@@ -235,12 +265,11 @@ function RecurringInvoiceModal({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  function updateItem(i: number, patch: Partial<{ finishedGoodId?: string; description: string; quantity: string; unitPrice: string }>) {
+  function updateItem(i: number, patch: Partial<FormItem>) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   }
   function addItem() {
-    const fg = finishedGoods[0];
-    setItems((prev) => [...prev, { _key: newItemKey(), finishedGoodId: fg?.id || '', description: fg?.name || '', quantity: '1', unitPrice: String(fg?.sellingPrice ?? 0) }]);
+    setItems((prev) => [...prev, blankItem(finishedGoods)]);
   }
   function removeItem(i: number) {
     setItems((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
@@ -257,6 +286,7 @@ function RecurringInvoiceModal({
         finishedGoodId: it.finishedGoodId || undefined,
         description: it.description,
         quantity: Number(it.quantity),
+        unit: it.unit,
         unitPrice: Number(it.unitPrice),
       })),
       discountAmount: Number(discountAmount) || 0,
@@ -302,43 +332,90 @@ function RecurringInvoiceModal({
 
         <div className="space-y-2">
           <span className="block text-xs font-medium text-muted">Items</span>
-          {items.map((item, i) => (
-            <div key={item._key} className="grid grid-cols-[1fr_1fr_24px] gap-2 items-center border-b border-black/5 pb-2 sm:grid-cols-[1fr_80px_100px_24px] sm:border-0 sm:pb-0">
-              <select
-                className={`${inputClass} col-span-3 sm:col-span-1`}
-                value={item.finishedGoodId}
-                onChange={(e) => {
-                  const fg = finishedGoods.find((f) => f.id === e.target.value);
-                  updateItem(i, { finishedGoodId: e.target.value, description: fg?.name || item.description, unitPrice: fg ? String(fg.sellingPrice) : item.unitPrice });
-                }}
+          {items.map((item, i) => {
+            const isProductLine = !!item.finishedGoodId;
+            return (
+              <div
+                key={item._key}
+                className="grid grid-cols-[1fr_72px_1fr_24px] gap-2 items-center border-b border-black/5 pb-2 sm:grid-cols-[1fr_80px_76px_100px_24px] sm:border-0 sm:pb-0"
               >
-                <option value="">Custom item</option>
-                {finishedGoods.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                className={inputClass}
-                type="number"
-                step={quantityInputStep(finishedGoods.find((f) => f.id === item.finishedGoodId)?.unit)}
-                min={quantityInputStep(finishedGoods.find((f) => f.id === item.finishedGoodId)?.unit)}
-                placeholder="Qty"
-                value={item.quantity}
-                onChange={(e) => updateItem(i, { quantity: e.target.value })}
-                onBlur={(e) =>
-                  updateItem(i, {
-                    quantity: String(snapQuantityToUnit(Number(e.target.value) || 0, finishedGoods.find((f) => f.id === item.finishedGoodId)?.unit)),
-                  })
-                }
-              />
-              <input className={inputClass} type="number" step="0.001" min="0" placeholder="Unit price" value={item.unitPrice} onChange={(e) => updateItem(i, { unitPrice: e.target.value })} />
-              <button type="button" onClick={() => removeItem(i)} className="text-muted hover:text-red-600 text-lg leading-none">
-                &times;
-              </button>
-            </div>
-          ))}
+                <select
+                  className={`${inputClass} col-span-4 sm:col-span-1`}
+                  value={item.finishedGoodId}
+                  onChange={(e) => {
+                    const fg = finishedGoods.find((f) => f.id === e.target.value);
+                    const unit = fg ? normalizeUnit(fg.unit) : item.unit;
+                    updateItem(i, {
+                      finishedGoodId: e.target.value,
+                      description: fg?.name || item.description,
+                      unit,
+                      quantity: String(snapQuantityToUnit(Number(item.quantity) || 0, unit) || 1),
+                      unitPrice: fg ? String(fg.sellingPrice) : item.unitPrice,
+                    });
+                  }}
+                >
+                  <option value="">Custom item</option>
+                  {finishedGoods.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className={inputClass}
+                  type="number"
+                  step={quantityInputStep(item.unit)}
+                  min={quantityInputStep(item.unit)}
+                  placeholder="Qty"
+                  title="Quantity"
+                  value={item.quantity}
+                  onChange={(e) => updateItem(i, { quantity: e.target.value })}
+                  onBlur={(e) =>
+                    updateItem(i, {
+                      quantity: String(snapQuantityToUnit(Number(e.target.value) || 0, item.unit)),
+                    })
+                  }
+                  required
+                />
+                {isProductLine ? (
+                  <div className="h-full flex items-center justify-center rounded-lg bg-black/5 px-2 text-sm text-ink/70" title="Unit comes from the product">
+                    {unitLabel(item.unit)}
+                  </div>
+                ) : (
+                  <select
+                    className={inputClass}
+                    value={item.unit}
+                    title="Unit"
+                    onChange={(e) =>
+                      updateItem(i, {
+                        unit: e.target.value,
+                        quantity: String(snapQuantityToUnit(Number(item.quantity) || 0, e.target.value) || 1),
+                      })
+                    }
+                  >
+                    {UNIT_OPTIONS.map((u) => (
+                      <option key={u.value} value={u.value}>
+                        {u.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <input
+                  className={inputClass}
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  placeholder="Unit price"
+                  title="Unit price (OMR)"
+                  value={item.unitPrice}
+                  onChange={(e) => updateItem(i, { unitPrice: e.target.value })}
+                />
+                <button type="button" onClick={() => removeItem(i)} className="text-muted hover:text-red-600 text-lg leading-none" title="Remove item">
+                  &times;
+                </button>
+              </div>
+            );
+          })}
           <SecondaryButton onClick={addItem}>+ Add item</SecondaryButton>
         </div>
 

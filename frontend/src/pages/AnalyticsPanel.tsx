@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { TrendingUp, Users, Boxes, LineChart as LineChartIcon, AlertTriangle } from 'lucide-react';
 import api from '../api/client';
 import { Card, StatCard, EmptyState, inputClass } from '../components/ui';
-import { formatQuantity } from '../utils/formatQuantity';
+import { formatQuantityWithUnit } from '../utils/formatQuantity';
 
 function monthRange() {
   const now = new Date();
@@ -126,6 +126,14 @@ export default function AnalyticsPanel() {
     api.get('/analytics/inventory-turnover', { params: { days: 90 } }).then((res) => setTurnover(res.data));
   }, []);
 
+  // Profitability rows carry no unit - take it from the product (the
+  // turnover data already lists every finished good with its unit). A
+  // custom line with no product shows the plain number.
+  function quantitySoldLabel(r: ProfitabilityRow) {
+    const fg = r.finishedGoodId ? turnover?.finishedGoods.find((f) => f.id === r.finishedGoodId) : undefined;
+    return fg ? formatQuantityWithUnit(r.quantitySold, fg.unit) : String(Math.round(Number(r.quantitySold) * 1000) / 1000);
+  }
+
   const topProduct = profitability?.rows[0];
   const topCustomer = customers?.rows[0];
   const slowMovingRaw = turnover?.rawMaterials.filter((r) => r.slowMoving && r.quantityInStock > 0) || [];
@@ -199,7 +207,7 @@ export default function AnalyticsPanel() {
                 {profitability.rows.map((r) => (
                   <tr key={r.finishedGoodId || r.productName}>
                     <td className="py-2 pr-3 text-ink font-medium">{r.productName}</td>
-                    <td className="py-2 px-3 text-right whitespace-nowrap text-ink/70">{r.quantitySold.toFixed(3)}</td>
+                    <td className="py-2 px-3 text-right whitespace-nowrap text-ink/70">{quantitySoldLabel(r)}</td>
                     <td className="py-2 px-3 text-right whitespace-nowrap text-ink/70">{r.revenue.toFixed(3)}</td>
                     <td className="py-2 px-3 text-right whitespace-nowrap text-ink/70">{r.cogs.toFixed(3)}</td>
                     <td className={`py-2 px-3 text-right whitespace-nowrap font-medium ${r.margin >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
@@ -299,7 +307,7 @@ export default function AnalyticsPanel() {
                         <div className="text-xs text-amber-700">No usage in 90 days</div>
                       </div>
                       <div className="text-ink/70 text-right whitespace-nowrap">
-                        {formatQuantity(r.quantityInStock, r.unit)} {r.unit}
+                        {formatQuantityWithUnit(r.quantityInStock, r.unit)}
                         <div className="text-xs text-muted">{r.stockValue.toFixed(3)} OMR</div>
                       </div>
                     </div>
@@ -320,7 +328,7 @@ export default function AnalyticsPanel() {
                         <div className="text-xs text-amber-700">No sales in 90 days</div>
                       </div>
                       <div className="text-ink/70 text-right whitespace-nowrap">
-                        {formatQuantity(r.quantityInStock, r.unit)} {r.unit}
+                        {formatQuantityWithUnit(r.quantityInStock, r.unit)}
                         <div className="text-xs text-muted">{r.stockValue.toFixed(3)} OMR</div>
                       </div>
                     </div>

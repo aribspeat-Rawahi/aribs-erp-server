@@ -26,7 +26,11 @@ interface Quotation {
   validUntil?: string;
   deliveryMethod?: string;
   discountAmount?: number;
-  items?: { finishedGoodId?: string; description: string; quantity: number; unitPrice: number }[];
+  paymentType?: string;
+  deliveryDate?: string;
+  template?: string;
+  vatExcluded?: boolean;
+  items?: { finishedGoodId?: string; description: string; quantity: number; unit?: string; unitPrice: number }[];
 }
 
 const statusTone: Record<string, string> = {
@@ -101,6 +105,10 @@ export default function Quotations() {
         deliveryMethod: editing.deliveryMethod,
         discountAmount: editing.discountAmount,
         validUntil: editing.validUntil,
+        paymentType: editing.paymentType,
+        deliveryDate: editing.deliveryDate,
+        template: editing.template,
+        vatExcluded: editing.vatExcluded,
       }
     : undefined;
 

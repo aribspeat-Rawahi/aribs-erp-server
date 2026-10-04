@@ -6,7 +6,8 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { DeliveryMethod } from '../common/payment-type.enum';
+import { DeliveryMethod, PaymentType } from '../common/payment-type.enum';
+import { InvoiceTemplate } from '../settings/settings.entity';
 
 export enum QuotationStatus {
   DRAFT = 'draft',
@@ -49,6 +50,21 @@ export class Quotation {
 
   @Column({ type: 'enum', enum: DeliveryMethod, nullable: true })
   deliveryMethod: DeliveryMethod;
+
+  // Same fields as an invoice, so a quotation form matches the invoice
+  // form and converting to an invoice carries everything over.
+  @Column({ type: 'enum', enum: PaymentType, nullable: true })
+  paymentType: PaymentType;
+
+  @Column({ type: 'date', nullable: true })
+  deliveryDate: string;
+
+  @Column({ type: 'enum', enum: InvoiceTemplate, default: InvoiceTemplate.CLASSIC })
+  template: InvoiceTemplate;
+
+  // No VAT on this quotation (same approval rule as an invoice).
+  @Column({ default: false })
+  vatExcluded: boolean;
 
   @Column('decimal', { precision: 12, scale: 3 })
   vatAmount: number;

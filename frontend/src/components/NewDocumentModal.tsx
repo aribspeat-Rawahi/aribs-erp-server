@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import api from '../api/client';
 import { PrimaryButton, SecondaryButton, Modal, Field, inputClass } from './ui';
 import { PAYMENT_TYPE_OPTIONS, DELIVERY_METHOD_OPTIONS, TEMPLATE_OPTIONS } from '../constants';
-import { quantityInputStep, snapQuantityToUnit } from '../utils/formatQuantity';
+import { UNIT_OPTIONS, normalizeUnit, quantityInputStep, quantityInputValue, snapQuantityToUnit, unitLabel } from '../utils/formatQuantity';
 
 export type DocType = 'quotation' | 'invoice' | 'delivery_note';
 
@@ -22,6 +22,9 @@ interface DocItem {
   finishedGoodId?: string;
   description: string;
   quantity: string;
+  // A product line always uses the product's unit (set in the product
+  // form); only a "Custom item" line lets the user pick one.
+  unit: string;
   unitPrice: string;
 }
 
@@ -32,7 +35,13 @@ function newItemKey() {
 export interface ExistingDoc {
   id: string;
   customerId?: string;
-  items?: { finishedGoodId?: string; description: string; quantity: number; unitPrice: number }[];
+  items?: {
+    finishedGoodId?: string;
+    description: string;
+    quantity: number;
+    unit?: string;
+    unitPrice: number;
+  }[];
   paymentType?: string;
   deliveryMethod?: string;
   discountAmount?: number;
@@ -62,6 +71,7 @@ function blankItem(finishedGoods: FinishedGood[]): DocItem {
     finishedGoodId: fg?.id || '',
     description: fg?.name || '',
     quantity: '1',
+    unit: normalizeUnit(fg?.unit),
     unitPrice: String(fg?.sellingPrice ?? 0),
   };
 }
@@ -85,14 +95,19 @@ export default function NewDocumentModal({
   const [customerId, setCustomerId] = useState(existing?.customerId || customers[0]?.id || '');
   const [items, setItems] = useState<DocItem[]>(
     existing?.items?.length
-      ? existing.items.map((it) => ({
-          _key: newItemKey(),
-          finishedGoodId: it.finishedGoodId || '',
-          description: it.description,
-          quantity: String(it.quantity),
-          unitPrice: String(it.unitPrice),
-        }))
-      : [blankItem(finishedGoods)]
+      ? existing.items.map((it) => {
+          const product = finishedGoods.find((f) => f.id === it.finishedGoodId);
+          const unit = normalizeUnit(product?.unit || it.unit);
+          return {
+            _key: newItemKey(),
+            finishedGoodId: it.finishedGoodId || '',
+            description: it.description,
+            quantity: quantityInputValue(it.quantity, unit),
+            unit,
+            unitPrice: String(it.unitPrice),
+          };
+        })
+      : [blankItem(finishedGoods)],
   );
   const [paymentType, setPaymentType] = useState(existing?.paymentType || '');
   const [deliveryMethod, setDeliveryMethod] = useState(existing?.deliveryMethod || '');
@@ -133,6 +148,7 @@ export default function NewDocumentModal({
       finishedGoodId: it.finishedGoodId || undefined,
       description: it.description,
       quantity: Number(it.quantity),
+      unit: it.unit,
       unitPrice: Number(it.unitPrice),
     }));
 
@@ -141,15 +157,17 @@ export default function NewDocumentModal({
       discountAmount: Number(discountAmount) || 0,
       deliveryMethod: deliveryMethod || undefined,
     };
-    if (docType !== 'quotation') {
-      body.paymentType = paymentType || undefined;
-      body.deliveryDate = deliveryDate || undefined;
-    }
+    // Quotation and invoice forms carry the same fields (a quotation has
+    // "Valid until" where an invoice has "Due date").
+    body.paymentType = paymentType || undefined;
+    body.deliveryDate = deliveryDate || undefined;
     if (docType === 'quotation') {
       body.validUntil = validUntil || undefined;
     }
     if (docType === 'invoice') {
       body.dueDate = dueDate || undefined;
+    }
+    if (docType === 'invoice' || docType === 'quotation') {
       body.vatExcluded = vatExcluded;
       body.template = template;
     }
@@ -219,65 +237,95 @@ export default function NewDocumentModal({
 
         <div className="space-y-2">
           <span className="block text-xs font-medium text-muted">Items</span>
-          {items.map((item, i) => (
-            <div key={item._key} className="grid grid-cols-[1fr_1fr_24px] gap-2 items-center border-b border-black/5 pb-2 sm:grid-cols-[1fr_80px_100px_24px] sm:border-0 sm:pb-0">
-              <select
-                className={`${inputClass} col-span-3 sm:col-span-1`}
-                value={item.finishedGoodId}
-                onChange={(e) => {
-                  const fg = finishedGoods.find((f) => f.id === e.target.value);
-                  updateItem(i, {
-                    finishedGoodId: e.target.value,
-                    description: fg?.name || item.description,
-                    unitPrice: fg ? String(fg.sellingPrice) : item.unitPrice,
-                  });
-                }}
+          {items.map((item, i) => {
+            const isProductLine = !!item.finishedGoodId;
+            return (
+              <div
+                key={item._key}
+                className="grid grid-cols-[1fr_72px_1fr_24px] gap-2 items-center border-b border-black/5 pb-2 sm:grid-cols-[1fr_80px_76px_100px_24px] sm:border-0 sm:pb-0"
               >
-                <option value="">Custom item</option>
-                {finishedGoods.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                className={inputClass}
-                type="number"
-                step={quantityInputStep(finishedGoods.find((f) => f.id === item.finishedGoodId)?.unit)}
-                min={quantityInputStep(finishedGoods.find((f) => f.id === item.finishedGoodId)?.unit)}
-                placeholder="Qty"
-                value={item.quantity}
-                onChange={(e) => updateItem(i, { quantity: e.target.value })}
-                onBlur={(e) =>
-                  updateItem(i, {
-                    quantity: String(snapQuantityToUnit(Number(e.target.value) || 0, finishedGoods.find((f) => f.id === item.finishedGoodId)?.unit)),
-                  })
-                }
-              />
-              <input
-                className={inputClass}
-                type="number"
-                step="0.001"
-                min="0"
-                placeholder="Unit price"
-                value={item.unitPrice}
-                onChange={(e) => updateItem(i, { unitPrice: e.target.value })}
-              />
-              <button
-                type="button"
-                onClick={() => removeItem(i)}
-                className="text-muted hover:text-red-600 text-lg leading-none"
-                title="Remove item"
-              >
-                &times;
-              </button>
-            </div>
-          ))}
+                <select
+                  className={`${inputClass} col-span-4 sm:col-span-1`}
+                  value={item.finishedGoodId}
+                  onChange={(e) => {
+                    const fg = finishedGoods.find((f) => f.id === e.target.value);
+                    const unit = fg ? normalizeUnit(fg.unit) : item.unit;
+                    updateItem(i, {
+                      finishedGoodId: e.target.value,
+                      description: fg?.name || item.description,
+                      unit,
+                      quantity: String(snapQuantityToUnit(Number(item.quantity) || 0, unit) || 1),
+                      unitPrice: fg ? String(fg.sellingPrice) : item.unitPrice,
+                    });
+                  }}
+                >
+                  <option value="">Custom item</option>
+                  {finishedGoods.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className={inputClass}
+                  type="number"
+                  step={quantityInputStep(item.unit)}
+                  min={quantityInputStep(item.unit)}
+                  placeholder="Qty"
+                  title="Quantity"
+                  value={item.quantity}
+                  onChange={(e) => updateItem(i, { quantity: e.target.value })}
+                  onBlur={(e) =>
+                    updateItem(i, {
+                      quantity: String(snapQuantityToUnit(Number(e.target.value) || 0, item.unit)),
+                    })
+                  }
+                  required
+                />
+                {isProductLine ? (
+                  <div className="h-full flex items-center justify-center rounded-lg bg-black/5 px-2 text-sm text-ink/70" title="Unit comes from the product">
+                    {unitLabel(item.unit)}
+                  </div>
+                ) : (
+                  <select
+                    className={inputClass}
+                    value={item.unit}
+                    title="Unit"
+                    onChange={(e) =>
+                      updateItem(i, {
+                        unit: e.target.value,
+                        quantity: String(snapQuantityToUnit(Number(item.quantity) || 0, e.target.value) || 1),
+                      })
+                    }
+                  >
+                    {UNIT_OPTIONS.map((u) => (
+                      <option key={u.value} value={u.value}>
+                        {u.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <input
+                  className={inputClass}
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  placeholder="Unit price"
+                  title="Unit price (OMR)"
+                  value={item.unitPrice}
+                  onChange={(e) => updateItem(i, { unitPrice: e.target.value })}
+                />
+                <button type="button" onClick={() => removeItem(i)} className="text-muted hover:text-red-600 text-lg leading-none" title="Remove item">
+                  &times;
+                </button>
+              </div>
+            );
+          })}
           <SecondaryButton onClick={addItem}>+ Add item</SecondaryButton>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          {docType !== 'quotation' && (
+          {
             <Field label="Payment terms">
               <select className={inputClass} value={paymentType} onChange={(e) => setPaymentType(e.target.value)}>
                 <option value="">-</option>
@@ -288,7 +336,7 @@ export default function NewDocumentModal({
                 ))}
               </select>
             </Field>
-          )}
+          }
           <Field label="Delivery method">
             <select className={inputClass} value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value)}>
               <option value="">-</option>
@@ -303,14 +351,7 @@ export default function NewDocumentModal({
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Discount (OMR)">
-            <input
-              className={inputClass}
-              type="number"
-              step="0.001"
-              min="0"
-              value={discountAmount}
-              onChange={(e) => setDiscountAmount(e.target.value)}
-            />
+            <input className={inputClass} type="number" step="0.001" min="0" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} />
           </Field>
           {docType === 'quotation' && (
             <Field label="Valid until">
@@ -322,7 +363,7 @@ export default function NewDocumentModal({
               <input className={inputClass} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </Field>
           )}
-          {(docType === 'invoice' || docType === 'delivery_note') && (
+          {
             <Field label="Delivery date">
               <input
                 className={`${inputClass} ${!deliveryDateEnabled ? 'bg-black/5 text-muted cursor-not-allowed' : ''}`}
@@ -333,10 +374,10 @@ export default function NewDocumentModal({
                 onChange={(e) => setDeliveryDate(e.target.value)}
               />
             </Field>
-          )}
+          }
         </div>
 
-        {docType === 'invoice' && (
+        {(docType === 'invoice' || docType === 'quotation') && (
           <div className="grid grid-cols-2 gap-3 items-center">
             <Field label="PDF template">
               <select className={inputClass} value={template} onChange={(e) => setTemplate(e.target.value)}>
@@ -349,7 +390,7 @@ export default function NewDocumentModal({
             </Field>
             <label className="flex items-center gap-2 text-sm text-ink/80 mt-5">
               <input type="checkbox" checked={vatExcluded} onChange={(e) => setVatExcluded(e.target.checked)} />
-              VAT excluded for this invoice
+              VAT excluded for this {docType === 'quotation' ? 'quotation' : 'invoice'}
             </label>
           </div>
         )}

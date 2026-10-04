@@ -3,7 +3,7 @@ import { Plus } from 'lucide-react';
 import api from '../api/client';
 import { PageHeader, PrimaryButton, SecondaryButton, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
 import { PAYMENT_TYPE_OPTIONS } from '../constants';
-import { quantityInputStep, snapQuantityToUnit } from '../utils/formatQuantity';
+import { formatQuantityWithUnit, quantityInputStep, snapQuantityToUnit, unitLabel } from '../utils/formatQuantity';
 
 interface Customer {
   id: string;
@@ -20,7 +20,7 @@ interface SalesOrder {
   id: string;
   customerId: string;
   status: string;
-  items: { finishedGoodId: string; quantity: number; unitPrice: number }[];
+  items: { finishedGoodId: string; quantity: number; unit?: string; unitPrice: number }[];
 }
 
 const statusTone: Record<string, string> = {
@@ -55,6 +55,16 @@ export default function SalesOrders() {
     return customers.find((c) => c.id === id)?.name || id;
   }
 
+  // "Cement x 10 Bags, Sand x 2.500 Tons" - the line's own unit, else the product's.
+  function itemsSummary(o: SalesOrder) {
+    return (o.items || [])
+      .map((it) => {
+        const fg = finishedGoods.find((f) => f.id === it.finishedGoodId);
+        return `${fg?.name || 'Item'} x ${formatQuantityWithUnit(it.quantity, it.unit || fg?.unit)}`;
+      })
+      .join(', ');
+  }
+
   async function act(id: string, action: 'complete' | 'cancel') {
     try {
       await api.post(`/sales-orders/${id}/${action}`);
@@ -83,6 +93,7 @@ export default function SalesOrders() {
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-ink">{customerName(o.customerId)}</div>
                   <div className="text-xs text-muted">{o.items?.length || 0} item(s)</div>
+                  {!!o.items?.length && <div className="text-xs text-muted break-words">{itemsSummary(o)}</div>}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusTone[o.status] || 'bg-black/5 text-ink/70'}`}>
@@ -183,39 +194,52 @@ function NewSalesOrderModal({
           </Field>
         </div>
         <div className="space-y-2">
-          {items.map((item, i) => (
-            <div key={item._key} className="grid grid-cols-2 gap-2 border-b border-black/5 pb-2 sm:grid-cols-[1fr_90px_110px] sm:border-0 sm:pb-0">
-              <select
-                className={`${inputClass} col-span-2 sm:col-span-1`}
-                value={item.finishedGoodId}
-                onChange={(e) => {
-                  const fg = finishedGoods.find((f) => f.id === e.target.value);
-                  updateItem(i, { finishedGoodId: e.target.value, unitPrice: String(fg?.sellingPrice ?? 0) });
-                }}
-              >
-                {finishedGoods.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                className={inputClass}
-                type="number"
-                step={quantityInputStep(finishedGoods.find((f) => f.id === item.finishedGoodId)?.unit)}
-                min={quantityInputStep(finishedGoods.find((f) => f.id === item.finishedGoodId)?.unit)}
-                placeholder="Qty"
-                value={item.quantity}
-                onChange={(e) => updateItem(i, { quantity: e.target.value })}
-                onBlur={(e) =>
-                  updateItem(i, {
-                    quantity: String(snapQuantityToUnit(Number(e.target.value) || 0, finishedGoods.find((f) => f.id === item.finishedGoodId)?.unit)),
-                  })
-                }
-              />
-              <input className={inputClass} type="number" step="0.001" min="0" placeholder="Unit price" value={item.unitPrice} onChange={(e) => updateItem(i, { unitPrice: e.target.value })} />
-            </div>
-          ))}
+          {items.map((item, i) => {
+            // A sales order line is always a product, so the unit is the product's.
+            const unit = finishedGoods.find((f) => f.id === item.finishedGoodId)?.unit;
+            return (
+              <div key={item._key} className="grid grid-cols-[1fr_64px_1fr] gap-2 border-b border-black/5 pb-2 sm:grid-cols-[1fr_90px_64px_110px] sm:border-0 sm:pb-0">
+                <select
+                  className={`${inputClass} col-span-3 sm:col-span-1`}
+                  value={item.finishedGoodId}
+                  onChange={(e) => {
+                    const fg = finishedGoods.find((f) => f.id === e.target.value);
+                    updateItem(i, {
+                      finishedGoodId: e.target.value,
+                      quantity: String(snapQuantityToUnit(Number(item.quantity) || 0, fg?.unit) || 1),
+                      unitPrice: String(fg?.sellingPrice ?? 0),
+                    });
+                  }}
+                >
+                  {finishedGoods.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className={inputClass}
+                  type="number"
+                  step={quantityInputStep(unit)}
+                  min={quantityInputStep(unit)}
+                  placeholder="Qty"
+                  title="Quantity"
+                  value={item.quantity}
+                  onChange={(e) => updateItem(i, { quantity: e.target.value })}
+                  onBlur={(e) =>
+                    updateItem(i, {
+                      quantity: String(snapQuantityToUnit(Number(e.target.value) || 0, unit)),
+                    })
+                  }
+                  required
+                />
+                <div className="h-full flex items-center justify-center rounded-lg bg-black/5 px-2 text-sm text-ink/70" title="Unit comes from the product">
+                  {unitLabel(unit)}
+                </div>
+                <input className={inputClass} type="number" step="0.001" min="0" placeholder="Unit price" title="Unit price (OMR)" value={item.unitPrice} onChange={(e) => updateItem(i, { unitPrice: e.target.value })} />
+              </div>
+            );
+          })}
           <SecondaryButton
             onClick={() => setItems((prev) => [...prev, { _key: newItemKey(), finishedGoodId: finishedGoods[0]?.id || '', quantity: '1', unitPrice: String(finishedGoods[0]?.sellingPrice ?? 0) }])}
           >

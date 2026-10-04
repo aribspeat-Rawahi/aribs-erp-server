@@ -44,7 +44,7 @@ import {
 } from 'recharts';
 import api from '../api/client';
 import { PageHeader, Card, StatCard, Pill } from '../components/ui';
-import { formatQuantity } from '../utils/formatQuantity';
+import { formatQuantityWithUnit } from '../utils/formatQuantity';
 
 function monthRange() {
   const now = new Date();
@@ -865,7 +865,7 @@ export default function Dashboard() {
                   <div key={item.id} className="flex items-center justify-between py-2 text-sm">
                     <span className="text-ink">{item.name}</span>
                     <span className="text-amber-700 font-medium">
-                      {formatQuantity(item.quantityInStock, item.unit)} {item.unit}
+                      {formatQuantityWithUnit(item.quantityInStock, item.unit)}
                     </span>
                   </div>
                 ))}

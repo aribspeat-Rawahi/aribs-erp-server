@@ -12,6 +12,7 @@ import { CreatePurchaseReturnDto } from './dto/purchase-return.dto';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService, PostingLine } from '../journal/journal-posting.service';
+import { assertQuantityForUnit } from '../units/units';
 
 interface ActorRef {
   userId?: string;
@@ -94,7 +95,7 @@ export class PurchaseReturnService {
 
     let subtotal = 0;
     let vatAmount = 0;
-    const itemRows: { rawMaterialId: string; quantity: number; costPerUnit: number; vatRate: number }[] = [];
+    const itemRows: { rawMaterialId: string; quantity: number; unit: string; costPerUnit: number; vatRate: number }[] = [];
     for (const line of dto.items) {
       const poItem = poItemByMaterial.get(line.rawMaterialId);
       if (!poItem) {
@@ -107,12 +108,14 @@ export class PurchaseReturnService {
           `Cannot return ${line.quantity} — only ${remaining} of this material remains returnable on this order.`,
         );
       }
+      assertQuantityForUnit(line.quantity, poItem.unit, 'this material');
       const lineTotal = this.round3(Number(line.quantity) * Number(poItem.costPerUnit));
       subtotal += lineTotal;
       vatAmount += this.round3((lineTotal * Number(poItem.vatRate)) / 100);
       itemRows.push({
         rawMaterialId: line.rawMaterialId,
         quantity: Number(line.quantity),
+        unit: poItem.unit,
         costPerUnit: Number(poItem.costPerUnit),
         vatRate: Number(poItem.vatRate),
       });

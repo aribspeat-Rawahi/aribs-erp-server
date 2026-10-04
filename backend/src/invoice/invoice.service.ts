@@ -20,6 +20,7 @@ import { ApprovalService } from '../approval/approval.service';
 import { ApprovalRequestType, ApprovalRequestStatus } from '../approval/approval-request.entity';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { DocumentLinkService } from '../document-link/document-link.service';
+import { UnitService } from '../units/unit.service';
 import { buildWhatsappLinks, toWhatsappPhone } from '../common/whatsapp-phone.util';
 
 // Auto-posted Chart-of-Accounts codes for invoice issuance (Dr Accounts
@@ -73,6 +74,7 @@ export class InvoiceService {
     private approvalService: ApprovalService,
     private journalPosting: JournalPostingService,
     private documentLinks: DocumentLinkService,
+    private units: UnitService,
   ) {
     this.uploadDir = this.config.get('INVOICE_UPLOAD_DIR') || './uploads/invoices';
     fs.mkdirSync(this.uploadDir, { recursive: true });
@@ -260,6 +262,7 @@ export class InvoiceService {
     const pdfItems: InvoicePdfItem[] = items.map((i) => ({
       description: i.description,
       quantity: Number(i.quantity),
+      unit: i.unit,
       unitPrice: Number(i.unitPrice),
       vatRate: Number(i.vatRate),
       lineTotal: Number(i.lineTotal),
@@ -315,8 +318,9 @@ export class InvoiceService {
     const vatExcluded = dto.vatExcluded ?? !customer.vatApplicable;
     const settings = await this.settingsService.get();
 
+    const lines = await this.units.resolveProductLines(dto.items);
     const { lineItems, subtotal, discountAmount, vatAmount, total } = this.calcTotals(
-      dto.items.map((i) => ({ ...i, vatRate: i.vatRate ?? 5 })),
+      lines.map((i) => ({ ...i, vatRate: i.vatRate ?? 5 })),
       vatExcluded,
       dto.discountAmount ?? 0,
     );
@@ -373,6 +377,7 @@ export class InvoiceService {
         finishedGoodId: i['finishedGoodId'],
         description: i['description'],
         quantity: i.quantity,
+        unit: i['unit'],
         unitPrice: i.unitPrice,
         vatRate: i.vatRate ?? 5,
         lineTotal: i.lineTotal,
@@ -425,7 +430,7 @@ export class InvoiceService {
     let calc: { lineItems: any[]; subtotal: number; discountAmount: number; vatAmount: number; total: number } | null = null;
     if (dto.items || vatExcludedChanged || discountChanged) {
       const itemsForCalc = dto.items
-        ? dto.items.map((i) => ({ ...i, vatRate: i.vatRate ?? 5 }))
+        ? (await this.units.resolveProductLines(dto.items)).map((i) => ({ ...i, vatRate: i.vatRate ?? 5 }))
         : existingItems.map((i) => ({ quantity: Number(i.quantity), unitPrice: Number(i.unitPrice), vatRate: Number(i.vatRate) }));
       calc = this.calcTotals(itemsForCalc, finalVatExcluded, dto.discountAmount ?? Number(invoice.discountAmount));
     }
@@ -483,6 +488,7 @@ export class InvoiceService {
               finishedGoodId: i['finishedGoodId'],
               description: i['description'],
               quantity: i.quantity,
+              unit: i['unit'],
               unitPrice: i.unitPrice,
               vatRate: i.vatRate ?? 5,
               lineTotal: i.lineTotal,
@@ -577,6 +583,7 @@ export class InvoiceService {
         finishedGoodId: i.finishedGoodId,
         description: i.description,
         quantity: Number(i.quantity),
+        unit: i.unit,
         unitPrice: Number(i.unitPrice),
         vatRate: Number(i.vatRate),
       })),

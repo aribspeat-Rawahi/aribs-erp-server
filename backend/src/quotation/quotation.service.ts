@@ -15,6 +15,8 @@ import { ApprovalService } from '../approval/approval.service';
 import { ApprovalRequestType, ApprovalRequestStatus } from '../approval/approval-request.entity';
 import { DocumentLinkService } from '../document-link/document-link.service';
 import { buildWhatsappLinks, toWhatsappPhone } from '../common/whatsapp-phone.util';
+import { EmailService } from '../common/email.service';
+import { UnitService } from '../units/unit.service';
 
 @Injectable()
 export class QuotationService {
@@ -34,6 +36,8 @@ export class QuotationService {
     private approvalService: ApprovalService,
     private config: ConfigService,
     private documentLinks: DocumentLinkService,
+    private units: UnitService,
+    private emailService: EmailService,
   ) {}
 
   findAll() {
@@ -57,31 +61,54 @@ export class QuotationService {
     return !isNaN(n) && n >= 0 ? n : 10; // same default/env var as Invoice's gate
   }
 
-  async create(dto: CreateQuotationDto, opts?: { skipApprovalGates?: boolean; requestedBy?: { userId?: string; email?: string } }) {
-    const { computed, subtotal, discountAmount, vatAmount, total } = this.computeTotals(
-      dto.items,
-      dto.discountAmount ?? 0,
-    );
-
-    // CRM Step 7 — only the large-discount gate applies to quotations
-    // (no credit limit or VAT-exclude concept here: a quotation doesn't
-    // create debt, and it has no vatExcluded field at all). Only gated
-    // on create — an existing quotation's edits already go through the
-    // separate QuotationEditRequest flow for different-day changes.
-    if (!opts?.skipApprovalGates && subtotal > 0) {
+  // CRM Step 7 gates that apply to quotations: a large discount, and
+  // excluding VAT for a customer who is normally VAT-applicable (same rule
+  // as invoices). No credit-limit gate - a quotation doesn't create debt.
+  private approvalGates(
+    customer: { name: string; vatApplicable?: boolean },
+    subtotal: number,
+    discountAmount: number,
+    vatExcluded: boolean,
+  ): { type: ApprovalRequestType; reason: string }[] {
+    const gates: { type: ApprovalRequestType; reason: string }[] = [];
+    if (subtotal > 0) {
       const thresholdPercent = this.discountApprovalThresholdPercent();
       const discountPercent = (discountAmount / subtotal) * 100;
       if (discountPercent > thresholdPercent + 0.001) {
-        const reason = `Discount of ${discountPercent.toFixed(1)}% (${discountAmount.toFixed(3)} OMR) exceeds the ${thresholdPercent}% approval threshold.`;
+        gates.push({
+          type: ApprovalRequestType.LARGE_DISCOUNT,
+          reason: `Discount of ${discountPercent.toFixed(1)}% (${discountAmount.toFixed(3)} OMR) exceeds the ${thresholdPercent}% approval threshold.`,
+        });
+      }
+    }
+    if (vatExcluded && customer.vatApplicable) {
+      gates.push({
+        type: ApprovalRequestType.VAT_EXCLUDE,
+        reason: `VAT is being excluded for ${customer.name}, who is normally VAT-applicable.`,
+      });
+    }
+    return gates;
+  }
+
+  async create(dto: CreateQuotationDto, opts?: { skipApprovalGates?: boolean; requestedBy?: { userId?: string; email?: string } }) {
+    const customer = await this.customerService.findOne(dto.customerId);
+    const vatExcluded = dto.vatExcluded ?? !customer.vatApplicable;
+    const lines = await this.units.resolveProductLines(dto.items);
+    const { computed, subtotal, discountAmount, vatAmount, total } = this.computeTotals(
+      lines,
+      dto.discountAmount ?? 0,
+      vatExcluded,
+    );
+
+    if (!opts?.skipApprovalGates) {
+      const gates = this.approvalGates(customer, subtotal, discountAmount, vatExcluded);
+      if (gates.length > 0) {
+        const reason = gates.map((g) => g.reason).join(' ');
         if (!dto.requestApproval) {
-          throw new BadRequestException({
-            approvalRequired: true,
-            gates: [{ type: ApprovalRequestType.LARGE_DISCOUNT, reason }],
-            message: `This quotation needs approval: ${reason}`,
-          });
+          throw new BadRequestException({ approvalRequired: true, gates, message: `This quotation needs approval: ${reason}` });
         }
         const approvalRequest = await this.approvalService.create({
-          type: ApprovalRequestType.LARGE_DISCOUNT,
+          type: gates[0].type,
           entityType: 'quotation',
           customerId: dto.customerId,
           payload: dto,
@@ -101,6 +128,10 @@ export class QuotationService {
       vatAmount,
       total,
       deliveryMethod: dto.deliveryMethod,
+      paymentType: dto.paymentType,
+      deliveryDate: dto.deliveryDate,
+      template: dto.template || (await this.settingsService.get()).defaultInvoiceTemplate,
+      vatExcluded,
       status: QuotationStatus.DRAFT,
       quotationNumber: 'PENDING',
     });
@@ -117,12 +148,17 @@ export class QuotationService {
           finishedGoodId: i.finishedGoodId,
           description: i.description,
           quantity: i.quantity,
+          unit: i.unit,
           unitPrice: i.unitPrice,
           vatRate: i.vatRate ?? 5,
           lineTotal: i.lineTotal,
         }),
       ),
     );
+
+    if (vatExcluded && customer.vatApplicable) {
+      await this.emailService.sendVatExcludedNotice(saved.quotationNumber, customer.name, total);
+    }
 
     return { ...saved, items };
   }
@@ -146,8 +182,9 @@ export class QuotationService {
   // rounding remainder so the allocated discount always sums exactly to
   // `discount`.
   private computeTotals(
-    items: { finishedGoodId?: string; description?: string; quantity: number; unitPrice: number; vatRate?: number }[],
+    items: { finishedGoodId?: string; description?: string; quantity: number; unit?: string; unitPrice: number; vatRate?: number }[],
     discountAmount = 0,
+    vatExcluded = false,
   ) {
     let subtotal = 0;
     const computed = items.map((i) => {
@@ -168,7 +205,7 @@ export class QuotationService {
         : this.round3(subtotal > 0 ? (line.lineTotal / subtotal) * discount : 0);
       allocatedDiscount = this.round3(allocatedDiscount + lineDiscount);
       const lineTaxable = this.round3(line.lineTotal - lineDiscount);
-      vatAmount += this.round3((lineTaxable * Number(line.vatRate ?? 5)) / 100);
+      vatAmount += vatExcluded ? 0 : this.round3((lineTaxable * Number(line.vatRate ?? 5)) / 100);
     });
     vatAmount = this.round3(vatAmount);
 
@@ -181,14 +218,16 @@ export class QuotationService {
 
   private async applyItemsToQuotation(
     quotation: Quotation,
-    items: { finishedGoodId?: string; description: string; quantity: number; unitPrice: number; vatRate?: number }[],
+    items: { finishedGoodId?: string; description: string; quantity: number; unit?: string; unitPrice: number; vatRate?: number }[],
     discountAmount?: number,
   ) {
+    const lines = await this.units.resolveProductLines(items.map((i) => ({ ...i, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice) })));
     const existing = await this.itemRepo.find({ where: { quotationId: quotation.id } });
     await this.itemRepo.remove(existing);
     const { computed, subtotal, discountAmount: discount, vatAmount, total } = this.computeTotals(
-      items,
+      lines,
       discountAmount ?? Number(quotation.discountAmount),
+      quotation.vatExcluded,
     );
     const saved = await this.itemRepo.save(
       computed.map((i) =>
@@ -197,6 +236,7 @@ export class QuotationService {
           finishedGoodId: i['finishedGoodId'],
           description: i['description'],
           quantity: i.quantity,
+          unit: i.unit,
           unitPrice: i.unitPrice,
           vatRate: i.vatRate ?? 5,
           lineTotal: i.lineTotal,
@@ -217,11 +257,58 @@ export class QuotationService {
   // - Any later day -> queued as a QuotationEditRequest. It only takes
   //   effect once someone with the right role (CEO, MD, Accountant, or
   //   Admin) approves it via approveEdit().
-  async requestEdit(id: string, dto: UpdateQuotationDto, requestedBy?: { userId?: string; email?: string }) {
+  async requestEdit(
+    id: string,
+    dto: UpdateQuotationDto,
+    requestedBy?: { userId?: string; email?: string },
+    opts?: { skipApprovalGates?: boolean },
+  ) {
     const quotation = await this.quotationRepo.findOne({ where: { id } });
     if (!quotation) throw new NotFoundException('Quotation not found');
     if (quotation.status === QuotationStatus.CONVERTED) {
       throw new BadRequestException('This quotation was already converted to an invoice and can no longer be edited');
+    }
+
+    // Turning VAT OFF for a normally VAT-applicable customer needs the
+    // same approval as on an invoice; once allowed (or when turning VAT
+    // back ON) it applies straight away and the totals are recalculated.
+    const vatExcludedChanged = dto.vatExcluded !== undefined && dto.vatExcluded !== quotation.vatExcluded;
+    if (vatExcludedChanged && dto.vatExcluded && !opts?.skipApprovalGates) {
+      const customer = await this.customerService.findOne(dto.customerId || quotation.customerId);
+      if (customer.vatApplicable) {
+        const reason = `VAT is being excluded for ${customer.name}, who is normally VAT-applicable.`;
+        if (!dto.requestApproval) {
+          throw new BadRequestException({
+            approvalRequired: true,
+            gates: [{ type: ApprovalRequestType.VAT_EXCLUDE, reason }],
+            message: `This change needs approval: ${reason}`,
+          });
+        }
+        const approvalRequest = await this.approvalService.create({
+          type: ApprovalRequestType.VAT_EXCLUDE,
+          entityType: 'quotation',
+          targetId: id,
+          customerId: quotation.customerId,
+          payload: dto,
+          reason,
+          requestedBy,
+        });
+        return { pendingApproval: true, approvalRequestId: approvalRequest.id, message: 'Sent for approval — changes will apply once approved.' };
+      }
+    }
+    if (vatExcludedChanged) {
+      quotation.vatExcluded = !!dto.vatExcluded;
+      await this.quotationRepo.save(quotation);
+      if (!dto.items && dto.discountAmount === undefined) {
+        // recalculate VAT on the current lines
+        await this.applyItemsToQuotation(quotation, await this.itemRepo.find({ where: { quotationId: id } }));
+      }
+    }
+    if (dto.paymentType !== undefined) quotation.paymentType = dto.paymentType;
+    if (dto.deliveryDate !== undefined) quotation.deliveryDate = dto.deliveryDate || (null as unknown as string);
+    if (dto.template !== undefined) quotation.template = dto.template;
+    if (dto.paymentType !== undefined || dto.deliveryDate !== undefined || dto.template !== undefined) {
+      await this.quotationRepo.save(quotation);
     }
 
     // Delivery method and customer are metadata (not a price commitment)
@@ -288,7 +375,10 @@ export class QuotationService {
   async applyApprovedQuotationRequest(approvalRequestId: string, approvedBy?: { userId?: string; email?: string }) {
     const request = await this.approvalService.claimPending(approvalRequestId, 'quotation');
     const payload = JSON.parse(request.payload);
-    const result = await this.create(payload, { skipApprovalGates: true });
+    // targetId set = an edit to an existing quotation (VAT exclude), else a new one.
+    const result = request.targetId
+      ? await this.requestEdit(request.targetId, payload, undefined, { skipApprovalGates: true })
+      : await this.create(payload, { skipApprovalGates: true });
     await this.approvalService.markDecided(approvalRequestId, ApprovalRequestStatus.APPROVED, approvedBy);
     return result;
   }
@@ -357,6 +447,7 @@ export class QuotationService {
     const pdfItems: InvoicePdfItem[] = items.map((i) => ({
       description: i.description,
       quantity: Number(i.quantity),
+      unit: i.unit,
       unitPrice: Number(i.unitPrice),
       vatRate: Number(i.vatRate),
       lineTotal: Number(i.lineTotal),
@@ -367,7 +458,7 @@ export class QuotationService {
       version: 1,
       issueDate: quotation.issueDate,
       dueDate: undefined,
-      deliveryDate: undefined,
+      deliveryDate: quotation.deliveryDate,
       companyName: settings.companyName,
       companyVatin: settings.companyVatin || 'OM1000000000',
       companyAddress: settings.companyAddress,
@@ -382,10 +473,11 @@ export class QuotationService {
       taxableAmount: this.round3(Number(quotation.subtotal) - Number(quotation.discountAmount || 0)),
       vatAmount: Number(quotation.vatAmount),
       netAmount: Number(quotation.total),
-      vatExcluded: false,
+      vatExcluded: quotation.vatExcluded,
+      paymentType: quotation.paymentType,
       deliveryMethod: quotation.deliveryMethod,
       logoBase64,
-      template: settings.defaultInvoiceTemplate,
+      template: quotation.template || settings.defaultInvoiceTemplate,
       documentType: 'quotation',
     });
   }
@@ -425,10 +517,15 @@ export class QuotationService {
         quotationNumber: quotation.quotationNumber,
         discountAmount: Number(quotation.discountAmount || 0),
         deliveryMethod: quotation.deliveryMethod,
+        paymentType: quotation.paymentType,
+        deliveryDate: quotation.deliveryDate || undefined,
+        template: quotation.template,
+        vatExcluded: quotation.vatExcluded,
         items: items.map((i) => ({
           finishedGoodId: i.finishedGoodId,
           description: i.description,
           quantity: Number(i.quantity),
+          unit: i.unit,
           unitPrice: Number(i.unitPrice),
           vatRate: Number(i.vatRate),
         })),

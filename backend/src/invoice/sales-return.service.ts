@@ -14,6 +14,7 @@ import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService, PostingLine } from '../journal/journal-posting.service';
 import { BatchTrackingService } from '../inventory/batch-tracking.service';
 import { BatchSource } from '../inventory/batch-source.enum';
+import { assertQuantityForUnit } from '../units/units';
 
 interface ActorRef {
   userId?: string;
@@ -113,7 +114,7 @@ export class SalesReturnService {
 
     let subtotal = 0;
     let vatAmount = 0;
-    const itemRows: { finishedGoodId: string; quantity: number; unitPrice: number; vatRate: number }[] = [];
+    const itemRows: { finishedGoodId: string; quantity: number; unit: string; unitPrice: number; vatRate: number }[] = [];
     for (const line of dto.items) {
       const reference = referenceItemByProduct.get(line.finishedGoodId);
       if (!reference) {
@@ -126,12 +127,14 @@ export class SalesReturnService {
           `Cannot return ${line.quantity} — only ${remaining} of this product remains returnable on this invoice.`,
         );
       }
+      assertQuantityForUnit(line.quantity, reference.unit, reference.description);
       const lineTotal = this.round3(Number(line.quantity) * Number(reference.unitPrice));
       subtotal += lineTotal;
       vatAmount += this.round3((lineTotal * Number(reference.vatRate)) / 100);
       itemRows.push({
         finishedGoodId: line.finishedGoodId,
         quantity: Number(line.quantity),
+        unit: reference.unit,
         unitPrice: Number(reference.unitPrice),
         vatRate: Number(reference.vatRate),
       });

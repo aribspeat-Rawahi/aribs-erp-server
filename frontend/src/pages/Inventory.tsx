@@ -3,7 +3,18 @@ import { ScanLine, Plus, Pencil, Eye, Trash2, PackagePlus } from 'lucide-react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Pill, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
-import { formatQuantity, quantityInputStep, snapQuantityToUnit } from '../utils/formatQuantity';
+import {
+  UNIT_OPTIONS,
+  formatQuantity,
+  formatQuantityWithUnit,
+  isDecimalUnit,
+  normalizeUnit,
+  quantityInputMin,
+  quantityInputStep,
+  quantityInputValue,
+  snapQuantityToUnit,
+  unitLabel,
+} from '../utils/formatQuantity';
 
 interface StockItem {
   id: string;
@@ -104,6 +115,25 @@ const sourceTone: Record<string, string> = {
 };
 
 type Tab = 'finished' | 'raw' | 'orders' | 'bom' | 'raw-batches' | 'finished-batches';
+
+// Raw material amounts derived from a recipe (quantityPerUnit x quantity
+// produced) can be fractional even for Pcs/Bags materials - show those with
+// decimals instead of rounding them away; everything else uses the normal
+// unit formatting ("10 Bags", "2.500 Kgs").
+function formatDerivedNumber(qty: number | string, unit?: string | null): string {
+  const n = Math.round((Number(qty) || 0) * 1000) / 1000;
+  if (!isDecimalUnit(unit) && !Number.isInteger(n)) return String(n);
+  return formatQuantity(n, unit);
+}
+function formatDerivedQuantity(qty: number | string, unit?: string | null): string {
+  return `${formatDerivedNumber(qty, unit)} ${unitLabel(unit)}`;
+}
+
+// Recipe ratio (raw material per 1 unit of finished good) - up to 4
+// decimals, trailing zeros trimmed ("0.25", "2").
+function formatRatio(qty: number | string): string {
+  return String(Math.round((Number(qty) || 0) * 10000) / 10000);
+}
 
 export default function Inventory() {
   const { hasAnyRole } = useAuth();
@@ -336,7 +366,7 @@ export default function Inventory() {
                       <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
                         <div className="sm:text-right">
                           <div className="text-sm font-semibold text-ink whitespace-nowrap">
-                            {formatQuantity(item.quantityInStock, item.unit)} {item.unit}
+                            {formatQuantityWithUnit(item.quantityInStock, item.unit)}
                           </div>
                           {low && <div className="text-xs text-amber-600">Low stock</div>}
                         </div>
@@ -390,6 +420,7 @@ export default function Inventory() {
           )}
           {showScan && (
             <ScanStockModal
+              finishedGoods={finishedGoods}
               onClose={() => setShowScan(false)}
               onSaved={() => {
                 setShowScan(false);
@@ -432,7 +463,7 @@ export default function Inventory() {
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-ink">{fgName(o.finishedGoodId)}</div>
                       <div className="text-xs text-muted">
-                        {formatQuantity(o.quantityToProduce, finishedGoods.find((f) => f.id === o.finishedGoodId)?.unit)} units
+                        {formatQuantityWithUnit(o.quantityToProduce, fgUnit(o.finishedGoodId))}
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -487,8 +518,9 @@ export default function Inventory() {
             <ProductionOrderDetailModal
               order={viewingOrder}
               finishedGoodName={fgName(viewingOrder.finishedGoodId)}
-              finishedGoodUnit={finishedGoods.find((f) => f.id === viewingOrder.finishedGoodId)?.unit}
+              finishedGoodUnit={fgUnit(viewingOrder.finishedGoodId)}
               rmName={rmName}
+              rmUnit={rmUnit}
               onClose={() => setViewingOrder(null)}
             />
           )}
@@ -520,7 +552,9 @@ export default function Inventory() {
                   <div key={line.id} className="flex flex-col gap-2 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                     <span className="min-w-0">{rmName(line.rawMaterialId)}</span>
                     <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
-                      <span className="text-muted whitespace-nowrap">{Number(line.quantityPerUnit).toFixed(4)} per unit</span>
+                      <span className="text-muted whitespace-nowrap">
+                        {formatRatio(line.quantityPerUnit)} {unitLabel(rmUnit(line.rawMaterialId))} per {unitLabel(fgUnit(line.finishedGoodId))}
+                      </span>
                       <div className="flex items-center gap-1.5">
                         <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => setEditingLine(line)} />
                         <IconButton icon={Trash2} tone="danger" title="Remove" requires="full" onClick={() => removeBomLine(line.id)} />
@@ -534,6 +568,7 @@ export default function Inventory() {
           {showAddLine && (
             <BomLineModal
               finishedGoodId={selectedFg}
+              finishedGoodUnit={fgUnit(selectedFg)}
               rawMaterials={rawMaterials}
               onClose={() => setShowAddLine(false)}
               onSaved={() => {
@@ -546,6 +581,7 @@ export default function Inventory() {
             <BomLineModal
               line={editingLine}
               finishedGoodId={selectedFg}
+              finishedGoodUnit={fgUnit(selectedFg)}
               rawMaterials={rawMaterials}
               onClose={() => setEditingLine(null)}
               onSaved={() => {
@@ -599,7 +635,8 @@ export default function Inventory() {
                       </span>
                       <div className="sm:text-right">
                         <div className="text-sm font-semibold text-ink whitespace-nowrap">
-                          {formatQuantity(b.quantityRemaining, rmUnit(b.rawMaterialId))} / {formatQuantity(b.quantityReceived, rmUnit(b.rawMaterialId))}
+                          {formatDerivedNumber(b.quantityRemaining, rmUnit(b.rawMaterialId))} /{' '}
+                          {formatQuantityWithUnit(b.quantityReceived, rmUnit(b.rawMaterialId))}
                         </div>
                         <div className="text-xs text-muted">remaining</div>
                       </div>
@@ -614,6 +651,8 @@ export default function Inventory() {
             <RawBatchTraceModal
               batch={viewingRawBatch}
               rawMaterialName={rmName(viewingRawBatch.rawMaterialId)}
+              rawMaterialUnit={rmUnit(viewingRawBatch.rawMaterialId)}
+              finishedGoodUnit={fgUnit}
               supplierName={supplierName(viewingRawBatch.supplierId) || null}
               finishedGoodName={fgName}
               customerNameForOrder={customerNameForOrder}
@@ -662,7 +701,7 @@ export default function Inventory() {
                       </span>
                       <div className="sm:text-right">
                         <div className="text-sm font-semibold text-ink whitespace-nowrap">
-                          {formatQuantity(b.quantityRemaining, fgUnit(b.finishedGoodId))} / {formatQuantity(b.quantityProduced, fgUnit(b.finishedGoodId))}
+                          {formatQuantity(b.quantityRemaining, fgUnit(b.finishedGoodId))} / {formatQuantityWithUnit(b.quantityProduced, fgUnit(b.finishedGoodId))}
                         </div>
                         <div className="text-xs text-muted">remaining</div>
                       </div>
@@ -677,7 +716,9 @@ export default function Inventory() {
             <FinishedBatchTraceModal
               batch={viewingFinishedBatch}
               finishedGoodName={fgName(viewingFinishedBatch.finishedGoodId)}
+              finishedGoodUnit={fgUnit(viewingFinishedBatch.finishedGoodId)}
               rawMaterialName={rmName}
+              rawMaterialUnit={rmUnit}
               supplierName={(id?: string) => supplierName(id) || null}
               customerNameForOrder={customerNameForOrder}
               onClose={() => setViewingFinishedBatch(null)}
@@ -705,9 +746,12 @@ function AddProductModal({
   const [name, setName] = useState(item?.name || '');
   const [barcode, setBarcode] = useState(item?.barcode || '');
   const [sku, setSku] = useState(item?.sku || '');
-  const [unit, setUnit] = useState(item?.unit || 'pcs');
-  const [quantityInStock, setQuantityInStock] = useState(item ? String(item.quantityInStock) : '0');
-  const [lowStockThreshold, setLowStockThreshold] = useState(item ? String(item.lowStockThreshold) : '0');
+  // Fixed unit list (Pcs/Bags/Kgs/Litre/Tons) — chosen once here; every
+  // document line for this product takes it automatically. Old free-text
+  // units are pre-selected via normalizeUnit; new products must pick one.
+  const [unit, setUnit] = useState<string>(item ? normalizeUnit(item.unit) : '');
+  const [quantityInStock, setQuantityInStock] = useState('0');
+  const [lowStockThreshold, setLowStockThreshold] = useState(item ? quantityInputValue(item.lowStockThreshold, item.unit) : '0');
   const [price, setPrice] = useState(item ? String(item.sellingPrice ?? item.costPerUnit ?? 0) : '0');
   // Finished-good-only — production cost per unit, used for COGS/Gross
   // Profit on the Dashboard. Auto-updated (weighted average) whenever a
@@ -716,12 +760,30 @@ function AddProductModal({
   const [finishedGoodCost, setFinishedGoodCost] = useState(item ? String(item.costPerUnit ?? 0) : '0');
   // Raw-material-only fields (Inventory Reorder Automation).
   const [supplierId, setSupplierId] = useState(item?.supplierId || '');
-  const [reorderQuantity, setReorderQuantity] = useState(item?.reorderQuantity !== undefined && item?.reorderQuantity !== null ? String(item.reorderQuantity) : '');
+  const [reorderQuantity, setReorderQuantity] = useState(
+    item?.reorderQuantity !== undefined && item?.reorderQuantity !== null && item?.reorderQuantity !== ''
+      ? quantityInputValue(item.reorderQuantity, item.unit)
+      : '',
+  );
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Switching unit re-snaps the quantities already typed (e.g. 2.5 -> 3
+  // when going from Kgs to Bags).
+  function changeUnit(next: string) {
+    setUnit(next);
+    const snap = (v: string) => (v === '' ? '' : String(snapQuantityToUnit(Number(v) || 0, next)));
+    setQuantityInStock(snap);
+    setLowStockThreshold(snap);
+    setReorderQuantity(snap);
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!unit) {
+      setError('Please choose a unit.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -780,15 +842,24 @@ function AddProductModal({
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Unit">
-            <input className={inputClass} value={unit} onChange={(e) => setUnit(e.target.value)} required />
+            <select className={inputClass} value={unit} onChange={(e) => changeUnit(e.target.value)} required>
+              <option value="" disabled>
+                Select unit
+              </option>
+              {UNIT_OPTIONS.map((u) => (
+                <option key={u.value} value={u.value}>
+                  {u.label}
+                </option>
+              ))}
+            </select>
           </Field>
           {item ? (
             <Field label="Current stock">
-              <input className={`${inputClass} bg-slate-50 text-slate-500`} value={`${formatQuantity(item.quantityInStock, unit)} ${unit}`} disabled />
+              <input className={`${inputClass} bg-slate-50 text-slate-500`} value={formatQuantityWithUnit(item.quantityInStock, item.unit)} disabled />
               <p className="mt-1 text-xs text-slate-500">Use "Add stock" to change quantity.</p>
             </Field>
           ) : (
-            <Field label="Opening stock">
+            <Field label={`Opening stock${unit ? ` (${unitLabel(unit)})` : ''}`}>
               <input
                 className={inputClass}
                 type="number"
@@ -800,7 +871,7 @@ function AddProductModal({
               />
             </Field>
           )}
-          <Field label="Low stock alert at">
+          <Field label={`Low stock alert at${unit ? ` (${unitLabel(unit)})` : ''}`}>
             <input
               className={inputClass}
               type="number"
@@ -843,7 +914,7 @@ function AddProductModal({
                 ))}
               </select>
             </Field>
-            <Field label="Reorder quantity (optional)">
+            <Field label={`Reorder quantity${unit ? ` (${unitLabel(unit)})` : ''} (optional)`}>
               <input
                 className={inputClass}
                 type="number"
@@ -893,15 +964,15 @@ function StockItemDetailModal({
         </div>
         <div className="flex justify-between gap-3">
           <span className="text-muted">Unit</span>
-          <span className="font-medium text-ink text-right">{item.unit}</span>
+          <span className="font-medium text-ink text-right">{unitLabel(item.unit)}</span>
         </div>
         <div className="flex justify-between gap-3">
           <span className="text-muted">In stock</span>
-          <span className="font-medium text-ink text-right">{formatQuantity(item.quantityInStock, item.unit)} {item.unit}</span>
+          <span className="font-medium text-ink text-right">{formatQuantityWithUnit(item.quantityInStock, item.unit)}</span>
         </div>
         <div className="flex justify-between gap-3">
           <span className="text-muted">Low stock alert at</span>
-          <span className="font-medium text-ink text-right">{formatQuantity(item.lowStockThreshold, item.unit)} {item.unit}</span>
+          <span className="font-medium text-ink text-right">{formatQuantityWithUnit(item.lowStockThreshold, item.unit)}</span>
         </div>
         <div className="flex justify-between gap-3">
           <span className="text-muted">{kind === 'finished' ? 'Selling price' : 'Cost per unit'}</span>
@@ -919,7 +990,7 @@ function StockItemDetailModal({
               <span className="text-muted">Reorder quantity</span>
               <span className="font-medium text-ink text-right">
                 {item.reorderQuantity !== undefined && item.reorderQuantity !== null && item.reorderQuantity !== ''
-                  ? `${formatQuantity(item.reorderQuantity, item.unit)} ${item.unit}`
+                  ? formatQuantityWithUnit(item.reorderQuantity, item.unit)
                   : 'Auto-suggested'}
               </span>
             </div>
@@ -933,9 +1004,21 @@ function StockItemDetailModal({
   );
 }
 
-function ScanStockModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function ScanStockModal({
+  finishedGoods,
+  onClose,
+  onSaved,
+}: {
+  finishedGoods: StockItem[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const [barcode, setBarcode] = useState('');
   const [quantity, setQuantity] = useState('1');
+  // The scanned product decides the unit (whole numbers for Pcs/Bags, up
+  // to 3 decimals for Kgs/Litre/Tons).
+  const scanned = finishedGoods.find((f) => f.barcode && f.barcode === barcode.trim());
+  const unit = scanned?.unit;
   const [direction, setDirection] = useState<'in' | 'out'>('in');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -969,10 +1052,34 @@ function ScanStockModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
           />
         </div>
         <Field label="Barcode">
-          <input className={inputClass} autoFocus value={barcode} onChange={(e) => setBarcode(e.target.value)} required />
+          <input
+            className={inputClass}
+            autoFocus
+            value={barcode}
+            onChange={(e) => {
+              setBarcode(e.target.value);
+              const match = finishedGoods.find((f) => f.barcode && f.barcode === e.target.value.trim());
+              if (match) setQuantity((q) => String(snapQuantityToUnit(Number(q) || 0, match.unit) || 1));
+            }}
+            required
+          />
+          {scanned && (
+            <p className="mt-1 text-xs text-muted">
+              {scanned.name} · in stock {formatQuantityWithUnit(scanned.quantityInStock, scanned.unit)}
+            </p>
+          )}
         </Field>
-        <Field label="Quantity">
-          <input className={inputClass} type="number" step="0.001" value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
+        <Field label={`Quantity${scanned ? ` (${unitLabel(unit)})` : ''}`}>
+          <input
+            className={inputClass}
+            type="number"
+            step={quantityInputStep(unit)}
+            min={quantityInputMin(unit)}
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            onBlur={(e) => setQuantity(String(snapQuantityToUnit(Number(e.target.value) || 0, unit)))}
+            required
+          />
         </Field>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
@@ -1038,7 +1145,16 @@ function AddStockModal({
     <Modal title={`Add stock — ${kind === 'finished' ? 'Finished Good' : 'Raw Material'}`} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-3">
         <Field label={kind === 'finished' ? 'Product' : 'Raw material'}>
-          <select className={inputClass} value={itemId} onChange={(e) => setItemId(e.target.value)} required>
+          <select
+            className={inputClass}
+            value={itemId}
+            onChange={(e) => {
+              setItemId(e.target.value);
+              const next = items.find((i) => i.id === e.target.value);
+              setQuantity((q) => String(snapQuantityToUnit(Number(q) || 0, next?.unit) || 1));
+            }}
+            required
+          >
             {items.map((i) => (
               <option key={i.id} value={i.id}>
                 {i.name}
@@ -1046,12 +1162,12 @@ function AddStockModal({
             ))}
           </select>
         </Field>
-        <Field label={`Quantity to add${selected ? ` (${selected.unit})` : ''}`}>
+        <Field label={`Quantity to add${selected ? ` (${unitLabel(selected.unit)})` : ''}`}>
           <input
             className={inputClass}
             type="number"
             step={quantityInputStep(selected?.unit)}
-            min={quantityInputStep(selected?.unit)}
+            min={quantityInputMin(selected?.unit)}
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             onBlur={(e) => setQuantity(String(snapQuantityToUnit(Number(e.target.value) || 0, selected?.unit)))}
@@ -1106,7 +1222,9 @@ function NewProductionOrderModal({
   onSaved: () => void;
 }) {
   const [finishedGoodId, setFinishedGoodId] = useState(order?.finishedGoodId || finishedGoods[0]?.id || '');
-  const [quantity, setQuantity] = useState(order ? String(order.quantityToProduce) : '1');
+  const [quantity, setQuantity] = useState(
+    order ? quantityInputValue(order.quantityToProduce, finishedGoods.find((f) => f.id === order.finishedGoodId)?.unit) : '1',
+  );
   const [notes, setNotes] = useState(order?.notes || '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1137,7 +1255,16 @@ function NewProductionOrderModal({
     <Modal title={order ? 'Edit production order' : 'New production order'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-3">
         <Field label="Finished good">
-          <select className={inputClass} value={finishedGoodId} onChange={(e) => setFinishedGoodId(e.target.value)} required>
+          <select
+            className={inputClass}
+            value={finishedGoodId}
+            onChange={(e) => {
+              setFinishedGoodId(e.target.value);
+              const next = finishedGoods.find((f) => f.id === e.target.value);
+              setQuantity((q) => String(snapQuantityToUnit(Number(q) || 0, next?.unit) || 1));
+            }}
+            required
+          >
             {finishedGoods.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.name}
@@ -1145,12 +1272,12 @@ function NewProductionOrderModal({
             ))}
           </select>
         </Field>
-        <Field label={`Quantity to produce${selectedFinishedGood ? ` (${selectedFinishedGood.unit})` : ''}`}>
+        <Field label={`Quantity to produce${selectedFinishedGood ? ` (${unitLabel(selectedFinishedGood.unit)})` : ''}`}>
           <input
             className={inputClass}
             type="number"
             step={quantityInputStep(selectedFinishedGood?.unit)}
-            min={quantityInputStep(selectedFinishedGood?.unit)}
+            min={quantityInputMin(selectedFinishedGood?.unit)}
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             onBlur={(e) => setQuantity(String(snapQuantityToUnit(Number(e.target.value) || 0, selectedFinishedGood?.unit)))}
@@ -1177,12 +1304,14 @@ function ProductionOrderDetailModal({
   finishedGoodName,
   finishedGoodUnit,
   rmName,
+  rmUnit,
   onClose,
 }: {
   order: ProductionOrder;
   finishedGoodName: string;
   finishedGoodUnit?: string;
   rmName: (id: string) => string;
+  rmUnit: (id: string) => string | undefined;
   onClose: () => void;
 }) {
   const [lines, setLines] = useState<BomLine[] | null>(null);
@@ -1202,8 +1331,7 @@ function ProductionOrderDetailModal({
           <div className="flex justify-between gap-3">
             <span className="text-muted">Quantity to produce</span>
             <span className="font-medium text-ink text-right">
-              {formatQuantity(order.quantityToProduce, finishedGoodUnit)}
-              {finishedGoodUnit ? ` ${finishedGoodUnit}` : ''}
+              {formatQuantityWithUnit(order.quantityToProduce, finishedGoodUnit)}
             </span>
           </div>
           <div className="flex justify-between gap-3">
@@ -1219,7 +1347,7 @@ function ProductionOrderDetailModal({
         </div>
         <div>
           <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">
-            Recipe — {formatQuantity(order.quantityToProduce, finishedGoodUnit)} unit(s) needs
+            Recipe — {formatQuantityWithUnit(order.quantityToProduce, finishedGoodUnit)} needs
           </div>
           {!lines ? (
             <div className="text-sm text-muted">Loading…</div>
@@ -1231,8 +1359,8 @@ function ProductionOrderDetailModal({
                 <div key={line.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2 text-sm">
                   <span className="min-w-0">{rmName(line.rawMaterialId)}</span>
                   <span className="text-muted">
-                    {(Number(line.quantityPerUnit) * Number(order.quantityToProduce)).toFixed(3)} total (
-                    {Number(line.quantityPerUnit).toFixed(4)}/unit)
+                    {formatDerivedQuantity(Number(line.quantityPerUnit) * Number(order.quantityToProduce), rmUnit(line.rawMaterialId))} total (
+                    {formatRatio(line.quantityPerUnit)} {unitLabel(rmUnit(line.rawMaterialId))} per {unitLabel(finishedGoodUnit)})
                   </span>
                 </div>
               ))}
@@ -1250,18 +1378,23 @@ function ProductionOrderDetailModal({
 function BomLineModal({
   line,
   finishedGoodId,
+  finishedGoodUnit,
   rawMaterials,
   onClose,
   onSaved,
 }: {
   line?: BomLine;
   finishedGoodId: string;
+  finishedGoodUnit?: string;
   rawMaterials: StockItem[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [rawMaterialId, setRawMaterialId] = useState(line?.rawMaterialId || rawMaterials[0]?.id || '');
-  const [quantityPerUnit, setQuantityPerUnit] = useState(line ? String(line.quantityPerUnit) : '0.1');
+  // A ratio (raw material per 1 unit of finished good), so decimals are
+  // allowed whatever the units are — e.g. 0.25 Kgs per Bag.
+  const [quantityPerUnit, setQuantityPerUnit] = useState(line ? formatRatio(line.quantityPerUnit) : '0.1');
+  const selectedMaterial = rawMaterials.find((r) => r.id === rawMaterialId);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -1295,8 +1428,21 @@ function BomLineModal({
             ))}
           </select>
         </Field>
-        <Field label="Quantity per unit produced">
-          <input className={inputClass} type="number" step="0.0001" min="0.0001" value={quantityPerUnit} onChange={(e) => setQuantityPerUnit(e.target.value)} required />
+        <Field
+          label={`Quantity per unit produced${selectedMaterial ? ` (${unitLabel(selectedMaterial.unit)} per 1 ${unitLabel(finishedGoodUnit)})` : ''}`}
+        >
+          <div className="flex items-center gap-2">
+            <input
+              className={inputClass}
+              type="number"
+              step="0.0001"
+              min="0.0001"
+              value={quantityPerUnit}
+              onChange={(e) => setQuantityPerUnit(e.target.value)}
+              required
+            />
+            {selectedMaterial && <span className="shrink-0 text-sm text-muted">{unitLabel(selectedMaterial.unit)}</span>}
+          </div>
         </Field>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
@@ -1314,6 +1460,8 @@ function BomLineModal({
 function RawBatchTraceModal({
   batch,
   rawMaterialName,
+  rawMaterialUnit,
+  finishedGoodUnit,
   supplierName,
   finishedGoodName,
   customerNameForOrder,
@@ -1321,6 +1469,8 @@ function RawBatchTraceModal({
 }: {
   batch: RawMaterialBatch;
   rawMaterialName: string;
+  rawMaterialUnit?: string;
+  finishedGoodUnit: (id: string) => string | undefined;
   supplierName: string | null;
   finishedGoodName: (id: string) => string;
   customerNameForOrder: (salesOrderId?: string) => string;
@@ -1352,8 +1502,8 @@ function RawBatchTraceModal({
         <div className="text-sm text-ink/80 bg-black/[0.03] rounded-lg p-3">
           <div className="font-medium text-ink">{rawMaterialName}</div>
           <div className="text-xs text-muted mt-0.5">
-            Received {Number(batch.quantityReceived).toFixed(3)} on {batch.receivedDate}
-            {supplierName && ` from ${supplierName}`} · cost {Number(batch.costPerUnit).toFixed(3)} OMR/unit
+            Received {formatQuantityWithUnit(batch.quantityReceived, rawMaterialUnit)} on {batch.receivedDate}
+            {supplierName && ` from ${supplierName}`} · cost {Number(batch.costPerUnit).toFixed(3)} OMR/{unitLabel(rawMaterialUnit)}
           </div>
         </div>
 
@@ -1372,11 +1522,12 @@ function RawBatchTraceModal({
                   <Card key={c.id} className="p-3">
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <div className="text-sm font-medium text-ink min-w-0">
-                        {Number(c.quantityConsumed).toFixed(3)} used → {fb ? `${fb.batchNumber} (${finishedGoodName(fb.finishedGoodId)})` : 'finished good batch'}
+                        {formatDerivedQuantity(c.quantityConsumed, rawMaterialUnit)} used → {fb ? `${fb.batchNumber} (${finishedGoodName(fb.finishedGoodId)})` : 'finished good batch'}
                       </div>
                       {fb && (
                         <span className="text-xs text-muted">
-                          {Number(fb.quantityRemaining).toFixed(3)} / {Number(fb.quantityProduced).toFixed(3)} remaining
+                          {formatQuantity(fb.quantityRemaining, finishedGoodUnit(fb.finishedGoodId))} /{' '}
+                          {formatQuantityWithUnit(fb.quantityProduced, finishedGoodUnit(fb.finishedGoodId))} remaining
                         </span>
                       )}
                     </div>
@@ -1384,7 +1535,7 @@ function RawBatchTraceModal({
                       <div className="mt-2 pl-3 border-l-2 border-black/10 space-y-1">
                         {sales.map((s) => (
                           <div key={s.id} className="text-xs text-muted">
-                            → {Number(s.quantityConsumed).toFixed(3)} sold to {customerNameForOrder(s.salesOrderId)}
+                            → {formatQuantityWithUnit(s.quantityConsumed, finishedGoodUnit(s.finishedGoodId))} sold to {customerNameForOrder(s.salesOrderId)}
                           </div>
                         ))}
                       </div>
@@ -1405,14 +1556,18 @@ function RawBatchTraceModal({
 function FinishedBatchTraceModal({
   batch,
   finishedGoodName,
+  finishedGoodUnit,
   rawMaterialName,
+  rawMaterialUnit,
   supplierName,
   customerNameForOrder,
   onClose,
 }: {
   batch: FinishedGoodBatch;
   finishedGoodName: string;
+  finishedGoodUnit?: string;
   rawMaterialName: (id: string) => string;
+  rawMaterialUnit: (id: string) => string | undefined;
   supplierName: (id?: string) => string | null;
   customerNameForOrder: (salesOrderId?: string) => string;
   onClose: () => void;
@@ -1445,7 +1600,7 @@ function FinishedBatchTraceModal({
         <div className="text-sm text-ink/80 bg-black/[0.03] rounded-lg p-3">
           <div className="font-medium text-ink">{finishedGoodName}</div>
           <div className="text-xs text-muted mt-0.5">
-            Produced {Number(batch.quantityProduced).toFixed(3)} on {batch.producedDate}
+            Produced {formatQuantityWithUnit(batch.quantityProduced, finishedGoodUnit)} on {batch.producedDate}
           </div>
         </div>
 
@@ -1464,7 +1619,7 @@ function FinishedBatchTraceModal({
                     return (
                       <Card key={c.id} className="p-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                         <div className="text-sm text-ink min-w-0">
-                          {Number(c.quantityConsumed).toFixed(3)} {rawMaterialName(c.rawMaterialId)}
+                          {formatDerivedQuantity(c.quantityConsumed, rawMaterialUnit(c.rawMaterialId))} {rawMaterialName(c.rawMaterialId)}
                           {rb && <span className="text-muted"> — {rb.batchNumber}</span>}
                         </div>
                         {rb && supplierName(rb.supplierId) && (
@@ -1485,7 +1640,7 @@ function FinishedBatchTraceModal({
                 <div className="space-y-1.5">
                   {sales.map((s) => (
                     <div key={s.id} className="text-sm text-ink">
-                      {Number(s.quantityConsumed).toFixed(3)} → {customerNameForOrder(s.salesOrderId)}
+                      {formatQuantityWithUnit(s.quantityConsumed, finishedGoodUnit)} → {customerNameForOrder(s.salesOrderId)}
                     </div>
                   ))}
                 </div>

@@ -8,6 +8,7 @@ import { RawMaterialService } from '../inventory/raw-material.service';
 import { BatchTrackingService } from '../inventory/batch-tracking.service';
 import { BatchSource } from '../inventory/batch-source.enum';
 import { JournalPostingService, PostingLine } from '../journal/journal-posting.service';
+import { UnitService } from '../units/unit.service';
 
 interface ActorRef {
   userId?: string;
@@ -36,6 +37,7 @@ export class PurchaseOrderService {
     @InjectDataSource()
     private dataSource: DataSource,
     private journalPosting: JournalPostingService,
+    private units: UnitService,
   ) {}
 
   private round3(n: number) {
@@ -108,7 +110,8 @@ export class PurchaseOrderService {
   // Step 1: place the order. Stock is NOT touched yet — only once goods
   // physically arrive (see receive()) does stock actually increase.
   async create(dto: CreatePurchaseOrderDto) {
-    const totals = this.calcTotals(dto.items);
+    const lines = await this.units.resolveRawMaterialLines(dto.items);
+    const totals = this.calcTotals(lines);
     const order = this.orderRepo.create({
       supplierId: dto.supplierId,
       notes: dto.notes,
@@ -117,7 +120,7 @@ export class PurchaseOrderService {
     });
     const savedOrder = await this.orderRepo.save(order);
 
-    const items = dto.items.map((i) =>
+    const items = lines.map((i) =>
       this.itemRepo.create({ ...i, vatRate: i.vatRate ?? 5, purchaseOrderId: savedOrder.id }),
     );
     await this.itemRepo.save(items);
@@ -279,7 +282,8 @@ export class PurchaseOrderService {
     if (dto.items) {
       const existing = await this.itemRepo.find({ where: { purchaseOrderId: id } });
       if (existing.length > 0) await this.itemRepo.remove(existing);
-      const items = dto.items.map((i) => this.itemRepo.create({ ...i, vatRate: i.vatRate ?? 5, purchaseOrderId: id }));
+      const lines = await this.units.resolveRawMaterialLines(dto.items);
+      const items = lines.map((i) => this.itemRepo.create({ ...i, vatRate: i.vatRate ?? 5, purchaseOrderId: id }));
       await this.itemRepo.save(items);
       Object.assign(order, this.calcTotals(dto.items));
       await this.orderRepo.save(order);

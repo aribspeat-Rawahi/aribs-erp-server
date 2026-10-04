@@ -19,6 +19,11 @@ export class SalesOrderItem {
   @Column('decimal', { precision: 12, scale: 3 })
   quantity: number;
 
+  // pcs | bags | kg | litre | ton (see units/units.ts) - copied from the
+  // product when the line is saved, so old documents keep their unit.
+  @Column({ length: 10, default: 'pcs' })
+  unit: string;
+
   @Column('decimal', { precision: 12, scale: 3 })
   unitPrice: number;
 

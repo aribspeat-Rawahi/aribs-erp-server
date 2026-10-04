@@ -34,6 +34,7 @@ import { SchemaCheckModule } from './schema-check/schema-check.module';
 import { DocumentLinkModule } from './document-link/document-link.module';
 import { PublicDocumentModule } from './public-document/public-document.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
+import { UnitsModule } from './units/units.module';
 
 @Module({
   imports: [
@@ -94,6 +95,7 @@ import { MonitoringModule } from './monitoring/monitoring.module';
     DocumentLinkModule,
     PublicDocumentModule,
     MonitoringModule,
+    UnitsModule,
     SchemaCheckModule,
   ],
 })

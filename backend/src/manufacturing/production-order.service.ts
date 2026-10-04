@@ -11,6 +11,7 @@ import { FinishedGood } from '../inventory/finished-good.entity';
 import { BatchTrackingService } from '../inventory/batch-tracking.service';
 import { BatchSource } from '../inventory/batch-source.enum';
 import { JournalPostingService } from '../journal/journal-posting.service';
+import { assertQuantityForUnit } from '../units/units';
 
 // Auto-posted Chart-of-Accounts codes for a completed production run —
 // transfers material cost from Raw Materials into Finished Goods
@@ -50,7 +51,9 @@ export class ProductionOrderService {
   // Step 1: plan a production run. Does NOT touch stock yet — that only
   // happens on complete(), so planning something you can't finish yet
   // doesn't lock up material.
-  create(dto: CreateProductionOrderDto) {
+  async create(dto: CreateProductionOrderDto) {
+    const product = await this.finishedGoodService.findOne(dto.finishedGoodId);
+    assertQuantityForUnit(dto.quantityToProduce, product.unit, product.name);
     const order = this.repo.create({
       ...dto,
       status: ProductionOrderStatus.PLANNED,
@@ -223,6 +226,10 @@ export class ProductionOrderService {
     const order = await this.findOne(id);
     if (order.status !== ProductionOrderStatus.PLANNED) {
       throw new BadRequestException(`Only planned orders can be edited (this one is ${order.status})`);
+    }
+    if (dto.quantityToProduce !== undefined || dto.finishedGoodId !== undefined) {
+      const product = await this.finishedGoodService.findOne(dto.finishedGoodId || order.finishedGoodId);
+      assertQuantityForUnit(dto.quantityToProduce ?? order.quantityToProduce, product.unit, product.name);
     }
     Object.assign(order, dto);
     return this.repo.save(order);

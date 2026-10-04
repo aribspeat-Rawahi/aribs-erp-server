@@ -1,10 +1,13 @@
 import PDFDocument from 'pdfkit';
 import * as QRCode from 'qrcode';
 import { amountToOmaniWords } from './number-to-words.util';
+import { formatQty, formatQtyWithUnit, unitLabel } from '../units/units';
 
 export interface InvoicePdfItem {
   description: string;
   quantity: number;
+  // pcs | bags | kg | litre | ton - shown as "10 Bags", "2.500 Tons"
+  unit?: string;
   unitPrice: number;
   vatRate: number;
   lineTotal: number;
@@ -153,8 +156,8 @@ async function renderClassic(doc: PDFKit.PDFDocument, data: InvoicePdfData) {
   y = Math.max(y + 14, 232);
   doc.rect(40, y, pageWidth - 80, 22).fill(GREEN_DARK);
   doc.fillColor('#fff').fontSize(10);
-  doc.text('Item', 46, y + 6, { width: 200 });
-  doc.text('Qty', 250, y + 6, { width: 50, align: 'right' });
+  doc.text('Item', 46, y + 6, { width: 180 });
+  doc.text('Qty', 228, y + 6, { width: 72, align: 'right' });
   doc.text('Unit Price', 300, y + 6, { width: 80, align: 'right' });
   doc.text('VAT', 380, y + 6, { width: 60, align: 'right' });
   doc.text('Total', 445, y + 6, { width: 90, align: 'right' });
@@ -162,8 +165,8 @@ async function renderClassic(doc: PDFKit.PDFDocument, data: InvoicePdfData) {
 
   doc.fillColor('#24291f').fontSize(10);
   for (const item of data.items) {
-    doc.text(item.description, 46, y, { width: 200 });
-    doc.text(String(item.quantity), 250, y, { width: 50, align: 'right' });
+    doc.text(item.description, 46, y, { width: 180 });
+    doc.text(formatQtyWithUnit(item.quantity, item.unit), 228, y, { width: 72, align: 'right' });
     doc.text(item.unitPrice.toFixed(3), 300, y, { width: 80, align: 'right' });
     doc.text(data.vatExcluded ? '-' : ((item.unitPrice * item.quantity * item.vatRate) / 100).toFixed(3), 380, y, { width: 60, align: 'right' });
     doc.text(item.lineTotal.toFixed(3), 445, y, { width: 90, align: 'right' });
@@ -280,9 +283,9 @@ async function renderFormal(doc: PDFKit.PDFDocument, data: InvoicePdfData) {
     const vals = [
       String(idx + 1),
       item.description,
-      String(item.quantity),
+      formatQty(item.quantity, item.unit),
       item.unitPrice.toFixed(3),
-      'Pcs',
+      unitLabel(item.unit),
       data.vatExcluded ? '-' : ((item.unitPrice * item.quantity * item.vatRate) / 100).toFixed(3),
       item.lineTotal.toFixed(3),
     ];
@@ -428,8 +431,8 @@ Tel: ${data.companyPhone || '-'} | VATIN: ${data.companyVatin}`,
     const vals = [
       String(idx + 1),
       item.description,
-      'Pcs',
-      String(item.quantity),
+      unitLabel(item.unit),
+      formatQty(item.quantity, item.unit),
       item.unitPrice.toFixed(3),
       taxable.toFixed(3),
       vat.toFixed(3),

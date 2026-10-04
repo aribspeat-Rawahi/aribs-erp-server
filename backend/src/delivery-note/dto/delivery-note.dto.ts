@@ -1,4 +1,5 @@
-import { IsString, IsNumber, IsOptional, IsArray, IsEnum, ValidateNested, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsArray, IsEnum, ValidateNested, Min, IsIn } from 'class-validator';
+import { UNITS } from '../../units/units';
 import { Type } from 'class-transformer';
 import { PaymentType, DeliveryMethod } from '../../common/payment-type.enum';
 
@@ -13,6 +14,12 @@ export class DeliveryNoteItemDto {
   @IsNumber()
   @Min(0.001)
   quantity: number;
+
+  // Only used for a custom line (no product); a product line always
+  // takes the product's unit. pcs | bags | kg | litre | ton
+  @IsOptional()
+  @IsIn(UNITS)
+  unit?: string;
 
   @IsOptional()
   @IsNumber()

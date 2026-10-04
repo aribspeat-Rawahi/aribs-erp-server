@@ -7,6 +7,7 @@ import { CreateSalesOrderDto } from './dto/sales-order.dto';
 import { FinishedGoodService } from '../inventory/finished-good.service';
 import { FinishedGood } from '../inventory/finished-good.entity';
 import { BatchTrackingService } from '../inventory/batch-tracking.service';
+import { UnitService } from '../units/unit.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
 
 // Auto-posted Chart-of-Accounts codes for the Cost of Goods Sold entry a
@@ -32,6 +33,7 @@ export class SalesOrderService {
     private journalPosting: JournalPostingService,
     @InjectDataSource()
     private dataSource: DataSource,
+    private units: UnitService,
   ) {}
 
   findAll() {
@@ -48,6 +50,7 @@ export class SalesOrderService {
   // Step 1: create the order — stock is NOT deducted yet, so a draft
   // order (e.g. while quoting/negotiating) doesn't lock up inventory.
   async create(dto: CreateSalesOrderDto) {
+    const lines = await this.units.resolveProductLines(dto.items);
     const order = this.orderRepo.create({
       customerId: dto.customerId,
       paymentType: dto.paymentType,
@@ -56,7 +59,7 @@ export class SalesOrderService {
     });
     const savedOrder = await this.orderRepo.save(order);
 
-    const items = dto.items.map((i) =>
+    const items = lines.map((i) =>
       this.itemRepo.create({ ...i, salesOrderId: savedOrder.id }),
     );
     await this.itemRepo.save(items);

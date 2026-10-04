@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import api from '../api/client';
 import { Card, StatCard, EmptyState, inputClass } from '../components/ui';
-import { formatQuantity } from '../utils/formatQuantity';
+import { formatQuantityWithUnit } from '../utils/formatQuantity';
 
 // Reports Hub — one card per report, matching the reference design. Each
 // card opens its own full page at /accounting/reports/:key (ReportDetail.tsx
@@ -286,7 +286,7 @@ export default function ReportsPanel() {
                     <div key={item.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                       <span className="text-ink min-w-0">{item.name}</span>
                       <span className="text-amber-700 font-medium whitespace-nowrap">
-                        {formatQuantity(item.quantityInStock, item.unit)} {item.unit}
+                        {formatQuantityWithUnit(item.quantityInStock, item.unit)}
                       </span>
                     </div>
                   ))}

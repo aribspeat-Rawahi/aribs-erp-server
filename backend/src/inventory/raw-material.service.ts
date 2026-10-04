@@ -8,6 +8,7 @@ import { PurchaseOrder, PurchaseOrderStatus } from '../supplier/purchase-order.e
 import { PurchaseOrderItem } from '../supplier/purchase-order-item.entity';
 import { BatchTrackingService } from './batch-tracking.service';
 import { BatchSource } from './batch-source.enum';
+import { assertQuantityForUnit, isDecimalUnit, unitLabel } from '../units/units';
 
 @Injectable()
 export class RawMaterialService {
@@ -36,6 +37,9 @@ export class RawMaterialService {
   }
 
   create(dto: CreateRawMaterialDto) {
+    if (dto.quantityInStock !== undefined) {
+      assertQuantityForUnit(dto.quantityInStock, dto.unit, dto.name, { allowZero: true });
+    }
     const item = this.repo.create(dto);
     return this.repo.save(item);
   }
@@ -48,6 +52,12 @@ export class RawMaterialService {
   async update(id: string, dto: Partial<CreateRawMaterialDto>) {
     const item = await this.findOne(id);
     const { quantityInStock, ...safeDto } = dto;
+    // Switching to Pcs/Bags is only possible while the stock is a whole number.
+    if (safeDto.unit && !isDecimalUnit(safeDto.unit) && !Number.isInteger(Number(item.quantityInStock))) {
+      throw new BadRequestException(
+        `${item.name} has ${Number(item.quantityInStock)} in stock - ${unitLabel(safeDto.unit)} needs a whole number. Adjust the stock first.`,
+      );
+    }
     Object.assign(item, safeDto);
     return this.repo.save(item);
   }
@@ -94,6 +104,7 @@ export class RawMaterialService {
       });
       if (!item) throw new NotFoundException('Raw material not found');
 
+      assertQuantityForUnit(dto.quantity, item.unit, item.name);
       const addQty = Number(dto.quantity);
       const existingQty = Number(item.quantityInStock);
       const existingCost = Number(item.costPerUnit);

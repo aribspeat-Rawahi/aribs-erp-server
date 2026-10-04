@@ -1,4 +1,5 @@
-import { IsString, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, Min, IsIn } from 'class-validator';
+import { UNITS } from '../../units/units';
 
 export class CreateRawMaterialDto {
   @IsString()
@@ -12,7 +13,8 @@ export class CreateRawMaterialDto {
   @IsString()
   barcode?: string;
 
-  @IsString()
+  // One of pcs | bags | kg | litre | ton (units/units.ts).
+  @IsIn(UNITS, { message: 'Unit must be one of: Pcs, Bags, Kgs, Litre, Tons.' })
   unit: string;
 
   @IsOptional()

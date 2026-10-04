@@ -7,7 +7,7 @@ import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Pill, Card, Emp
 import { Can } from '../components/Permission';
 import { labelFor, PAYMENT_TYPE_OPTIONS, DELIVERY_METHOD_OPTIONS } from '../constants';
 import NewDocumentModal, { ExistingDoc } from '../components/NewDocumentModal';
-import { formatQuantity, quantityInputStep, snapQuantityToUnit } from '../utils/formatQuantity';
+import { formatQuantityWithUnit, quantityInputStep, snapQuantityToUnit } from '../utils/formatQuantity';
 
 interface Customer {
   id: string;
@@ -32,7 +32,7 @@ interface Invoice {
   dueDate?: string;
   vatExcluded?: boolean;
   template?: string;
-  items?: { finishedGoodId?: string; description: string; quantity: number; unitPrice: number }[];
+  items?: { finishedGoodId?: string; description: string; quantity: number; unit?: string; unitPrice: number }[];
 }
 
 interface InvoicePayment {
@@ -52,6 +52,7 @@ interface SalesReturnItem {
   id: string;
   finishedGoodId: string;
   quantity: number | string;
+  unit?: string;
   unitPrice: number | string;
   vatRate: number | string;
 }
@@ -126,6 +127,16 @@ export default function Invoices() {
 
   function customerName(id: string) {
     return customers.find((c) => c.id === id)?.name || id;
+  }
+
+  // "Cement x 10 Bags, Sand x 2.500 Tons" - the line's own unit, else the product's.
+  function returnItemsSummary(r: SalesReturn) {
+    return (r.items || [])
+      .map((it) => {
+        const fg = finishedGoods.find((f) => f.id === it.finishedGoodId);
+        return `${fg?.name || 'Item'} x ${formatQuantityWithUnit(it.quantity, it.unit || fg?.unit)}`;
+      })
+      .join(', ');
   }
 
   async function remove(id: string) {
@@ -343,6 +354,7 @@ export default function Invoices() {
                         {r.reason ? ` · ${r.reason}` : ''}
                         {r.status === 'rejected' && r.rejectionReason ? ` · Rejected: ${r.rejectionReason}` : ''}
                       </div>
+                      {!!r.items?.length && <div className="text-xs text-muted break-words">{returnItemsSummary(r)}</div>}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="text-sm font-semibold text-ink whitespace-nowrap">{Number(r.total).toFixed(3)} OMR</div>
@@ -569,14 +581,20 @@ function NewSalesReturnModal({
   onSaved: () => void;
 }) {
   const [items, setItems] = useState(() => {
-    const byProduct = new Map<string, number>();
+    // The returnable quantity follows the invoice line's own unit (else the product's).
+    const byProduct = new Map<string, { maxQty: number; unit?: string }>();
     for (const it of invoice.items || []) {
       if (!it.finishedGoodId) continue;
-      byProduct.set(it.finishedGoodId, (byProduct.get(it.finishedGoodId) || 0) + Number(it.quantity));
+      const prev = byProduct.get(it.finishedGoodId);
+      byProduct.set(it.finishedGoodId, {
+        maxQty: (prev?.maxQty || 0) + Number(it.quantity),
+        unit: prev?.unit || it.unit || finishedGoods.find((f) => f.id === it.finishedGoodId)?.unit,
+      });
     }
-    return Array.from(byProduct.entries()).map(([finishedGoodId, maxQty]) => ({
+    return Array.from(byProduct.entries()).map(([finishedGoodId, { maxQty, unit }]) => ({
       finishedGoodId,
       maxQty,
+      unit,
       quantity: '0',
     }));
   });
@@ -588,9 +606,6 @@ function NewSalesReturnModal({
 
   function productName(id: string) {
     return finishedGoods.find((f) => f.id === id)?.name || id;
-  }
-  function productUnit(id: string) {
-    return finishedGoods.find((f) => f.id === id)?.unit;
   }
 
   function updateQty(i: number, quantity: string) {
@@ -645,17 +660,17 @@ function NewSalesReturnModal({
                 {items.map((it, i) => (
                   <tr key={it.finishedGoodId}>
                     <td className="px-3 py-2">{productName(it.finishedGoodId)}</td>
-                    <td className="px-3 py-2 text-right">{formatQuantity(it.maxQty, productUnit(it.finishedGoodId))}</td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap">{formatQuantityWithUnit(it.maxQty, it.unit)}</td>
                     <td className="px-3 py-2 text-right">
                       <input
                         className={`${inputClass} text-right max-w-[6rem] sm:max-w-none`}
                         type="number"
-                        step={quantityInputStep(productUnit(it.finishedGoodId))}
+                        step={quantityInputStep(it.unit)}
                         min="0"
                         max={Number(it.maxQty)}
                         value={it.quantity}
                         onChange={(e) => updateQty(i, e.target.value)}
-                        onBlur={(e) => updateQty(i, String(snapQuantityToUnit(Number(e.target.value) || 0, productUnit(it.finishedGoodId))))}
+                        onBlur={(e) => updateQty(i, String(Math.min(snapQuantityToUnit(Number(e.target.value) || 0, it.unit), Number(it.maxQty))))}
                       />
                     </td>
                   </tr>
