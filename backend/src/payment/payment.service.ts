@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { InvoicePayment } from '../invoice/invoice-payment.entity';
 import { Invoice } from '../invoice/invoice.entity';
 import { SupplierPayment } from '../supplier/supplier-payment.entity';
@@ -98,7 +98,8 @@ export class PaymentService {
       employees,
       bankAccounts,
     ] = await Promise.all([
-      this.invoicePaymentRepo.find({ order: { paymentDate: 'DESC' } }),
+      // credit notes from sales returns are not money received
+      this.invoicePaymentRepo.find({ where: { salesReturnId: IsNull() }, order: { paymentDate: 'DESC' } }),
       this.supplierPaymentRepo.find({ order: { paymentDate: 'DESC' } }),
       this.payrollRepo.find({ where: { isPaid: true } }),
       this.reimbursementRepo.find({ where: { status: ReimbursementStatus.PAID } }),

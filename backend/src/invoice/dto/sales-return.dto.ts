@@ -27,8 +27,9 @@ export class CreateSalesReturnDto {
   @IsString()
   reason?: string;
 
-  // If set, the refund is recorded as a real withdrawal on this bank/cash
-  // account once approved. Omit to just credit Accounts Receivable.
+  // Ignored since the credit-note/refund rework - the approver picks the
+  // refund account at approval. Kept so older app versions don't fail
+  // validation.
   @IsOptional()
   @IsString()
   bankAccountId?: string;
@@ -37,4 +38,12 @@ export class CreateSalesReturnDto {
 export class RejectSalesReturnDto {
   @IsString()
   reason: string;
+}
+
+export class ApproveSalesReturnDto {
+  // Needed only when part of the return is refunded (the customer had
+  // already paid more than what is still due on the invoice).
+  @IsOptional()
+  @IsString()
+  bankAccountId?: string;
 }

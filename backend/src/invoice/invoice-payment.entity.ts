@@ -37,6 +37,12 @@ export class InvoicePayment {
   @Column({ nullable: true })
   bankTransactionId?: string;
 
+  // Set when this row is a credit note from an approved sales return (not
+  // money received): it lowers what the customer still owes. Its
+  // accounting is part of the sales return's own journal entry.
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  salesReturnId?: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

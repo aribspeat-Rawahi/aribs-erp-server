@@ -15,6 +15,12 @@ import { JournalPostingService, PostingLine } from '../journal/journal-posting.s
 import { BatchTrackingService } from '../inventory/batch-tracking.service';
 import { BatchSource } from '../inventory/batch-source.enum';
 import { assertQuantityForUnit } from '../units/units';
+import { InvoicePayment } from './invoice-payment.entity';
+import { computePaymentStatus } from './payment-status.util';
+import { BackorderService } from '../stock-alerts/backorder.service';
+import { CustomerService } from '../customer/customer.service';
+import { SettingsService } from '../settings/settings.service';
+import { generateInvoicePdf } from '../common/invoice-pdf.util';
 
 interface ActorRef {
   userId?: string;
@@ -45,6 +51,9 @@ export class SalesReturnService {
     private bankAccountService: BankAccountService,
     private journalPosting: JournalPostingService,
     private batchTrackingService: BatchTrackingService,
+    private backorders: BackorderService,
+    private customerService: CustomerService,
+    private settingsService: SettingsService,
   ) {}
 
   private generateReturnNumber() {
@@ -79,13 +88,15 @@ export class SalesReturnService {
     return item;
   }
 
+  // Approved AND pending returns count, so two open returns can't both
+  // claim the same goods.
   private async alreadyReturnedQty(invoiceId: string, finishedGoodId: string) {
-    const approved = await this.repo.find({
-      where: { invoiceId, status: SalesReturnStatus.APPROVED },
+    const returns = await this.repo.find({
+      where: { invoiceId, status: In([SalesReturnStatus.APPROVED, SalesReturnStatus.PENDING]) },
       relations: ['items'],
     });
     let qty = 0;
-    for (const r of approved) {
+    for (const r of returns) {
       for (const i of r.items) {
         if (i.finishedGoodId === finishedGoodId) qty += Number(i.quantity);
       }
@@ -112,6 +123,12 @@ export class SalesReturnService {
       if (!referenceItemByProduct.has(ii.finishedGoodId)) referenceItemByProduct.set(ii.finishedGoodId, ii);
     }
 
+    // Return value per line = qty x the invoice's unit price, less this
+    // line's share of the invoice discount (same pro-rata rule the invoice
+    // used), plus VAT at the line's rate - no VAT if the invoice was VAT
+    // excluded. `subtotal` here is the net (after discount) amount.
+    const invoiceSubtotal = Number(invoice.subtotal);
+    const netFactor = invoiceSubtotal > 0 ? (invoiceSubtotal - Number(invoice.discountAmount || 0)) / invoiceSubtotal : 1;
     let subtotal = 0;
     let vatAmount = 0;
     const itemRows: { finishedGoodId: string; quantity: number; unit: string; unitPrice: number; vatRate: number }[] = [];
@@ -128,9 +145,9 @@ export class SalesReturnService {
         );
       }
       assertQuantityForUnit(line.quantity, reference.unit, reference.description);
-      const lineTotal = this.round3(Number(line.quantity) * Number(reference.unitPrice));
-      subtotal += lineTotal;
-      vatAmount += this.round3((lineTotal * Number(reference.vatRate)) / 100);
+      const lineNet = this.round3(Number(line.quantity) * Number(reference.unitPrice) * netFactor);
+      subtotal += lineNet;
+      if (!invoice.vatExcluded) vatAmount += this.round3((lineNet * Number(reference.vatRate)) / 100);
       itemRows.push({
         finishedGoodId: line.finishedGoodId,
         quantity: Number(line.quantity),
@@ -141,6 +158,7 @@ export class SalesReturnService {
     }
     subtotal = this.round3(subtotal);
     vatAmount = this.round3(vatAmount);
+    if (itemRows.length === 0) throw new BadRequestException('Add at least one item to return');
 
     const item = this.repo.create({
       returnNumber: this.generateReturnNumber(),
@@ -152,7 +170,6 @@ export class SalesReturnService {
       subtotal,
       vatAmount,
       total: this.round3(subtotal + vatAmount),
-      bankAccountId: dto.bankAccountId,
       requestedByUserId: requestedBy.userId,
       requestedByEmail: requestedBy.email,
       items: itemRows.map((i) => this.repo.manager.create(SalesReturnItem, i)),
@@ -178,17 +195,57 @@ export class SalesReturnService {
     return { deleted: true };
   }
 
-  // Increases finished-good stock (with a new traceable batch, same as
-  // any other stock-in) and (optionally) records a real bank/cash
-  // withdrawal — both inside one DB transaction, then auto-posts the
-  // Journal Entry.
-  async approve(id: string, decidedBy: ActorRef) {
+  // How an approval would settle the money: first it lowers what the
+  // customer still owes on the invoice (credit note), the rest - only if
+  // they had already paid more than that - is paid back from a bank/cash
+  // account.
+  async getSettlement(id: string) {
+    const item = await this.findOne(id);
+    const invoice = await this.dataSource.manager.findOne(Invoice, { where: { id: item.invoiceId } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    return { ...this.splitSettlement(Number(item.total), invoice), invoiceNumber: invoice.invoiceNumber };
+  }
+
+  private splitSettlement(total: number, invoice: Invoice) {
+    const outstanding = this.round3(Math.max(0, Number(invoice.total) - Number(invoice.paidAmount || 0)));
+    const appliedToInvoice = this.round3(Math.min(total, outstanding));
+    const refundAmount = this.round3(total - appliedToInvoice);
+    return { total, outstanding, appliedToInvoice, refundAmount, refundAccountRequired: refundAmount > 0.0005 };
+  }
+
+  // Approve & add to stock:
+  //  - goods go back into stock (new traceable batch; any part that fills
+  //    invoices waiting for stock goes straight out to them);
+  //  - credit note: the applied part is recorded on the invoice as a
+  //    credit (an invoice_payments row with salesReturnId, no money moves),
+  //    so its balance due drops;
+  //  - refund: the rest is withdrawn from the chosen bank/cash account;
+  //  - one journal entry: Dr Sales Returns (net) + Dr VAT Payable,
+  //    Cr Accounts Receivable (applied) + Cr Bank (refund), plus the cost
+  //    of goods sold reversal (Dr Finished Goods / Cr COGS).
+  // All stock/money writes happen in one DB transaction.
+  async approve(id: string, decidedBy: ActorRef, opts: { bankAccountId?: string } = {}) {
     let totalCost = 0;
+    const productIds: string[] = [];
+    let invoiceNumber = '';
     const saved = await this.dataSource.transaction(async (manager) => {
-      const item = await manager.findOne(SalesReturn, { where: { id }, relations: ['items'] });
+      const item = await manager.findOne(SalesReturn, { where: { id }, relations: ['items'], lock: { mode: 'pessimistic_write' } });
       if (!item) throw new NotFoundException('Sales return not found');
       if (item.status !== SalesReturnStatus.PENDING) {
         throw new BadRequestException(`Only pending returns can be approved (this one is ${item.status})`);
+      }
+      const invoice = await manager.findOne(Invoice, { where: { id: item.invoiceId }, lock: { mode: 'pessimistic_write' } });
+      if (!invoice) throw new NotFoundException('Invoice not found');
+      invoiceNumber = invoice.invoiceNumber;
+
+      const total = Number(item.total);
+      const { appliedToInvoice, refundAmount } = this.splitSettlement(total, invoice);
+      // the refund account is chosen by the approver, not the requester
+      const refundAccountId = opts.bankAccountId;
+      if (refundAmount > 0.0005 && !refundAccountId) {
+        throw new BadRequestException(
+          `The customer has already paid for these goods - choose the bank/cash account to refund ${refundAmount.toFixed(3)} OMR from.`,
+        );
       }
 
       for (const line of item.items) {
@@ -197,37 +254,56 @@ export class SalesReturnService {
           lock: { mode: 'pessimistic_write' },
         });
         if (!good) throw new NotFoundException('Product not found');
-        // Cost of Goods Sold reversal — valued at the product's current
-        // costPerUnit (the weighted-average basis, same one the original
-        // sale's COGS entry used), since the original batch(es) shipped
-        // aren't individually tracked back at return time.
+        // Cost of Goods Sold reversal at the product's current (weighted
+        // average) cost - the same basis the sale's COGS used.
         totalCost += Number(line.quantity) * Number(good.costPerUnit);
-        good.quantityInStock = Number(good.quantityInStock) + Number(line.quantity);
+        const before = Number(good.quantityInStock);
+        good.quantityInStock = this.round3(before + Number(line.quantity));
         await manager.save(good);
         await this.batchTrackingService.createFinishedGoodBatch(manager, {
           finishedGoodId: good.id,
           quantity: Number(line.quantity),
           source: BatchSource.MANUAL,
         });
+        await this.batchTrackingService.absorbBackorder(manager, good.id, before, Number(line.quantity));
+        productIds.push(good.id);
+      }
+      totalCost = this.round3(totalCost);
+
+      // credit note on the invoice
+      if (appliedToInvoice > 0.0005) {
+        await manager.save(
+          manager.create(InvoicePayment, {
+            invoiceId: invoice.id,
+            amount: appliedToInvoice,
+            paymentDate: item.date,
+            note: `Credit note - sales return ${item.returnNumber}`,
+            salesReturnId: item.id,
+          }),
+        );
+        invoice.paidAmount = this.round3(Number(invoice.paidAmount || 0) + appliedToInvoice);
+        invoice.paymentStatus = computePaymentStatus(invoice.paidAmount, Number(invoice.total));
+        await manager.save(invoice);
       }
 
+      // refund of what was already paid
       let bankTransactionId: string | undefined;
-      if (item.bankAccountId) {
+      if (refundAmount > 0.0005) {
         const account = await manager.findOne(BankAccount, {
-          where: { id: item.bankAccountId },
+          where: { id: refundAccountId },
           lock: { mode: 'pessimistic_write' },
         });
         if (!account) throw new NotFoundException('Bank/cash account not found');
-        if (Number(account.currentBalance) < Number(item.total)) {
-          throw new BadRequestException(`Insufficient balance in ${account.name} to refund this return.`);
+        if (Number(account.currentBalance) < refundAmount) {
+          throw new BadRequestException(`Insufficient balance in ${account.name} to refund ${refundAmount.toFixed(3)} OMR.`);
         }
-        account.currentBalance = Number(account.currentBalance) - Number(item.total);
+        account.currentBalance = this.round3(Number(account.currentBalance) - refundAmount);
         await manager.save(account);
         const txn = await manager.save(
           manager.create(BankTransaction, {
             bankAccountId: account.id,
             type: BankTransactionType.WITHDRAWAL,
-            amount: Number(item.total),
+            amount: refundAmount,
             date: item.date,
             note: `Sales return refund — ${item.returnNumber}`,
           }),
@@ -236,6 +312,9 @@ export class SalesReturnService {
       }
 
       item.status = SalesReturnStatus.APPROVED;
+      item.appliedToInvoice = appliedToInvoice;
+      item.refundAmount = refundAmount;
+      item.bankAccountId = refundAmount > 0.0005 ? refundAccountId : undefined;
       item.bankTransactionId = bankTransactionId;
       item.decidedByUserId = decidedBy.userId;
       item.decidedByEmail = decidedBy.email;
@@ -249,7 +328,13 @@ export class SalesReturnService {
       entityId: saved.id,
       userId: decidedBy.userId,
       userEmail: decidedBy.email,
-      details: { returnNumber: saved.returnNumber, total: saved.total },
+      details: {
+        returnNumber: saved.returnNumber,
+        invoiceNumber,
+        total: Number(saved.total),
+        appliedToInvoice: Number(saved.appliedToInvoice),
+        refundAmount: Number(saved.refundAmount),
+      },
     });
 
     try {
@@ -259,18 +344,15 @@ export class SalesReturnService {
         const vatAccountId = await this.journalPosting.findAccountIdByCode(VAT_PAYABLE_CODE);
         lines.push({ accountId: vatAccountId, debit: Number(saved.vatAmount), description: 'VAT reversed on return' });
       }
-      if (saved.bankAccountId) {
-        const bankJournalAccountId = await this.bankAccountService.ensureJournalAccountId(saved.bankAccountId);
-        lines.push({ accountId: bankJournalAccountId, credit: Number(saved.total), description: 'Refund paid' });
-      } else {
+      if (Number(saved.appliedToInvoice) > 0) {
         const arAccountId = await this.journalPosting.findAccountIdByCode(ACCOUNTS_RECEIVABLE_CODE);
-        lines.push({ accountId: arAccountId, credit: Number(saved.total), description: 'Credit against receivable' });
+        lines.push({ accountId: arAccountId, credit: Number(saved.appliedToInvoice), description: `Credit note — invoice ${invoiceNumber}` });
       }
-      // Cost of Goods Sold reversal — the returned stock is back in the
-      // warehouse, so relieve COGS and put its cost back on the Finished
-      // Goods Inventory asset. A self-balancing pair on top of the
-      // subtotal/VAT/bank lines above, so the entry as a whole still nets
-      // to zero.
+      if (Number(saved.refundAmount) > 0 && saved.bankAccountId) {
+        const bankJournalAccountId = await this.bankAccountService.ensureJournalAccountId(saved.bankAccountId);
+        lines.push({ accountId: bankJournalAccountId, credit: Number(saved.refundAmount), description: 'Refund paid' });
+      }
+      // returned goods back on the Finished Goods asset, COGS relieved
       if (totalCost > 0) {
         const fgAccountId = await this.journalPosting.findAccountIdByCode(FG_INVENTORY_CODE);
         const cogsAccountId = await this.journalPosting.findAccountIdByCode(COGS_CODE);
@@ -290,7 +372,61 @@ export class SalesReturnService {
       console.error(`Auto-posting failed for sales_return ${saved.id}:`, err);
     }
 
+    await this.backorders.refresh(productIds);
     return saved;
+  }
+
+  // Credit Note PDF - same layouts as the invoice. Lines show the
+  // invoice's unit price; the discount row is this return's share of the
+  // invoice discount.
+  async generateCreditNotePdf(id: string) {
+    const item = await this.findOne(id);
+    const invoice = await this.dataSource.manager.findOne(Invoice, { where: { id: item.invoiceId } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    const customer = await this.customerService.findOne(item.customerId);
+    const settings = await this.settingsService.get();
+    const logoBase64 = await this.settingsService.getLogoBase64();
+    const products = await this.dataSource.manager.find(FinishedGood, { where: { id: In(item.items.map((i) => i.finishedGoodId)) } });
+    const nameOf = new Map(products.map((p) => [p.id, p.name]));
+    const invoiceLines = await this.invoiceItemRepo.find({ where: { invoiceId: invoice.id } });
+    const descOf = new Map(invoiceLines.filter((l) => l.finishedGoodId).map((l) => [l.finishedGoodId as string, l.description]));
+
+    const pdfItems = item.items.map((i) => ({
+      description: descOf.get(i.finishedGoodId) || nameOf.get(i.finishedGoodId) || 'Item',
+      quantity: Number(i.quantity),
+      unit: i.unit,
+      unitPrice: Number(i.unitPrice),
+      vatRate: invoice.vatExcluded ? 0 : Number(i.vatRate),
+      lineTotal: this.round3(Number(i.quantity) * Number(i.unitPrice)),
+    }));
+    const gross = this.round3(pdfItems.reduce((sum, i) => sum + i.lineTotal, 0));
+    const net = Number(item.subtotal);
+
+    return generateInvoicePdf({
+      invoiceNumber: item.returnNumber,
+      version: 1,
+      issueDate: item.date,
+      quotationNumber: invoice.invoiceNumber,
+      referenceLabel: 'Invoice No',
+      companyName: settings.companyName,
+      companyVatin: settings.companyVatin || 'OM1000000000',
+      companyAddress: settings.companyAddress,
+      companyPhone: settings.companyPhone,
+      customerName: customer.name,
+      customerAddress: customer.address,
+      customerPhone: customer.phone,
+      customerVatin: customer.vatin,
+      items: pdfItems,
+      grossAmount: gross,
+      discountAmount: this.round3(Math.max(0, gross - net)),
+      taxableAmount: net,
+      vatAmount: Number(item.vatAmount),
+      netAmount: Number(item.total),
+      vatExcluded: !!invoice.vatExcluded,
+      logoBase64,
+      template: settings.defaultInvoiceTemplate,
+      documentType: 'credit_note',
+    });
   }
 
   async reject(id: string, reason: string, decidedBy: ActorRef) {

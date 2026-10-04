@@ -20,6 +20,17 @@ export class DeliveryNoteController {
     return this.service.findAll();
   }
 
+  // Delivery Notes > Not Delivered Yet
+  @Get('pending')
+  findPending() {
+    return this.service.findPendingDeliveries();
+  }
+
+  @Post('pending/invoices/:invoiceId/mark-delivered')
+  markInvoiceDelivered(@Param('invoiceId') invoiceId: string) {
+    return this.service.markInvoiceDelivered(invoiceId, 'manual');
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);

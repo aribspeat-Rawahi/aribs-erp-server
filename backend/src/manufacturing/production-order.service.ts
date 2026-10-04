@@ -12,6 +12,7 @@ import { BatchTrackingService } from '../inventory/batch-tracking.service';
 import { BatchSource } from '../inventory/batch-source.enum';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { assertQuantityForUnit } from '../units/units';
+import { BackorderService } from '../stock-alerts/backorder.service';
 
 // Auto-posted Chart-of-Accounts codes for a completed production run —
 // transfers material cost from Raw Materials into Finished Goods
@@ -36,6 +37,7 @@ export class ProductionOrderService {
     private journalPosting: JournalPostingService,
     @InjectDataSource()
     private dataSource: DataSource,
+    private backorders: BackorderService,
   ) {}
 
   findAll() {
@@ -158,13 +160,18 @@ export class ProductionOrderService {
       );
       const existingQty = Number(finishedGood.quantityInStock);
       const producedQty = Number(order.quantityToProduce);
-      const existingValue = existingQty * Number(finishedGood.costPerUnit);
+      // Stock below zero = goods already invoiced but not made yet; they
+      // carry no value, so only real (positive) stock is averaged in.
+      const valuedQty = Math.max(existingQty, 0);
+      const existingValue = valuedQty * Number(finishedGood.costPerUnit);
       const newValue = producedQty * batchUnitCost;
       finishedGood.costPerUnit =
-        existingQty + producedQty > 0 ? (existingValue + newValue) / (existingQty + producedQty) : batchUnitCost;
+        valuedQty + producedQty > 0 ? (existingValue + newValue) / (valuedQty + producedQty) : batchUnitCost;
 
       finishedGood.quantityInStock = existingQty + producedQty;
       await manager.save(finishedGood);
+      // the part that fills invoices already waiting for it leaves the new batch at once
+      await this.batchTrackingService.absorbBackorder(manager, finishedGood.id, existingQty, producedQty);
 
       order.status = ProductionOrderStatus.COMPLETED;
       order.completedAt = new Date();
@@ -207,6 +214,7 @@ export class ProductionOrderService {
       }
     }
 
+    await this.backorders.refresh([result.order.finishedGoodId]);
     return result;
   }
 

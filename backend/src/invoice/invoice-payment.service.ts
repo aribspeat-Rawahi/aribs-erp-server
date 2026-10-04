@@ -89,9 +89,11 @@ export class InvoicePaymentService {
   // Total payments recorded (any invoice) within a date range — the
   // Dashboard's "Total Collected" figure on the Invoice card.
   async getTotalInRange(startDate: string, endDate: string) {
+    // credit notes from sales returns are not money collected
     const payments = await this.repo
       .createQueryBuilder('payment')
       .where('payment.paymentDate BETWEEN :startDate AND :endDate', { startDate, endDate })
+      .andWhere('payment.salesReturnId IS NULL')
       .getMany();
     return this.round3(payments.reduce((sum, p) => sum + Number(p.amount), 0));
   }
@@ -168,6 +170,9 @@ export class InvoicePaymentService {
   async remove(invoiceId: string, paymentId: string) {
     const payment = await this.repo.findOne({ where: { id: paymentId, invoiceId } });
     if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.salesReturnId) {
+      throw new BadRequestException('This is the credit note of an approved sales return and cannot be deleted.');
+    }
 
     if (payment.bankAccountId && payment.bankTransactionId) {
       try {

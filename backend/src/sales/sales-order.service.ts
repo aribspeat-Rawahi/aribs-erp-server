@@ -67,16 +67,12 @@ export class SalesOrderService {
     return { ...savedOrder, items };
   }
 
-  // Step 2: complete the sale — this is what actually deducts finished
-  // goods stock. Checks all items have enough stock before deducting any
-  // (all-or-nothing, same principle as production orders).
-  // Wrapped in a single transaction: the SalesOrder row and every
-  // FinishedGood row involved are pessimistically locked together, so
-  // two concurrent complete() calls on the same order (or on orders that
-  // share a product) can't both pass the "already completed"/stock
-  // checks and double-deduct.
-  async complete(id: string, actor: ActorRef = {}) {
-    const result = await this.dataSource.transaction(async (manager) => {
+  // Step 2: mark the order completed. This is order tracking only: stock
+  // leaves (and Cost of Goods Sold is posted) when the INVOICE is created,
+  // so completing an order never moves stock - otherwise the same goods
+  // would be taken out twice.
+  async complete(id: string, _actor: ActorRef = {}) {
+    return this.dataSource.transaction(async (manager) => {
       const order = await manager.findOne(SalesOrder, {
         where: { id },
         lock: { mode: 'pessimistic_write' },
@@ -85,77 +81,14 @@ export class SalesOrderService {
       if (order.status !== SalesOrderStatus.PENDING) {
         throw new BadRequestException(`Order is already ${order.status}`);
       }
-
       const items = await manager.find(SalesOrderItem, { where: { salesOrderId: id } });
       if (items.length === 0) {
         throw new BadRequestException('This order has no items');
       }
-
-      const lowStockWarnings: string[] = [];
-      // Cost of Goods Sold for this sale — each item's quantity valued at
-      // the product's costPerUnit *before* this sale's own stock deduction
-      // (the weighted-average cost the batches being shipped were carried
-      // at), summed across all items into a single COGS journal line.
-      let totalCost = 0;
-      for (const item of items) {
-        const product = await manager.findOne(FinishedGood, {
-          where: { id: item.finishedGoodId },
-          lock: { mode: 'pessimistic_write' },
-        });
-        if (!product) throw new NotFoundException('Finished good not found');
-        const newQty = Number(product.quantityInStock) - Number(item.quantity);
-        if (newQty < 0) {
-          throw new BadRequestException(
-            `Not enough ${product.name} in stock. Need ${item.quantity}, have ${product.quantityInStock}.`,
-          );
-        }
-        totalCost += Number(item.quantity) * Number(product.costPerUnit);
-        // Batch/Lot Traceability — consume finished good batches FIFO
-        // BEFORE mutating quantityInStock, linking this sales order to
-        // the specific product lot(s) it shipped from.
-        await this.batchTrackingService.consumeFinishedGoodFifo(manager, {
-          finishedGoodId: product.id,
-          quantity: Number(item.quantity),
-          salesOrderId: order.id,
-        });
-        product.quantityInStock = newQty;
-        await manager.save(product);
-        if (newQty <= Number(product.lowStockThreshold)) lowStockWarnings.push(product.name);
-      }
-
       order.status = SalesOrderStatus.COMPLETED;
       await manager.save(order);
-
-      return { order, items, lowStockWarnings, totalCost };
+      return { order, items, lowStockWarnings: [] as string[], totalCost: 0 };
     });
-
-    // Auto-posts (best-effort) Dr 500 Cost of Goods Sold / Cr 1210
-    // Finished Goods Inventory for the shipped items' cost — the
-    // inventory-relief entry a sale needs alongside the invoice's own
-    // Dr AR/Cr Sales entry, so the Inventory asset account actually goes
-    // down when stock leaves and the Trial Balance carries a real COGS
-    // figure instead of the Dashboard computing one ad-hoc.
-    if (result.totalCost > 0) {
-      try {
-        const cogsAccountId = await this.journalPosting.findAccountIdByCode(COGS_CODE);
-        const fgAccountId = await this.journalPosting.findAccountIdByCode(FG_INVENTORY_CODE);
-        await this.journalPosting.postForSource(
-          'sales_order',
-          id,
-          new Date().toISOString().slice(0, 10),
-          `Sales Order ${id} — cost of goods sold`,
-          [
-            { accountId: cogsAccountId, debit: result.totalCost, description: 'Cost of goods sold' },
-            { accountId: fgAccountId, credit: result.totalCost, description: 'Finished goods shipped' },
-          ],
-          actor,
-        );
-      } catch (err) {
-        console.error(`Auto-posting failed for sales_order ${id}:`, err);
-      }
-    }
-
-    return result;
   }
 
   async cancel(id: string) {

@@ -78,7 +78,7 @@ export default function SalesOrders() {
     <div>
       <PageHeader
         title="Sales Orders"
-        subtitle="Orders that deduct finished-goods stock on completion"
+        subtitle="Order tracking — stock leaves when the invoice is created"
         action={<PrimaryButton icon={Plus} requires="edit" onClick={() => setShowNew(true)}>New sales order</PrimaryButton>}
       />
       {loading ? (

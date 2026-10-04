@@ -10,6 +10,7 @@ import { BillOfMaterial } from '../manufacturing/bom.entity';
 import { ProductionOrder, ProductionOrderStatus } from '../manufacturing/production-order.entity';
 import { SalesOrder, SalesOrderStatus } from '../sales/sales-order.entity';
 import { SalesOrderItem } from '../sales/sales-order-item.entity';
+import { BackorderService } from '../stock-alerts/backorder.service';
 import { assertQuantityForUnit, isDecimalUnit, unitLabel } from '../units/units';
 
 @Injectable()
@@ -28,6 +29,7 @@ export class FinishedGoodService {
     @InjectDataSource()
     private dataSource: DataSource,
     private batchTrackingService: BatchTrackingService,
+    private backorders: BackorderService,
   ) {}
 
   findAll() {
@@ -84,22 +86,28 @@ export class FinishedGoodService {
   // Batch tracking: creates a new "manual" FinishedGoodBatch for the
   // scanned-in quantity, so it can still be traced/sold like any other lot.
   async stockIn(dto: ScanStockDto) {
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const item = await manager.findOne(FinishedGood, {
         where: { barcode: dto.barcode },
         lock: { mode: 'pessimistic_write' },
       });
       if (!item) throw new NotFoundException('No product matches this barcode');
       assertQuantityForUnit(dto.quantity, item.unit, item.name);
-      item.quantityInStock = Number(item.quantityInStock) + Number(dto.quantity);
+      const before = Number(item.quantityInStock);
+      item.quantityInStock = before + Number(dto.quantity);
       const saved = await manager.save(item);
       await this.batchTrackingService.createFinishedGoodBatch(manager, {
         finishedGoodId: item.id,
         quantity: Number(dto.quantity),
         source: BatchSource.MANUAL,
       });
+      // goods already invoiced while stock was short leave the new batch at once
+      await this.batchTrackingService.absorbBackorder(manager, item.id, before, Number(dto.quantity));
       return saved;
     });
+    // invoices waiting for this product may now be ready (sends the reminder)
+    await this.backorders.refresh([result.id]);
+    return result;
   }
 
   // Stock OUT — called at point of sale (scan or manual).

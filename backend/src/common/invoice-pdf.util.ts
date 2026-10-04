@@ -47,7 +47,10 @@ export interface InvoicePdfData {
   // Reuses the exact same three layouts for Quotations and Delivery
   // Notes — only the title text changes. Defaults to invoice for
   // backward compatibility with existing call sites.
-  documentType?: 'invoice' | 'quotation' | 'delivery_note';
+  documentType?: 'invoice' | 'quotation' | 'delivery_note' | 'credit_note';
+  // Label for the quotationNumber row (default "Quotation No"); a credit
+  // note uses it for the original invoice number.
+  referenceLabel?: string;
 }
 
 const PAYMENT_TYPE_LABELS: Record<string, string> = {
@@ -75,6 +78,9 @@ function docLabel(data: InvoicePdfData, base: string) {
   }
   if (data.documentType === 'delivery_note') {
     return base.replace(/INVOICE/g, 'DELIVERY NOTE').replace(/Invoice/g, 'Delivery Note');
+  }
+  if (data.documentType === 'credit_note') {
+    return base.replace(/INVOICE/g, 'CREDIT NOTE').replace(/Invoice/g, 'Credit Note');
   }
   return base;
 }
@@ -132,7 +138,7 @@ async function renderClassic(doc: PDFKit.PDFDocument, data: InvoicePdfData) {
     .text(`Date: ${data.issueDate}`, rightColX, 81, { width: rightColWidth, align: 'right' });
   if (data.dueDate) doc.text(`Due: ${data.dueDate}`, rightColX, 94, { width: rightColWidth, align: 'right' });
   if (data.deliveryDate) doc.text(`Delivery: ${data.deliveryDate}`, rightColX, 107, { width: rightColWidth, align: 'right' });
-  if (data.quotationNumber) doc.text(`Quotation No: ${data.quotationNumber}`, rightColX, 120, { width: rightColWidth, align: 'right' });
+  if (data.quotationNumber) doc.text(`${data.referenceLabel || 'Quotation No'}: ${data.quotationNumber}`, rightColX, 120, { width: rightColWidth, align: 'right' });
 
   doc.moveTo(40, 136).lineTo(pageWidth - 40, 136).strokeColor('#4C9A3B').lineWidth(2).stroke();
 
@@ -229,7 +235,7 @@ async function renderFormal(doc: PDFKit.PDFDocument, data: InvoicePdfData) {
     ['Due Date', data.dueDate || '-'],
     ['Delivery Date', data.deliveryDate || '-'],
   ];
-  if (data.quotationNumber) infoRows.push(['Quotation No', data.quotationNumber]);
+  if (data.quotationNumber) infoRows.push([data.referenceLabel || 'Quotation No', data.quotationNumber]);
   const headerHeight = 26 + infoRows.length * 15;
   const midX = boxLeft + (boxRight - boxLeft) * 0.58;
   doc.moveTo(midX, headerTop).lineTo(midX, headerTop + headerHeight).strokeColor(GREEN).lineWidth(1.5).stroke();
@@ -383,7 +389,7 @@ Tel: ${data.companyPhone || '-'} | VATIN: ${data.companyVatin}`,
     ['Delivery Method', deliveryMethodLabel(data.deliveryMethod)],
     ['Delivery Date', data.deliveryDate || '-'],
   ];
-  if (data.quotationNumber) rightRows.push(['Quotation No', data.quotationNumber]);
+  if (data.quotationNumber) rightRows.push([data.referenceLabel || 'Quotation No', data.quotationNumber]);
   const infoH = pad * 2 + Math.max(4, rightRows.length) * 15 - 15;
   doc.moveTo(boxLeft, infoTop + infoH).lineTo(boxRight, infoTop + infoH).strokeColor(GREEN_DARK).lineWidth(1.5).stroke();
   const infoMid = boxLeft + (boxRight - boxLeft) * 0.55;

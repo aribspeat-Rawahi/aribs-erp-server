@@ -15,6 +15,10 @@ export class SalesBatchConsumption {
   @Column({ nullable: true })
   salesOrderId: string;
 
+  // Stock now leaves with the invoice (sales orders no longer move stock).
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  invoiceId: string | null;
+
   @Column()
   finishedGoodBatchId: string;
 

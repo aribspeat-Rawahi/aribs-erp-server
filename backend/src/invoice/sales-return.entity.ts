@@ -72,6 +72,14 @@ export class SalesReturn {
   @Column({ nullable: true, type: 'text' })
   rejectionReason?: string;
 
+  // On approval: the part that reduced the invoice's balance due, and the
+  // part paid back to the customer (only when they had already paid).
+  @Column('decimal', { precision: 12, scale: 3, default: 0 })
+  appliedToInvoice: number;
+
+  @Column('decimal', { precision: 12, scale: 3, default: 0 })
+  refundAmount: number;
+
   @OneToMany(() => SalesReturnItem, (item) => item.salesReturn, { cascade: true })
   items: SalesReturnItem[];
 

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { DeliveryNote, DeliveryNoteStatus } from './delivery-note.entity';
 import { DeliveryNoteItem } from './delivery-note-item.entity';
 import { CreateDeliveryNoteDto, UpdateDeliveryNoteDto } from './dto/delivery-note.dto';
@@ -11,6 +11,29 @@ import { generateInvoicePdf, InvoicePdfItem } from '../common/invoice-pdf.util';
 import { UnitService } from '../units/unit.service';
 import { DocumentLinkService } from '../document-link/document-link.service';
 import { buildWhatsappLinks, toWhatsappPhone } from '../common/whatsapp-phone.util';
+import { Invoice } from '../invoice/invoice.entity';
+import { InvoiceItem } from '../invoice/invoice-item.entity';
+import { Customer } from '../customer/customer.entity';
+import { BackorderService, ProductShortage } from '../stock-alerts/backorder.service';
+
+// One row of Delivery Notes > Not Delivered Yet.
+export interface PendingDeliveryRow {
+  type: 'invoice' | 'delivery_note';
+  id: string; // invoice id or delivery note id (by type)
+  number: string; // INV-... or DN-...
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  customerId: string;
+  customerName: string;
+  issueDate: string;
+  deliveryDate: string | null;
+  deliveryMethod: string | null;
+  items: { description: string; quantity: number; unit: string; finishedGoodId: string | null }[];
+  waitingForStock: boolean;
+  shortages: ProductShortage[];
+  stockReadyAt: Date | null;
+  createdAt: Date;
+}
 
 @Injectable()
 export class DeliveryNoteService {
@@ -24,6 +47,8 @@ export class DeliveryNoteService {
     private activityLog: ActivityLogService,
     private documentLinks: DocumentLinkService,
     private units: UnitService,
+    private backorders: BackorderService,
+    @InjectDataSource() private dataSource: DataSource,
   ) {}
 
   private round3(n: number) {
@@ -127,11 +152,127 @@ export class DeliveryNoteService {
     return { ...saved, items };
   }
 
+  // A delivered delivery note also marks its invoice delivered.
   async markDelivered(id: string) {
     const note = await this.repo.findOne({ where: { id } });
     if (!note) throw new NotFoundException('Delivery note not found');
     note.status = DeliveryNoteStatus.DELIVERED;
-    return this.repo.save(note);
+    const saved = await this.repo.save(note);
+    if (note.invoiceNumber) {
+      const invoice = await this.dataSource.getRepository(Invoice).findOne({ where: { invoiceNumber: note.invoiceNumber } });
+      if (invoice) await this.markInvoiceDelivered(invoice.id, 'delivery_note');
+    }
+    return saved;
+  }
+
+  // "Mark delivered" on an invoice row (no delivery note), or via its
+  // delivery note. Lives here (not in InvoiceService) because
+  // InvoiceService already depends on this service.
+  async markInvoiceDelivered(invoiceId: string, via: 'manual' | 'delivery_note' = 'manual') {
+    const invoiceRepo = this.dataSource.getRepository(Invoice);
+    const invoice = await invoiceRepo.findOne({ where: { id: invoiceId } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.deliveryStatus === 'delivered') return invoice;
+    invoice.deliveryStatus = 'delivered';
+    invoice.deliveredVia = via;
+    invoice.deliveredAt = new Date();
+    await invoiceRepo.save(invoice);
+    // a delivered invoice no longer waits for stock, so the shortage moves
+    // to the next pending invoice of those products
+    const items = await this.dataSource.getRepository(InvoiceItem).find({ where: { invoiceId } });
+    await this.backorders.refresh([...new Set(items.map((i) => i.finishedGoodId).filter((x): x is string => !!x))]);
+    return invoice;
+  }
+
+  // Delivery Notes > Not Delivered Yet:
+  //  - invoices not delivered yet (In Store ones are delivered at once)
+  //    that have no delivery note;
+  //  - delivery notes not delivered yet (showing their invoice number).
+  // An invoice with a delivery note appears only as that delivery note.
+  async findPendingDeliveries(): Promise<PendingDeliveryRow[]> {
+    const invoiceRepo = this.dataSource.getRepository(Invoice);
+    const pendingInvoices = await invoiceRepo.find({ where: { deliveryStatus: 'pending' }, order: { createdAt: 'DESC' } });
+    const pendingNotes = await this.repo.find({ where: { status: DeliveryNoteStatus.DRAFT }, order: { createdAt: 'DESC' } });
+
+    // invoice numbers that already have a delivery note (any status)
+    const invoiceNumbers = pendingInvoices.map((i) => i.invoiceNumber);
+    const notesForInvoices = invoiceNumbers.length
+      ? await this.repo.find({ where: { invoiceNumber: In(invoiceNumbers) }, select: { id: true, invoiceNumber: true } })
+      : [];
+    const hasNote = new Set(notesForInvoices.map((n) => n.invoiceNumber));
+    const invoicesWithoutNote = pendingInvoices.filter((i) => !hasNote.has(i.invoiceNumber));
+
+    // invoices linked to the pending notes (for the stock status)
+    const linkedNumbers = [...new Set(pendingNotes.map((n) => n.invoiceNumber).filter((x): x is string => !!x))];
+    const linkedInvoices = linkedNumbers.length ? await invoiceRepo.find({ where: { invoiceNumber: In(linkedNumbers) } }) : [];
+    const invoiceByNumber = new Map(linkedInvoices.map((i) => [i.invoiceNumber, i]));
+
+    const invoiceItems = invoicesWithoutNote.length
+      ? await this.dataSource.getRepository(InvoiceItem).find({ where: { invoiceId: In(invoicesWithoutNote.map((i) => i.id)) } })
+      : [];
+    const noteItems = pendingNotes.length ? await this.itemRepo.find({ where: { deliveryNoteId: In(pendingNotes.map((n) => n.id)) } }) : [];
+
+    const customerIds = [...new Set([...invoicesWithoutNote.map((i) => i.customerId), ...pendingNotes.map((n) => n.customerId)])];
+    const customers = customerIds.length ? await this.dataSource.getRepository(Customer).find({ where: { id: In(customerIds) } }) : [];
+    const customerName = new Map(customers.map((c) => [c.id, c.name]));
+
+    const shortages = await this.backorders.computeShortages();
+    const line = (i: { description: string; quantity: number | string; unit: string; finishedGoodId?: string | null }) => ({
+      description: i.description,
+      quantity: Number(i.quantity),
+      unit: i.unit,
+      finishedGoodId: i.finishedGoodId || null,
+    });
+
+    const rows: PendingDeliveryRow[] = [];
+    for (const inv of invoicesWithoutNote) {
+      const short = shortages.get(inv.id) || [];
+      rows.push({
+        type: 'invoice',
+        id: inv.id,
+        number: inv.invoiceNumber,
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        customerId: inv.customerId,
+        customerName: customerName.get(inv.customerId) || '',
+        issueDate: inv.issueDate,
+        deliveryDate: inv.deliveryDate || null,
+        deliveryMethod: inv.deliveryMethod || null,
+        items: invoiceItems.filter((it) => it.invoiceId === inv.id).map(line),
+        waitingForStock: short.length > 0,
+        shortages: short,
+        stockReadyAt: inv.stockReadyAt || null,
+        createdAt: inv.createdAt,
+      });
+    }
+    for (const note of pendingNotes) {
+      const inv = note.invoiceNumber ? invoiceByNumber.get(note.invoiceNumber) : undefined;
+      const short = inv && inv.deliveryStatus === 'pending' ? shortages.get(inv.id) || [] : [];
+      rows.push({
+        type: 'delivery_note',
+        id: note.id,
+        number: note.deliveryNoteNumber,
+        invoiceId: inv?.id || null,
+        invoiceNumber: note.invoiceNumber || null,
+        customerId: note.customerId,
+        customerName: customerName.get(note.customerId) || '',
+        issueDate: note.issueDate,
+        deliveryDate: note.deliveryDate || inv?.deliveryDate || null,
+        deliveryMethod: note.deliveryMethod || null,
+        items: noteItems.filter((it) => it.deliveryNoteId === note.id).map(line),
+        waitingForStock: short.length > 0,
+        shortages: short,
+        stockReadyAt: inv?.stockReadyAt || null,
+        createdAt: note.createdAt,
+      });
+    }
+    // nearest delivery date first; rows without a date last
+    rows.sort((a, b) => {
+      if (a.deliveryDate && b.deliveryDate && a.deliveryDate !== b.deliveryDate) return a.deliveryDate < b.deliveryDate ? -1 : 1;
+      if (!!a.deliveryDate !== !!b.deliveryDate) return a.deliveryDate ? -1 : 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+    return rows;
   }
 
   // Simpler than Invoice/Quotation edits — no same-day/approval rules,

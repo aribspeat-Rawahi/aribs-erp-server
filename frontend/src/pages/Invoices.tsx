@@ -30,8 +30,12 @@ interface Invoice {
   deliveryMethod?: string;
   discountAmount?: number;
   dueDate?: string;
+  deliveryDate?: string;
   vatExcluded?: boolean;
   template?: string;
+  deliveryStatus?: string;
+  waitingForStock?: boolean;
+  stockReadyAt?: string | null;
   items?: { finishedGoodId?: string; description: string; quantity: number; unit?: string; unitPrice: number }[];
 }
 
@@ -42,6 +46,8 @@ interface InvoicePayment {
   paymentType?: string;
   paymentDate: string;
   note?: string;
+  // set = credit note from an approved sales return (not money received)
+  salesReturnId?: string | null;
 }
 interface BankAccount {
   id: string;
@@ -72,6 +78,8 @@ interface SalesReturn {
   decidedByEmail?: string;
   decidedAt?: string;
   rejectionReason?: string;
+  appliedToInvoice?: number | string;
+  refundAmount?: number | string;
   items: SalesReturnItem[];
 }
 
@@ -79,6 +87,12 @@ const paymentStatusTone: Record<string, string> = {
   paid: 'bg-brand-50 text-brand-700',
   partial: 'bg-amber-50 text-amber-700',
   due: 'bg-red-50 text-red-600',
+};
+
+const returnStatusLabel: Record<string, string> = {
+  pending: 'Waiting for approval',
+  approved: 'Approved — added to stock',
+  rejected: 'Rejected',
 };
 
 const returnStatusTone: Record<string, string> = {
@@ -104,6 +118,7 @@ export default function Invoices() {
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
   const [returningInvoice, setReturningInvoice] = useState<Invoice | null>(null);
   const [rejectingReturn, setRejectingReturn] = useState<SalesReturn | null>(null);
+  const [approvingReturn, setApprovingReturn] = useState<SalesReturn | null>(null);
 
   function load() {
     setLoading(true);
@@ -122,8 +137,15 @@ export default function Invoices() {
   }, []);
 
   useEffect(() => {
-    if (tab === 'returns') loadReturns();
+    if (tab === 'returns') {
+      loadReturns();
+      load(); // invoice numbers for the return rows
+    }
   }, [tab]);
+
+  function invoiceNumber(id: string) {
+    return invoices.find((i) => i.id === id)?.invoiceNumber || '';
+  }
 
   function customerName(id: string) {
     return customers.find((c) => c.id === id)?.name || id;
@@ -167,15 +189,6 @@ export default function Invoices() {
     }
   }
 
-  async function approveReturn(id: string) {
-    try {
-      await api.post(`/sales-returns/${id}/approve`);
-      loadReturns();
-    } catch (err: any) {
-      window.alert(err?.response?.data?.message || 'Could not approve this return.');
-    }
-  }
-
   async function convert(id: string) {
     if (!window.confirm('Convert this invoice into a delivery note?')) return;
     try {
@@ -210,6 +223,7 @@ export default function Invoices() {
         deliveryMethod: editing.deliveryMethod,
         discountAmount: editing.discountAmount,
         dueDate: editing.dueDate,
+        deliveryDate: editing.deliveryDate,
         vatExcluded: editing.vatExcluded,
         template: editing.template,
       }
@@ -245,9 +259,13 @@ export default function Invoices() {
             {invoices.map((inv) => (
               <div key={inv.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-ink whitespace-nowrap">{inv.invoiceNumber}</div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-sm font-medium text-ink whitespace-nowrap">{inv.invoiceNumber}</span>
+                    <DeliveryBadge invoice={inv} />
+                  </div>
                   <div className="text-xs text-muted">
                     {customerName(inv.customerId)} · {labelFor(PAYMENT_TYPE_OPTIONS, inv.paymentType)} · {labelFor(DELIVERY_METHOD_OPTIONS, inv.deliveryMethod)}
+                    {inv.deliveryDate && inv.deliveryStatus !== 'delivered' ? ` · Delivery ${inv.deliveryDate}` : ''}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end sm:gap-3">
@@ -323,7 +341,6 @@ export default function Invoices() {
         <NewSalesReturnModal
           invoice={returningInvoice}
           finishedGoods={finishedGoods}
-          bankAccounts={bankAccounts}
           onClose={() => setReturningInvoice(null)}
           onSaved={() => {
             setReturningInvoice(null);
@@ -351,22 +368,35 @@ export default function Invoices() {
                       <div className="text-sm font-medium text-ink">{customerName(r.customerId)}</div>
                       <div className="text-xs text-muted">
                         {r.returnNumber} · {r.date}
+                        {invoiceNumber(r.invoiceId) ? ` · ${invoiceNumber(r.invoiceId)}` : ''}
                         {r.reason ? ` · ${r.reason}` : ''}
                         {r.status === 'rejected' && r.rejectionReason ? ` · Rejected: ${r.rejectionReason}` : ''}
                       </div>
                       {!!r.items?.length && <div className="text-xs text-muted break-words">{returnItemsSummary(r)}</div>}
+                      {r.status === 'approved' && (
+                        <div className="text-xs text-muted">
+                          Credit on invoice {Number(r.appliedToInvoice || 0).toFixed(3)} OMR
+                          {Number(r.refundAmount || 0) > 0 ? ` · Refunded ${Number(r.refundAmount).toFixed(3)} OMR` : ''}
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="text-sm font-semibold text-ink whitespace-nowrap">{Number(r.total).toFixed(3)} OMR</div>
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${returnStatusTone[r.status] || 'bg-black/5 text-ink/70'}`}>
-                        {r.status}
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${returnStatusTone[r.status] || 'bg-black/5 text-ink/70'}`}>
+                        {returnStatusLabel[r.status] || r.status}
                       </span>
+                      {r.status === 'approved' && (
+                        <div className="flex items-center gap-1.5">
+                          <IconButton icon={Eye} title="View credit note" onClick={() => viewPdf(`/sales-returns/${r.id}/pdf`)} />
+                          <IconButton icon={Download} title="Download credit note" onClick={() => downloadPdf(`/sales-returns/${r.id}/pdf`, `Credit-Note-${r.returnNumber}.pdf`)} />
+                        </div>
+                      )}
                       {r.status === 'pending' && (
                         <div className="flex items-center gap-1.5">
                           <IconButton icon={Trash2} tone="danger" title="Delete return" requires="full" onClick={() => removeReturn(r.id)} />
                           {canDecide && (
                             <>
-                              <IconButton icon={Check} tone="success" title="Approve" requires="edit" requiresModule="approvals" onClick={() => approveReturn(r.id)} />
+                              <IconButton icon={Check} tone="success" title="Approve & add to stock" requires="edit" requiresModule="approvals" onClick={() => setApprovingReturn(r)} />
                               <IconButton icon={X} tone="danger" title="Reject" requires="edit" requiresModule="approvals" onClick={() => setRejectingReturn(r)} />
                             </>
                           )}
@@ -377,6 +407,21 @@ export default function Invoices() {
                 ))}
               </div>
             </Card>
+          )}
+          {approvingReturn && (
+            <ApproveSalesReturnModal
+              item={approvingReturn}
+              invoiceNumber={invoiceNumber(approvingReturn.invoiceId)}
+              summary={returnItemsSummary(approvingReturn)}
+              bankAccounts={bankAccounts}
+              onClose={() => setApprovingReturn(null)}
+              onSaved={() => {
+                setApprovingReturn(null);
+                loadReturns();
+                load();
+                api.get('/bank-accounts').then((res) => setBankAccounts(res.data));
+              }}
+            />
           )}
           {rejectingReturn && (
             <RejectSalesReturnModal
@@ -462,7 +507,11 @@ function PaymentLedgerModal({
 
   async function removePayment(id: string) {
     if (!window.confirm('Remove this payment entry? This cannot be undone.')) return;
-    await api.delete(`/invoices/${invoice.id}/payments/${id}`);
+    try {
+      await api.delete(`/invoices/${invoice.id}/payments/${id}`);
+    } catch (err: any) {
+      window.alert(err?.response?.data?.message || 'Could not remove this payment.');
+    }
     load();
     onChanged();
   }
@@ -498,11 +547,13 @@ function PaymentLedgerModal({
                   <div className="text-sm min-w-0">
                     <div className="font-medium text-ink">{Number(p.amount).toFixed(3)} OMR</div>
                     <div className="text-xs text-muted">
-                      {p.paymentDate} · {labelFor(PAYMENT_TYPE_OPTIONS, p.paymentType)}
+                      {p.paymentDate} · {p.salesReturnId ? 'Credit note (sales return)' : labelFor(PAYMENT_TYPE_OPTIONS, p.paymentType)}
                       {p.note ? ` · ${p.note}` : ''}
                     </div>
                   </div>
-                  <IconButton icon={Trash2} tone="danger" title="Remove" requires="full" onClick={() => removePayment(p.id)} />
+                  {!p.salesReturnId && (
+                    <IconButton icon={Trash2} tone="danger" title="Remove" requires="full" onClick={() => removePayment(p.id)} />
+                  )}
                 </div>
               ))}
             </div>
@@ -570,13 +621,11 @@ function PaymentLedgerModal({
 function NewSalesReturnModal({
   invoice,
   finishedGoods,
-  bankAccounts,
   onClose,
   onSaved,
 }: {
   invoice: Invoice;
   finishedGoods: FinishedGood[];
-  bankAccounts: BankAccount[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -600,7 +649,6 @@ function NewSalesReturnModal({
   });
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState('');
-  const [bankAccountId, setBankAccountId] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -629,7 +677,6 @@ function NewSalesReturnModal({
         items: lines,
         date,
         reason: reason || undefined,
-        bankAccountId: bankAccountId || undefined,
       });
       onSaved();
     } catch (err: any) {
@@ -685,16 +732,10 @@ function NewSalesReturnModal({
         <Field label="Reason (optional)">
           <input className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)} />
         </Field>
-        <Field label="Refund from account (optional — auto-withdraws on approval)">
-          <select className={inputClass} value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
-            <option value="">— Credit against Accounts Receivable only —</option>
-            {bankAccounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({Number(a.currentBalance).toFixed(3)} OMR)
-              </option>
-            ))}
-          </select>
-        </Field>
+        <p className="text-xs text-muted">
+          The return amount is worked out from this invoice: unit price, its share of the discount, and VAT. Stock and money
+          move only when an Admin, CEO, MD or Accountant approves it.
+        </p>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
@@ -742,6 +783,119 @@ function RejectSalesReturnModal({
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
           <PrimaryButton type="submit" requires="edit" requiresModule="approvals" disabled={busy}>{busy ? 'Saving…' : 'Reject'}</PrimaryButton>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// Invoice list badge: delivery + stock status.
+function DeliveryBadge({ invoice }: { invoice: Invoice }) {
+  const base = 'text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap';
+  if (invoice.deliveryStatus === 'delivered') return <span className={`${base} bg-brand-50 text-brand-700`}>Delivered</span>;
+  if (invoice.waitingForStock) return <span className={`${base} bg-red-600 text-white`}>Waiting for stock</span>;
+  if (invoice.stockReadyAt) return <span className={`${base} bg-emerald-100 text-emerald-700`}>Stock ready</span>;
+  if (invoice.deliveryStatus === 'pending') return <span className={`${base} bg-amber-50 text-amber-700`}>Not delivered</span>;
+  return null;
+}
+
+// Approve & add to stock: shows how the money settles before approving -
+// first a credit on the invoice (lowers what the customer owes), the rest
+// (only if they had already paid) refunded from the chosen account.
+function ApproveSalesReturnModal({
+  item,
+  invoiceNumber,
+  summary,
+  bankAccounts,
+  onClose,
+  onSaved,
+}: {
+  item: SalesReturn;
+  invoiceNumber: string;
+  summary: string;
+  bankAccounts: BankAccount[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [settlement, setSettlement] = useState<{
+    total: number;
+    outstanding: number;
+    appliedToInvoice: number;
+    refundAmount: number;
+    refundAccountRequired: boolean;
+  } | null>(null);
+  const [bankAccountId, setBankAccountId] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api
+      .get(`/sales-returns/${item.id}/settlement`)
+      .then((res) => setSettlement(res.data))
+      .catch((err) => setError(err?.response?.data?.message || 'Could not load the amounts.'));
+  }, [item.id]);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api.post(`/sales-returns/${item.id}/approve`, { bankAccountId: bankAccountId || undefined });
+      onSaved();
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Could not approve this return.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const row = (label: string, value: number, strong = false) => (
+    <div className="flex justify-between gap-3">
+      <span className="text-muted">{label}</span>
+      <span className={strong ? 'font-semibold text-ink' : 'text-ink'}>{value.toFixed(3)} OMR</span>
+    </div>
+  );
+
+  return (
+    <Modal title={`Approve return — ${item.returnNumber}`} onClose={onClose}>
+      <form onSubmit={onSubmit} className="space-y-3">
+        <div className="text-sm">
+          <div className="text-ink">{summary}</div>
+          {invoiceNumber && <div className="text-xs text-muted">Invoice {invoiceNumber}</div>}
+        </div>
+        <div className="rounded-lg border border-black/10 p-3 text-sm space-y-1">
+          {row('Return amount (after discount)', Number(item.subtotal))}
+          {row('VAT', Number(item.vatAmount))}
+          {row('Total', Number(item.total), true)}
+        </div>
+        {!settlement ? (
+          !error && <div className="text-sm text-muted">Loading…</div>
+        ) : (
+          <div className="rounded-lg border border-black/10 p-3 text-sm space-y-1">
+            {row('Still due on the invoice', settlement.outstanding)}
+            {row('Credit note on the invoice', settlement.appliedToInvoice, true)}
+            {row('Refund to customer', settlement.refundAmount, true)}
+          </div>
+        )}
+        {settlement?.refundAccountRequired && (
+          <Field label="Refund from account">
+            <select className={inputClass} value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} required>
+              <option value="">Choose bank / cash account</option>
+              {bankAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({Number(a.currentBalance).toFixed(3)} OMR)
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+        <p className="text-xs text-muted">The returned goods are added back to stock when you approve.</p>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2 pt-2">
+          <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
+          <PrimaryButton type="submit" requires="edit" requiresModule="approvals" disabled={busy || !settlement}>
+            {busy ? 'Approving…' : 'Approve & add to stock'}
+          </PrimaryButton>
         </div>
       </form>
     </Modal>

@@ -87,6 +87,7 @@ interface ProductionBatchConsumption {
 interface SalesBatchConsumption {
   id: string;
   salesOrderId?: string;
+  invoiceId?: string | null;
   finishedGoodBatchId: string;
   finishedGoodId: string;
   quantityConsumed: number | string;
@@ -136,7 +137,7 @@ function formatRatio(qty: number | string): string {
 }
 
 export default function Inventory() {
-  const { hasAnyRole } = useAuth();
+  const { hasAnyRole, canAccessModule } = useAuth();
   const canDelete = hasAnyRole(['admin']);
   const [tab, setTab] = useState<Tab>('finished');
 
@@ -166,6 +167,7 @@ export default function Inventory() {
   // Traceability
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
+  const [invoiceRefs, setInvoiceRefs] = useState<{ id: string; invoiceNumber: string; customerId: string }[]>([]);
   const [rawFilter, setRawFilter] = useState('');
   const [finishedFilter, setFinishedFilter] = useState('');
   const [rawBatches, setRawBatches] = useState<RawMaterialBatch[]>([]);
@@ -179,6 +181,8 @@ export default function Inventory() {
     api.get('/suppliers').then((res) => setSuppliers(res.data));
     api.get('/customers').then((res) => setCustomers(res.data));
     api.get('/sales-orders').then((res) => setSalesOrders(res.data));
+    // stock leaves with invoices: trace rows name the invoice
+    if (canAccessModule('invoices')) api.get('/invoices').then((res) => setInvoiceRefs(res.data)).catch(() => undefined);
     api.get('/finished-goods').then((res) => {
       setFinishedGoods(res.data);
       setSelectedFg((prev) => prev || res.data[0]?.id || '');
@@ -260,8 +264,13 @@ export default function Inventory() {
   function fgUnit(id: string) {
     return finishedGoods.find((f) => f.id === id)?.unit;
   }
-  function customerNameForOrder(salesOrderId?: string) {
-    if (!salesOrderId) return 'Manual stock-out (no sales order)';
+  function customerNameForOrder(salesOrderId?: string, invoiceId?: string | null) {
+    if (invoiceId) {
+      const inv = invoiceRefs.find((i) => i.id === invoiceId);
+      if (!inv) return 'Invoice (deleted or not visible)';
+      return `${inv.invoiceNumber} — ${customers.find((c) => c.id === inv.customerId)?.name || 'Unknown customer'}`;
+    }
+    if (!salesOrderId) return 'Manual stock-out / delivery to waiting invoice';
     const order = salesOrders.find((o) => o.id === salesOrderId);
     if (!order) return 'Unknown sales order';
     return customers.find((c) => c.id === order.customerId)?.name || 'Unknown customer';
@@ -1473,7 +1482,7 @@ function RawBatchTraceModal({
   finishedGoodUnit: (id: string) => string | undefined;
   supplierName: string | null;
   finishedGoodName: (id: string) => string;
-  customerNameForOrder: (salesOrderId?: string) => string;
+  customerNameForOrder: (salesOrderId?: string, invoiceId?: string | null) => string;
   onClose: () => void;
 }) {
   const [loading, setLoading] = useState(true);
@@ -1535,7 +1544,7 @@ function RawBatchTraceModal({
                       <div className="mt-2 pl-3 border-l-2 border-black/10 space-y-1">
                         {sales.map((s) => (
                           <div key={s.id} className="text-xs text-muted">
-                            → {formatQuantityWithUnit(s.quantityConsumed, finishedGoodUnit(s.finishedGoodId))} sold to {customerNameForOrder(s.salesOrderId)}
+                            → {formatQuantityWithUnit(s.quantityConsumed, finishedGoodUnit(s.finishedGoodId))} sold to {customerNameForOrder(s.salesOrderId, s.invoiceId)}
                           </div>
                         ))}
                       </div>
@@ -1569,7 +1578,7 @@ function FinishedBatchTraceModal({
   rawMaterialName: (id: string) => string;
   rawMaterialUnit: (id: string) => string | undefined;
   supplierName: (id?: string) => string | null;
-  customerNameForOrder: (salesOrderId?: string) => string;
+  customerNameForOrder: (salesOrderId?: string, invoiceId?: string | null) => string;
   onClose: () => void;
 }) {
   const [loading, setLoading] = useState(true);
@@ -1640,7 +1649,7 @@ function FinishedBatchTraceModal({
                 <div className="space-y-1.5">
                   {sales.map((s) => (
                     <div key={s.id} className="text-sm text-ink">
-                      {formatQuantityWithUnit(s.quantityConsumed, finishedGoodUnit)} → {customerNameForOrder(s.salesOrderId)}
+                      {formatQuantityWithUnit(s.quantityConsumed, finishedGoodUnit)} → {customerNameForOrder(s.salesOrderId, s.invoiceId)}
                     </div>
                   ))}
                 </div>

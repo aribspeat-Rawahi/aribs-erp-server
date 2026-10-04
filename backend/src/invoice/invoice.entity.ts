@@ -85,6 +85,35 @@ export class Invoice {
   @Column('decimal', { precision: 12, scale: 3, default: 0 })
   paidAmount: number;
 
+  // --- Delivery ---------------------------------------------------------
+  // 'pending' until the goods reach the customer: "In Store" sales are
+  // delivered at once; others when marked delivered on the Delivery Notes
+  // > Not Delivered Yet page, or when their delivery note is delivered.
+  @Column({ length: 20, default: 'pending' })
+  deliveryStatus: string;
+
+  @Column({ type: 'datetime', nullable: true })
+  deliveredAt: Date | null;
+
+  // how it became delivered: in_store | manual | delivery_note
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  deliveredVia: string | null;
+
+  // --- Stock --------------------------------------------------------------
+  // Stock is taken out when the invoice is created (it may go below zero).
+  // true while some of this invoice's products are still short.
+  @Column({ default: false })
+  waitingForStock: boolean;
+
+  // when the missing stock arrived (a reminder email was sent then)
+  @Column({ type: 'datetime', nullable: true })
+  stockReadyAt: Date | null;
+
+  // Cost of the goods currently taken out of stock for this invoice
+  // (posted as Cost of Goods Sold / Finished Goods Inventory).
+  @Column('decimal', { precision: 12, scale: 3, default: 0 })
+  cogsAmount: number;
+
   // Version history: starts at 1. Editing on the SAME calendar day as
   // issueDate just re-generates the PDF at the same version (overwrite).
   // Editing on a DIFFERENT day bumps this and keeps the old PDF file.

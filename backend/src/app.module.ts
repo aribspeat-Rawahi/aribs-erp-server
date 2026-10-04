@@ -35,6 +35,7 @@ import { DocumentLinkModule } from './document-link/document-link.module';
 import { PublicDocumentModule } from './public-document/public-document.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
 import { UnitsModule } from './units/units.module';
+import { StockAlertsModule } from './stock-alerts/stock-alerts.module';
 
 @Module({
   imports: [
@@ -96,6 +97,7 @@ import { UnitsModule } from './units/units.module';
     PublicDocumentModule,
     MonitoringModule,
     UnitsModule,
+    StockAlertsModule,
     SchemaCheckModule,
   ],
 })

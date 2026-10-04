@@ -27,6 +27,11 @@ export class InvoiceItem {
   @Column({ length: 10, default: 'pcs' })
   unit: string;
 
+  // How much of this line was missing from stock when the invoice was
+  // saved (kept as a record; the live shortage is recalculated).
+  @Column('decimal', { precision: 12, scale: 3, default: 0 })
+  shortQuantity: number;
+
   @Column('decimal', { precision: 12, scale: 3 })
   unitPrice: number;
 

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -21,6 +21,11 @@ import { ApprovalRequestType, ApprovalRequestStatus } from '../approval/approval
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { DocumentLinkService } from '../document-link/document-link.service';
 import { UnitService } from '../units/unit.service';
+import { FinishedGood } from '../inventory/finished-good.entity';
+import { BatchTrackingService } from '../inventory/batch-tracking.service';
+import { BatchSource } from '../inventory/batch-source.enum';
+import { BackorderService } from '../stock-alerts/backorder.service';
+import { SalesReturn, SalesReturnStatus } from './sales-return.entity';
 import { buildWhatsappLinks, toWhatsappPhone } from '../common/whatsapp-phone.util';
 
 // Auto-posted Chart-of-Accounts codes for invoice issuance (Dr Accounts
@@ -29,6 +34,9 @@ import { buildWhatsappLinks, toWhatsappPhone } from '../common/whatsapp-phone.ut
 const ACCOUNTS_RECEIVABLE_CODE = '1100';
 const SALES_REVENUE_CODE = '1402';
 const VAT_PAYABLE_CODE = '2100';
+// Cost of goods sold when stock leaves with the invoice.
+const COGS_CODE = '500';
+const FG_INVENTORY_CODE = '1210';
 
 // One customer's row in the Accounts Receivable Aging Report — exported
 // so ReportingService (and its DTO-less controller response type) can
@@ -75,6 +83,9 @@ export class InvoiceService {
     private journalPosting: JournalPostingService,
     private documentLinks: DocumentLinkService,
     private units: UnitService,
+    private batchTracking: BatchTrackingService,
+    private backorders: BackorderService,
+    @InjectDataSource() private dataSource: DataSource,
   ) {
     this.uploadDir = this.config.get('INVOICE_UPLOAD_DIR') || './uploads/invoices';
     fs.mkdirSync(this.uploadDir, { recursive: true });
@@ -309,6 +320,126 @@ export class InvoiceService {
     return filePath;
   }
 
+  // ---- Stock --------------------------------------------------------------
+  // Stock leaves when the invoice is created (sales orders no longer move
+  // stock). Allowed to go below zero: the invoice is then "waiting for
+  // stock" until production/stock-in covers it (see BackorderService).
+  // Editing an invoice moves only the difference; deleting puts it back.
+  // Cost of Goods Sold is kept in invoice.cogsAmount and posted as one
+  // journal entry per invoice (source 'invoice_cogs').
+  private async syncStock(
+    invoice: Invoice,
+    oldLines: { finishedGoodId?: string | null; quantity: number | string }[],
+    newLines: { finishedGoodId?: string | null; quantity: number | string }[],
+    actor?: { userId?: string; email?: string },
+  ) {
+    const delta = new Map<string, number>(); // + = goods out, - = goods back
+    for (const l of newLines) if (l.finishedGoodId) delta.set(l.finishedGoodId, (delta.get(l.finishedGoodId) || 0) + Number(l.quantity));
+    for (const l of oldLines) if (l.finishedGoodId) delta.set(l.finishedGoodId, (delta.get(l.finishedGoodId) || 0) - Number(l.quantity));
+
+    let cogs = Number(invoice.cogsAmount || 0);
+    await this.dataSource.transaction(async (manager) => {
+      for (const [productId, rawDelta] of delta) {
+        const change = this.round3(rawDelta);
+        if (Math.abs(change) < 0.0005) continue;
+        const good = await manager.findOne(FinishedGood, { where: { id: productId }, lock: { mode: 'pessimistic_write' } });
+        if (!good) continue;
+        const before = Number(good.quantityInStock);
+        const cost = Number(good.costPerUnit || 0);
+        if (change > 0) {
+          // only what is physically there comes out of batches
+          const fromStock = Math.min(change, Math.max(before, 0));
+          if (fromStock > 0.0005) {
+            await this.batchTracking.consumeFinishedGoodFifo(manager, {
+              finishedGoodId: productId,
+              quantity: fromStock,
+              invoiceId: invoice.id,
+              noTopUp: true,
+            });
+          }
+          good.quantityInStock = this.round3(before - change);
+        } else {
+          const back = -change;
+          const after = this.round3(before + back);
+          // batches only hold real (positive) stock
+          const batchQty = this.round3(Math.max(0, after) - Math.max(0, before));
+          if (batchQty > 0.0005) {
+            await this.batchTracking.createFinishedGoodBatch(manager, { finishedGoodId: productId, quantity: batchQty, source: BatchSource.MANUAL });
+          }
+          good.quantityInStock = after;
+        }
+        cogs = this.round3(cogs + change * cost);
+        await manager.save(good);
+      }
+      if (cogs < 0) cogs = 0;
+      await manager.update(Invoice, { id: invoice.id }, { cogsAmount: cogs });
+    });
+    invoice.cogsAmount = cogs;
+
+    try {
+      if (cogs > 0) {
+        const cogsAccountId = await this.journalPosting.findAccountIdByCode(COGS_CODE);
+        const fgAccountId = await this.journalPosting.findAccountIdByCode(FG_INVENTORY_CODE);
+        await this.journalPosting.postForSource(
+          'invoice_cogs',
+          invoice.id,
+          invoice.issueDate,
+          `Cost of goods sold — invoice ${invoice.invoiceNumber}`,
+          [
+            { accountId: cogsAccountId, debit: cogs, description: 'Cost of goods sold' },
+            { accountId: fgAccountId, credit: cogs, description: 'Finished goods sold' },
+          ],
+          actor || {},
+          invoice.invoiceNumber,
+        );
+      } else {
+        await this.journalPosting.removeForSource('invoice_cogs', invoice.id);
+      }
+    } catch (err) {
+      console.error(`Auto-posting failed for invoice_cogs ${invoice.id}:`, err);
+    }
+
+    await this.backorders.refresh([...delta.keys()]);
+  }
+
+  // Saves on each line how much was missing from stock right now.
+  private async recordShortages(invoice: Invoice, items: InvoiceItem[]) {
+    const productIds = [...new Set(items.map((i) => i.finishedGoodId).filter((x): x is string => !!x))];
+    if (!productIds.length) return;
+    const shortages = (await this.backorders.computeShortages(productIds)).get(invoice.id) || [];
+    for (const item of items) {
+      const missing = shortages.find((s) => s.finishedGoodId === item.finishedGoodId);
+      const short = missing ? Math.min(Number(item.quantity), missing.short) : 0;
+      if (missing) missing.short = this.round3(missing.short - short);
+      if (Number(item.shortQuantity || 0) !== short) {
+        item.shortQuantity = short;
+        await this.itemRepo.update({ id: item.id }, { shortQuantity: short });
+      }
+    }
+    const waiting = shortages.length > 0 && items.some((i) => Number(i.shortQuantity) > 0);
+    if (waiting !== invoice.waitingForStock) {
+      invoice.waitingForStock = waiting;
+      await this.invoiceRepo.update({ id: invoice.id }, { waitingForStock: waiting, stockReadyAt: null });
+    }
+  }
+
+  private async hasApprovedReturns(invoiceId: string) {
+    return (await this.dataSource.getRepository(SalesReturn).count({ where: { invoiceId, status: SalesReturnStatus.APPROVED } })) > 0;
+  }
+
+  // "In Store" = the customer took the goods at the counter -> delivered.
+  private applyDeliveryRule(invoice: Invoice) {
+    if (invoice.deliveryMethod === 'in_store' && invoice.deliveryStatus !== 'delivered') {
+      invoice.deliveryStatus = 'delivered';
+      invoice.deliveredVia = 'in_store';
+      invoice.deliveredAt = new Date();
+    } else if (invoice.deliveryMethod !== 'in_store' && invoice.deliveredVia === 'in_store') {
+      invoice.deliveryStatus = 'pending';
+      invoice.deliveredVia = null;
+      invoice.deliveredAt = null;
+    }
+  }
+
   // Creates a brand-new invoice: sequential number, VAT calc, PDF v1.
   // Template used = dto.template override, else the org-wide default
   // from Settings (so switching the default in Settings changes future
@@ -384,6 +515,11 @@ export class InvoiceService {
       }),
     );
     await this.itemRepo.save(items);
+
+    this.applyDeliveryRule(saved);
+    await this.invoiceRepo.save(saved);
+    await this.syncStock(saved, [], items, opts?.requestedBy);
+    await this.recordShortages(saved, items);
 
     const pdfPath = await this.writePdfAndGetPath(saved, items, customer.name, customer.vatin, customer.address, customer.phone);
     saved.pdfPath = pdfPath;
@@ -465,6 +601,12 @@ export class InvoiceService {
       }
     }
 
+    // Items/amounts can't change once a sales return was approved against
+    // this invoice - the return's credit note and refund are based on them.
+    if ((dto.items || discountChanged || vatExcludedChanged) && (await this.hasApprovedReturns(id))) {
+      throw new BadRequestException('This invoice has an approved sales return, so its items and amounts can no longer be changed.');
+    }
+
     // Nothing blocks (or this is a trusted replay from an approved
     // request) — apply for real.
     if (dto.customerId !== undefined) invoice.customerId = dto.customerId;
@@ -475,6 +617,7 @@ export class InvoiceService {
     if (dto.deliveryMethod !== undefined) invoice.deliveryMethod = dto.deliveryMethod;
     if (dto.template !== undefined) invoice.template = dto.template;
     if (dto.vatExcluded !== undefined) invoice.vatExcluded = dto.vatExcluded;
+    this.applyDeliveryRule(invoice);
 
     let items = existingItems;
     if (calc) {
@@ -500,6 +643,12 @@ export class InvoiceService {
       invoice.discountAmount = calc.discountAmount;
       invoice.vatAmount = calc.vatAmount;
       invoice.total = calc.total;
+    }
+
+    if (dto.items) {
+      await this.invoiceRepo.save(invoice);
+      await this.syncStock(invoice, existingItems, items, opts?.requestedBy);
+      await this.recordShortages(invoice, items);
     }
 
     // The total may have just changed — re-check it against whatever is
@@ -602,7 +751,12 @@ export class InvoiceService {
   async remove(id: string, deletedBy?: { userId?: string; email?: string }) {
     const invoice = await this.invoiceRepo.findOne({ where: { id } });
     if (!invoice) throw new NotFoundException('Invoice not found');
+    if (await this.hasApprovedReturns(id)) {
+      throw new BadRequestException('This invoice has an approved sales return and cannot be deleted.');
+    }
     const items = await this.itemRepo.find({ where: { invoiceId: id } });
+    // put the goods back in stock (and remove its cost of goods sold)
+    await this.syncStock(invoice, items, [], deletedBy);
     if (items.length > 0) await this.itemRepo.remove(items);
     await this.invoicePaymentService.removeAllForInvoice(id);
     if (invoice.pdfPath && fs.existsSync(invoice.pdfPath)) {
@@ -934,7 +1088,9 @@ export class InvoiceService {
           date: p.paymentDate,
           type: 'payment',
           reference: inv?.invoiceNumber || '-',
-          description: `Payment received${inv ? ' — ' + inv.invoiceNumber : ''}`,
+          description: p.salesReturnId
+            ? `Credit note (sales return)${inv ? ' — ' + inv.invoiceNumber : ''}`
+            : `Payment received${inv ? ' — ' + inv.invoiceNumber : ''}`,
           debit: 0,
           credit: Number(p.amount),
           sortKey: `${p.paymentDate}_1_${inv?.invoiceNumber || ''}`,

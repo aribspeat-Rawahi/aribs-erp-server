@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import api from '../api/client';
 import { PrimaryButton, SecondaryButton, Modal, Field, inputClass } from './ui';
 import { PAYMENT_TYPE_OPTIONS, DELIVERY_METHOD_OPTIONS, TEMPLATE_OPTIONS } from '../constants';
-import { UNIT_OPTIONS, normalizeUnit, quantityInputStep, quantityInputValue, snapQuantityToUnit, unitLabel } from '../utils/formatQuantity';
+import { UNIT_OPTIONS, formatQuantityWithUnit, normalizeUnit, quantityInputStep, quantityInputValue, snapQuantityToUnit, unitLabel } from '../utils/formatQuantity';
 
 export type DocType = 'quotation' | 'invoice' | 'delivery_note';
 
@@ -15,6 +15,7 @@ interface FinishedGood {
   name: string;
   unit: string;
   sellingPrice: number;
+  quantityInStock?: number | string;
 }
 
 interface DocItem {
@@ -121,6 +122,45 @@ export default function NewDocumentModal({
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Invoice stock check: stock leaves when the invoice is saved and may go
+  // below zero. Live stock is fetched when the form opens; when editing,
+  // this invoice's own quantities are already out of stock, so only the
+  // extra counts.
+  const [liveStock, setLiveStock] = useState<Record<string, number> | null>(null);
+  useEffect(() => {
+    if (docType !== 'invoice') return;
+    api
+      .get('/finished-goods')
+      .then((res) => setLiveStock(Object.fromEntries((res.data as FinishedGood[]).map((f) => [f.id, Number(f.quantityInStock) || 0]))))
+      .catch(() => setLiveStock(Object.fromEntries(finishedGoods.map((f) => [f.id, Number(f.quantityInStock) || 0]))));
+  }, [docType]);
+  const shortages =
+    docType === 'invoice' && liveStock
+      ? (() => {
+          const wanted = new Map<string, number>();
+          for (const it of items) if (it.finishedGoodId) wanted.set(it.finishedGoodId, (wanted.get(it.finishedGoodId) || 0) + (Number(it.quantity) || 0));
+          const already = new Map<string, number>();
+          for (const it of existing?.items || []) if (it.finishedGoodId) already.set(it.finishedGoodId, (already.get(it.finishedGoodId) || 0) + Number(it.quantity));
+          const out: { name: string; unit: string; need: number; inStock: number; short: number }[] = [];
+          for (const [id, need] of wanted) {
+            const inStock = Math.max(0, liveStock[id] ?? 0);
+            const extra = need - (already.get(id) || 0);
+            const short = Math.round((extra - inStock) * 1000) / 1000;
+            if (extra > 0 && short > 0) {
+              const fg = finishedGoods.find((f) => f.id === id);
+              out.push({ name: fg?.name || 'Item', unit: normalizeUnit(fg?.unit), need: extra, inStock, short });
+            }
+          }
+          return out;
+        })()
+      : [];
+  const stockShort = shortages.length > 0;
+  // Goods that aren't in stock can't be handed over at the counter: switch
+  // to "Delivery on Site" so the sales person sets the delivery date.
+  useEffect(() => {
+    if (stockShort && deliveryMethod !== 'on_site') setDeliveryMethod('on_site');
+  }, [stockShort]);
+
   // Delivery date only makes sense for an on-site delivery — clear and
   // lock the field whenever the delivery method isn't "on site".
   const deliveryDateEnabled = deliveryMethod === 'on_site';
@@ -140,6 +180,14 @@ export default function NewDocumentModal({
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (stockShort) {
+      if (!deliveryDate) {
+        setError('Stock is short - choose the delivery date before saving.');
+        return;
+      }
+      const list = shortages.map((s) => `- ${s.name}: ${formatQuantityWithUnit(s.short, s.unit)} short`).join('\n');
+      if (!window.confirm(`Not enough stock:\n${list}\n\nThe invoice will be marked "Waiting for stock" until the stock comes in. Save anyway?`)) return;
+    }
     setBusy(true);
     setError('');
     setNotice('');
@@ -324,6 +372,23 @@ export default function NewDocumentModal({
           <SecondaryButton onClick={addItem}>+ Add item</SecondaryButton>
         </div>
 
+        {stockShort && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="font-semibold">Not enough stock</div>
+            <ul className="mt-1 space-y-0.5">
+              {shortages.map((s) => (
+                <li key={s.name}>
+                  {s.name}: need {formatQuantityWithUnit(s.need, s.unit)}, in stock {formatQuantityWithUnit(s.inStock, s.unit)} -{' '}
+                  <span className="font-semibold">{formatQuantityWithUnit(s.short, s.unit)} short</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-1 text-xs">
+              The invoice will be marked "Waiting for stock". Choose the delivery date below - you'll get a reminder when the stock arrives.
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3">
           {
             <Field label="Payment terms">
@@ -339,8 +404,8 @@ export default function NewDocumentModal({
           }
           <Field label="Delivery method">
             <select className={inputClass} value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value)}>
-              <option value="">-</option>
-              {DELIVERY_METHOD_OPTIONS.map((d) => (
+              {!stockShort && <option value="">-</option>}
+              {DELIVERY_METHOD_OPTIONS.filter((d) => !stockShort || d.value === 'on_site').map((d) => (
                 <option key={d.value} value={d.value}>
                   {d.label}
                 </option>
@@ -364,11 +429,13 @@ export default function NewDocumentModal({
             </Field>
           )}
           {
-            <Field label="Delivery date">
+            <Field label={stockShort ? 'Delivery date (required)' : 'Delivery date'}>
               <input
-                className={`${inputClass} ${!deliveryDateEnabled ? 'bg-black/5 text-muted cursor-not-allowed' : ''}`}
+                className={`${inputClass} ${!deliveryDateEnabled ? 'bg-black/5 text-muted cursor-not-allowed' : ''} ${stockShort && !deliveryDate ? 'border-red-400' : ''}`}
                 type="date"
                 value={deliveryDate}
+                min={stockShort ? new Date().toISOString().slice(0, 10) : undefined}
+                required={stockShort}
                 disabled={!deliveryDateEnabled}
                 title={!deliveryDateEnabled ? 'Only settable when delivery method is "Delivery on Site"' : undefined}
                 onChange={(e) => setDeliveryDate(e.target.value)}

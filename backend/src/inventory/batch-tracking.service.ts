@@ -180,7 +180,7 @@ export class BatchTrackingService {
   // manual/barcode stock-out. Call BEFORE mutating FinishedGood.quantityInStock.
   async consumeFinishedGoodFifo(
     manager: EntityManager,
-    opts: { finishedGoodId: string; quantity: number; salesOrderId?: string },
+    opts: { finishedGoodId: string; quantity: number; salesOrderId?: string; invoiceId?: string; noTopUp?: boolean },
   ) {
     await this.ensureFinishedGoodOpeningBalance(manager, opts.finishedGoodId);
 
@@ -199,6 +199,7 @@ export class BatchTrackingService {
       await manager.save(
         manager.create(SalesBatchConsumption, {
           salesOrderId: opts.salesOrderId,
+          invoiceId: opts.invoiceId || null,
           finishedGoodBatchId: batch.id,
           finishedGoodId: opts.finishedGoodId,
           quantityConsumed: take,
@@ -207,7 +208,7 @@ export class BatchTrackingService {
       remaining -= take;
     }
 
-    if (remaining > EPSILON) {
+    if (remaining > EPSILON && !opts.noTopUp) {
       const topUp = await this.createFinishedGoodBatch(manager, {
         finishedGoodId: opts.finishedGoodId,
         quantity: remaining,
@@ -218,12 +219,25 @@ export class BatchTrackingService {
       await manager.save(
         manager.create(SalesBatchConsumption, {
           salesOrderId: opts.salesOrderId,
+          invoiceId: opts.invoiceId || null,
           finishedGoodBatchId: topUp.id,
           finishedGoodId: opts.finishedGoodId,
           quantityConsumed: remaining,
         }),
       );
     }
+  }
+
+  // Stock can go below zero (invoices sell goods not made yet). When stock
+  // then comes in, the part that fills that gap was already sold, so it is
+  // taken straight back out of the new batch(es) - batches stay equal to
+  // real stock. Call AFTER creating the new batch, with the stock level
+  // from BEFORE the increase.
+  async absorbBackorder(manager: EntityManager, finishedGoodId: string, stockBefore: number, added: number) {
+    const backorder = Math.max(0, -Number(stockBefore));
+    const qty = Math.min(backorder, Number(added));
+    if (qty <= EPSILON) return;
+    await this.consumeFinishedGoodFifo(manager, { finishedGoodId, quantity: qty, noTopUp: true });
   }
 
   // --- Read side (Traceability page) ---

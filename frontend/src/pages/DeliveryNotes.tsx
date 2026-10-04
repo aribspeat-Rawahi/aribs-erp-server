@@ -3,9 +3,10 @@ import { Plus, Eye, Pencil, Download, MessageCircle, Share2, Trash2, PackageChec
 import api from '../api/client';
 import { viewPdf, downloadPdf, openWhatsapp, sharePdf } from '../api/docActions';
 import { useAuth } from '../context/AuthContext';
-import { PageHeader, PrimaryButton, IconButton, Card, EmptyState } from '../components/ui';
+import { PageHeader, PrimaryButton, IconButton, Card, EmptyState, Pill } from '../components/ui';
 import { labelFor, PAYMENT_TYPE_OPTIONS, DELIVERY_METHOD_OPTIONS } from '../constants';
 import NewDocumentModal, { ExistingDoc } from '../components/NewDocumentModal';
+import { formatQuantityWithUnit } from '../utils/formatQuantity';
 
 interface Customer {
   id: string;
@@ -30,6 +31,24 @@ interface DeliveryNote {
   items?: { finishedGoodId?: string; description: string; quantity: number; unit?: string; unitPrice: number }[];
 }
 
+// One row of "Not Delivered Yet" (GET /delivery-notes/pending): an invoice
+// with no delivery note, or a delivery note not delivered yet.
+interface PendingRow {
+  type: 'invoice' | 'delivery_note';
+  id: string;
+  number: string;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  customerName: string;
+  issueDate: string;
+  deliveryDate: string | null;
+  deliveryMethod: string | null;
+  items: { description: string; quantity: number; unit: string }[];
+  waitingForStock: boolean;
+  shortages: { name: string; unit: string; short: number }[];
+  stockReadyAt: string | null;
+}
+
 const statusTone: Record<string, string> = {
   draft: 'bg-amber-50 text-amber-700',
   delivered: 'bg-brand-50 text-brand-700',
@@ -44,11 +63,20 @@ export default function DeliveryNotes() {
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const [editing, setEditing] = useState<DeliveryNote | null>(null);
+  const [tab, setTab] = useState<'all' | 'pending'>('all');
+  const [pending, setPending] = useState<PendingRow[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(true);
 
   function load() {
     setLoading(true);
     api.get('/delivery-notes').then((res) => setNotes(res.data)).finally(() => setLoading(false));
+    loadPending();
   }
+  function loadPending() {
+    setPendingLoading(true);
+    api.get('/delivery-notes/pending').then((res) => setPending(res.data)).finally(() => setPendingLoading(false));
+  }
+  const waitingCount = pending.filter((r) => r.waitingForStock).length;
 
   useEffect(() => {
     load();
@@ -60,7 +88,18 @@ export default function DeliveryNotes() {
     return customers.find((c) => c.id === id)?.name || id;
   }
 
-  async function markDelivered(id: string) {
+  async function markInvoiceDelivered(row: PendingRow) {
+    if (row.waitingForStock && !window.confirm(`${row.number} is still waiting for stock. Mark it delivered anyway?`)) return;
+    try {
+      await api.post(`/delivery-notes/pending/invoices/${row.id}/mark-delivered`);
+      loadPending();
+    } catch (err: any) {
+      window.alert(err?.response?.data?.message || 'Could not mark this invoice as delivered.');
+    }
+  }
+
+  async function markDelivered(id: string, waitingForStock = false) {
+    if (waitingForStock && !window.confirm('This delivery is still waiting for stock. Mark it delivered anyway?')) return;
     try {
       await api.post(`/delivery-notes/${id}/mark-delivered`);
       load();
@@ -103,7 +142,76 @@ export default function DeliveryNotes() {
         subtitle="What physically went out to the customer"
         action={<PrimaryButton icon={Plus} requires="edit" onClick={() => setShowNew(true)}>New delivery note</PrimaryButton>}
       />
-      {loading ? (
+      <div className="mb-4 flex items-center gap-2">
+        <Pill
+          value={tab}
+          onChange={(v) => setTab(v as 'all' | 'pending')}
+          options={[
+            { value: 'all', label: 'All Delivery Notes' },
+            { value: 'pending', label: `Not Delivered Yet${pending.length ? ` (${pending.length})` : ''}` },
+          ]}
+        />
+        {waitingCount > 0 && (
+          <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white" title="Waiting for stock">
+            {waitingCount} waiting for stock
+          </span>
+        )}
+      </div>
+      {tab === 'pending' ? (
+        pendingLoading ? (
+          <div className="text-sm text-muted">Loading…</div>
+        ) : pending.length === 0 ? (
+          <EmptyState>Everything has been delivered.</EmptyState>
+        ) : (
+          <Card>
+            <div className="divide-y divide-black/5">
+              {pending.map((r) => {
+                const pdfPath = r.type === 'invoice' ? `/invoices/${r.id}/pdf` : `/delivery-notes/${r.id}/pdf`;
+                return (
+                  <div key={r.type + r.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-sm font-medium text-ink whitespace-nowrap">{r.number}</span>
+                        {r.type === 'delivery_note' && r.invoiceNumber && (
+                          <span className="text-xs text-muted whitespace-nowrap">Invoice {r.invoiceNumber}</span>
+                        )}
+                        {r.waitingForStock ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-red-600 text-white whitespace-nowrap">Waiting for stock</span>
+                        ) : r.stockReadyAt ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700 whitespace-nowrap">Stock ready</span>
+                        ) : null}
+                      </div>
+                      <div className="text-xs text-muted">
+                        {r.customerName} · Issued {r.issueDate}
+                        {r.deliveryDate ? ` · Delivery ${r.deliveryDate}` : ' · No delivery date'}
+                      </div>
+                      <div className="text-xs text-ink/80 break-words">
+                        {r.items.map((it) => `${it.description} × ${formatQuantityWithUnit(it.quantity, it.unit)}`).join(', ')}
+                      </div>
+                      {r.waitingForStock && (
+                        <div className="text-xs text-red-600 break-words">
+                          Short: {r.shortages.map((s) => `${s.name} ${formatQuantityWithUnit(s.short, s.unit)}`).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <IconButton icon={Eye} title="View PDF" onClick={() => viewPdf(pdfPath)} />
+                      <IconButton icon={Download} title="Download PDF" onClick={() => downloadPdf(pdfPath, `${r.number}.pdf`)} />
+                      <IconButton
+                        icon={PackageCheck}
+                        tone="success"
+                        title="Mark delivered"
+                        requires="edit"
+                        onClick={() => (r.type === 'invoice' ? markInvoiceDelivered(r) : markDelivered(r.id, r.waitingForStock))}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )
+      ) : loading ? (
         <div className="text-sm text-muted">Loading…</div>
       ) : notes.length === 0 ? (
         <EmptyState>No delivery notes yet.</EmptyState>

@@ -254,4 +254,34 @@ export class EmailService {
       text: body,
     });
   }
+
+  // Invoices that were waiting for stock can now be delivered.
+  // Recipients: STOCK_ALERT_EMAILS (falls back to ERROR_ALERT_EMAILS).
+  async sendStockReadyNotice(invoiceLines: string[]) {
+    const recipients = (this.config.get('STOCK_ALERT_EMAILS') || this.config.get('ERROR_ALERT_EMAILS') || '')
+      .split(',')
+      .map((e: string) => e.trim())
+      .filter(Boolean);
+    if (recipients.length === 0 || invoiceLines.length === 0) return;
+
+    const subject = `Stock ready to deliver: ${invoiceLines.length} invoice(s)`;
+    const body = [
+      'Stock has arrived for invoices that were waiting for it:',
+      '',
+      ...invoiceLines.map((l) => `- ${l}`),
+      '',
+      'See Delivery Notes > Not Delivered Yet in the ERP.',
+    ].join('\n');
+
+    if (!this.transporter) {
+      this.logger.warn(`SMTP not configured — would have sent to [${recipients.join(', ')}]: ${subject}`);
+      return;
+    }
+    await this.transporter.sendMail({
+      from: this.config.get('SMTP_FROM') || 'erp@aribs.net',
+      to: recipients.join(','),
+      subject,
+      text: body,
+    });
+  }
 }
