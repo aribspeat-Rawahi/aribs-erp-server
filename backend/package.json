@@ -18,6 +18,8 @@
     "migration:check": "nest build && typeorm -d dist/data-source.js migration:generate src/migrations/Unused --check"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1146.0",
+    "@aws-sdk/lib-storage": "^3.1146.0",
     "@nestjs/common": "^12.1.0",
     "@nestjs/config": "^12.0.1",
     "@nestjs/core": "^12.1.0",
@@ -40,6 +42,7 @@
     "qrcode": "^1.5.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "tar": "^7.5.22",
     "typeorm": "^0.3.20"
   },
   "overrides": {

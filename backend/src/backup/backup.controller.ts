@@ -2,6 +2,7 @@ import { BadRequestException, Controller, Get, Param, Post, Req, Res, UploadedFi
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { BackupService } from './backup.service';
+import { OffsiteBackupService } from './offsite-backup.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
@@ -19,7 +20,37 @@ export class BackupController {
   constructor(
     private backupService: BackupService,
     private activityLog: ActivityLogService,
+    private offsite: OffsiteBackupService,
   ) {}
+
+  // Off-site (Cloudflare R2) backup: is it set up, and when did it last work.
+  @Roles(UserRole.ADMIN)
+  @Get('offsite/status')
+  offsiteStatus() {
+    return this.offsite.getStatus();
+  }
+
+  // "Back up now" - starts an off-site backup in the background (it can
+  // take a while with many uploaded files); the page polls the status.
+  @Roles(UserRole.ADMIN)
+  @Post('offsite/run')
+  async runOffsite(@Req() req: AuthedRequest) {
+    if (!this.offsite.isConfigured()) {
+      throw new BadRequestException('Off-site backup is not set up on this server yet (OFFSITE_BACKUP_* settings).');
+    }
+    if (this.offsite.isRunning()) return { started: false, running: true };
+
+    const dump = await this.backupService.createSqlDump();
+    void this.offsite.run(dump);
+    await this.activityLog.log({
+      action: 'backup.offsite_started',
+      entityType: 'backup',
+      userId: req.user?.userId,
+      userEmail: req.user?.email,
+      details: {},
+    });
+    return { started: true, running: true };
+  }
 
   // Admin-only — a full database dump is the most sensitive export this
   // app can produce (every customer, invoice, user password hash, etc.),

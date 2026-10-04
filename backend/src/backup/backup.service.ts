@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import mysqldump from 'mysqldump';
 import mysql, { Connection } from 'mysql2/promise';
+import { OffsiteBackupService } from './offsite-backup.service';
 
 export interface ScheduledBackupInfo {
   filename: string;
@@ -40,7 +41,10 @@ export class BackupService {
   private backupDir: string;
   private scheduledBackupDir: string;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private offsite: OffsiteBackupService,
+  ) {
     // Safety backups taken automatically right before a restore live here
     // (never the download-only backups from createSqlDump(), which are
     // never written to disk) — same uploads-folder convention as every
@@ -70,6 +74,9 @@ export class BackupService {
       const filePath = path.join(this.scheduledBackupDir, dump.filename);
       fs.writeFileSync(filePath, dump.sql, 'utf8');
       this.pruneOldScheduledBackups();
+      // Then the encrypted off-site copy (only if OFFSITE_BACKUP_* is set;
+      // records its own result and emails on failure, never throws).
+      await this.offsite.run(dump);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error(

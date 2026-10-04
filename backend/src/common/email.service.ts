@@ -218,4 +218,40 @@ export class EmailService {
       text: body,
     });
   }
+
+  // Sent when the nightly off-site backup (Cloudflare R2) fails, so a
+  // silently broken backup gets noticed. Recipients: OFFSITE_BACKUP_ALERT_EMAILS.
+  async sendOffsiteBackupFailed(errorMessage: string, lastSuccessAt: string | null) {
+    const recipients = (this.config.get('OFFSITE_BACKUP_ALERT_EMAILS') || '')
+      .split(',')
+      .map((e: string) => e.trim())
+      .filter(Boolean);
+    if (recipients.length === 0) {
+      this.logger.warn('OFFSITE_BACKUP_ALERT_EMAILS not set — skipping the off-site backup failure email.');
+      return;
+    }
+
+    const subject = 'ARIBS ERP: off-site backup FAILED';
+    const body = [
+      'Tonight\'s off-site backup (Cloudflare R2) did not complete.',
+      '',
+      `Error: ${errorMessage}`,
+      `Last successful off-site backup: ${lastSuccessAt || 'never'}`,
+      '',
+      'The local backup on the server is not affected. Check Settings > Database Backup in the ERP,',
+      'and the OFFSITE_BACKUP_* settings on the hosting panel.',
+    ].join('\n');
+
+    if (!this.transporter) {
+      this.logger.warn(`SMTP not configured — would have sent to [${recipients.join(', ')}]: ${subject}`);
+      return;
+    }
+
+    await this.transporter.sendMail({
+      from: this.config.get('SMTP_FROM') || 'erp@aribs.net',
+      to: recipients.join(','),
+      subject,
+      text: body,
+    });
+  }
 }

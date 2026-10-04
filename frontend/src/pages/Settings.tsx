@@ -48,6 +48,17 @@ export function logoUrl(updatedAt?: string) {
   return `${api.defaults.baseURL}/settings/logo?v=${encodeURIComponent(updatedAt || '')}`;
 }
 
+interface OffsiteStatus {
+  configured: boolean;
+  missingSettings: string[];
+  running: boolean;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  lastFile: string | null;
+  lastSizeBytes: number | null;
+  lastError: string | null;
+}
+
 export default function Settings() {
   // Database backup/restore is Admin-only on the server (CEO/MD can open
   // Settings but not the backup tools), so only Admin sees that card.
@@ -110,6 +121,38 @@ export default function Settings() {
   useEffect(() => {
     if (isAdmin) loadScheduledBackups();
   }, [isAdmin]);
+
+  // Off-site backup (encrypted copy in Cloudflare R2): status + "Back up now".
+  const [offsite, setOffsite] = useState<OffsiteStatus | null>(null);
+  const [offsiteError, setOffsiteError] = useState('');
+
+  function loadOffsiteStatus() {
+    api
+      .get<OffsiteStatus>('/backup/offsite/status')
+      .then((res) => setOffsite(res.data))
+      .catch(() => setOffsite(null));
+  }
+
+  useEffect(() => {
+    if (isAdmin) loadOffsiteStatus();
+  }, [isAdmin]);
+
+  // While a backup is running, check again every few seconds.
+  useEffect(() => {
+    if (!offsite?.running) return;
+    const timer = window.setTimeout(loadOffsiteStatus, 4000);
+    return () => window.clearTimeout(timer);
+  }, [offsite]);
+
+  async function onRunOffsite() {
+    setOffsiteError('');
+    try {
+      await api.post('/backup/offsite/run');
+      loadOffsiteStatus();
+    } catch (err: any) {
+      setOffsiteError(err?.response?.data?.message || 'Could not start the off-site backup.');
+    }
+  }
 
   async function onDownloadScheduled(filename: string) {
     setScheduledDownloading(filename);
@@ -591,6 +634,50 @@ export default function Settings() {
               ))}
             </div>
           )}
+        </div>
+
+        <div className="mt-5 pt-4 border-t border-black/10">
+          <div className="text-sm font-semibold text-ink mb-1">Off-site Backup (Cloudflare R2)</div>
+          <p className="text-xs text-muted mb-3">
+            Every night an encrypted copy of the database and all uploaded files is also stored outside this server,
+            so the data survives even if the hosting account is lost. Copies are kept for 30 days.
+          </p>
+          {!offsite ? (
+            <p className="text-xs text-muted">Loading…</p>
+          ) : !offsite.configured ? (
+            <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+              Not set up on this server yet. Missing settings: {offsite.missingSettings.join(', ')}.
+            </p>
+          ) : (
+            <div className="space-y-2 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-black/[0.03] rounded-lg px-3 py-2">
+                <div className="flex flex-col min-w-0">
+                  <span className="font-medium text-ink">
+                    {offsite.running
+                      ? 'Backing up now…'
+                      : offsite.lastSuccessAt
+                        ? `Last successful: ${new Date(offsite.lastSuccessAt).toLocaleString()}`
+                        : 'No off-site backup yet'}
+                  </span>
+                  {offsite.lastSuccessAt && offsite.lastSizeBytes != null && !offsite.running && (
+                    <span className="text-muted break-all">
+                      {formatBackupSize(offsite.lastSizeBytes)} · {offsite.lastFile}
+                    </span>
+                  )}
+                </div>
+                <SecondaryButton onClick={onRunOffsite} disabled={offsite.running}>
+                  {offsite.running ? 'Running…' : 'Back up now'}
+                </SecondaryButton>
+              </div>
+              {offsite.lastError && !offsite.running && (
+                <p className="text-red-600 bg-red-50 rounded-lg px-3 py-2 break-words">
+                  Last attempt failed ({offsite.lastAttemptAt ? new Date(offsite.lastAttemptAt).toLocaleString() : '-'}):{' '}
+                  {offsite.lastError}
+                </p>
+              )}
+            </div>
+          )}
+          {offsiteError && <p className="text-xs text-red-600 mt-2">{offsiteError}</p>}
         </div>
 
         <div className="mt-5 pt-4 border-t border-black/10">
