@@ -54,13 +54,15 @@ export class SupplierPaymentService {
       }
       const apAccountId = await this.journalPosting.findAccountIdByCode(ACCOUNTS_PAYABLE_CODE);
       const bankJournalAccountId = await this.bankAccountService.ensureJournalAccountId(payment.bankAccountId);
+      const po = await this.orderRepo.findOne({ where: { id: payment.purchaseOrderId } });
+      const ref = po?.poNumber || payment.purchaseOrderId;
       await this.journalPosting.postForSource(
         'supplier_payment',
         payment.id,
         payment.paymentDate,
-        `Payment to supplier — PO ${payment.purchaseOrderId}`,
+        `Payment to supplier — ${ref}`,
         [
-          { accountId: apAccountId, debit: Number(payment.amount), description: `PO ${payment.purchaseOrderId}` },
+          { accountId: apAccountId, debit: Number(payment.amount), description: ref },
           { accountId: bankJournalAccountId, credit: Number(payment.amount), description: 'Payment to supplier' },
         ],
         actor,
@@ -81,20 +83,21 @@ export class SupplierPaymentService {
   async create(purchaseOrderId: string, dto: CreateSupplierPaymentDto, actor: ActorRef = {}) {
     const order = await this.orderRepo.findOne({ where: { id: purchaseOrderId } });
     if (!order) throw new NotFoundException('Purchase order not found');
-    if (order.status !== PurchaseOrderStatus.RECEIVED) {
-      throw new BadRequestException('Only a RECEIVED purchase order has an Accounts Payable balance to pay.');
+    if (order.status !== PurchaseOrderStatus.RECEIVED && order.status !== PurchaseOrderStatus.PARTIALLY_RECEIVED) {
+      throw new BadRequestException('Nothing has been received on this order yet, so nothing is owed.');
     }
 
     const amount = this.round3(Number(dto.amount));
     const alreadyPaid = Number(order.paidAmount || 0);
-    const total = Number(order.total || 0);
+    // what is owed = value of the goods actually received
+    const total = Number(order.receivedTotal || 0);
     // 0.001 tolerance matches the 3-decimal OMR precision used everywhere
     // else, so settling the exact remaining balance never gets rejected
     // over a floating-point sliver.
     if (alreadyPaid + amount > total + 0.001) {
       const remaining = this.round3(Math.max(0, total - alreadyPaid));
       throw new BadRequestException(
-        `This payment (${amount.toFixed(3)} OMR) would exceed the remaining balance (${remaining.toFixed(3)} OMR). Reduce the amount, or check the order total.`,
+        `This payment (${amount.toFixed(3)} OMR) would exceed what is owed for the goods received (${remaining.toFixed(3)} OMR). Pay ahead with a vendor prepayment instead.`,
       );
     }
 
@@ -117,7 +120,7 @@ export class SupplierPaymentService {
             type: BankTransactionType.WITHDRAWAL,
             amount,
             date: dto.paymentDate || this.todayStr(),
-            note: `Payment to supplier — PO ${order.id}`,
+            note: `Payment to supplier — ${order.poNumber}`,
           }),
         );
         bankTransactionId = txn.id;
@@ -150,6 +153,9 @@ export class SupplierPaymentService {
   async remove(purchaseOrderId: string, paymentId: string) {
     const payment = await this.repo.findOne({ where: { id: paymentId, purchaseOrderId } });
     if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.creditSource) {
+      throw new BadRequestException('This row is a credit from a purchase return, vendor credit or prepayment - it is removed together with that record, not here.');
+    }
 
     if (payment.bankAccountId && payment.bankTransactionId) {
       try {
@@ -176,7 +182,7 @@ export class SupplierPaymentService {
       const remaining = await this.repo.find({ where: { purchaseOrderId } });
       const paidAmount = this.round3(remaining.reduce((sum, p) => sum + Number(p.amount), 0));
       order.paidAmount = paidAmount;
-      order.paymentStatus = computePaymentStatus(paidAmount, Number(order.total || 0));
+      order.paymentStatus = computePaymentStatus(paidAmount, Number(order.receivedTotal || 0));
       await this.orderRepo.save(order);
     }
     return { ok: true };
@@ -189,10 +195,12 @@ export class SupplierPaymentService {
   async restoreDeleted(data: Record<string, unknown>, actor: ActorRef = {}) {
     const order = await this.orderRepo.findOne({ where: { id: String(data.purchaseOrderId) } });
     if (!order) throw new BadRequestException('The purchase order of this payment no longer exists.');
-    if (order.status !== PurchaseOrderStatus.RECEIVED) throw new BadRequestException('The purchase order is no longer received, so it has nothing to pay.');
+    if (order.status !== PurchaseOrderStatus.RECEIVED && order.status !== PurchaseOrderStatus.PARTIALLY_RECEIVED) {
+      throw new BadRequestException('Nothing is owed on this purchase order any more.');
+    }
     const amount = this.round3(Number(data.amount));
     const paid = Number(order.paidAmount || 0);
-    if (paid + amount > Number(order.total || 0) + 0.001) {
+    if (paid + amount > Number(order.receivedTotal || 0) + 0.001) {
       throw new BadRequestException(`Putting this payment back (${amount.toFixed(3)} OMR) would exceed what is still owed on this order.`);
     }
     const payment = await this.dataSource.transaction(async (manager) => {
@@ -203,7 +211,7 @@ export class SupplierPaymentService {
           type: BankTransactionType.WITHDRAWAL,
           amount,
           date: String(data.paymentDate),
-          note: `Payment to supplier — PO ${order.id}`,
+          note: `Payment to supplier — ${order.poNumber}`,
         });
       }
       await manager.insert(SupplierPayment, { ...rowForInsert(data), amount, bankTransactionId } as any);
@@ -211,9 +219,53 @@ export class SupplierPaymentService {
     });
     const all = await this.repo.find({ where: { purchaseOrderId: order.id } });
     order.paidAmount = this.round3(all.reduce((sum, p) => sum + Number(p.amount), 0));
-    order.paymentStatus = computePaymentStatus(order.paidAmount, Number(order.total || 0));
+    order.paymentStatus = computePaymentStatus(order.paidAmount, Number(order.receivedTotal || 0));
     await this.orderRepo.save(order);
     await this.postJournalEntry(payment, actor);
     return payment;
+  }
+
+  // A credit that lowers what is owed on an order without money moving:
+  // debit note (approved purchase return), vendor credit or prepayment
+  // applied to it. The journal entry belongs to that record.
+  async addCreditRow(
+    manager: import('typeorm').EntityManager,
+    opts: { purchaseOrderId: string; amount: number; date: string; note: string; source: 'debit_note' | 'vendor_credit' | 'vendor_prepayment'; sourceId: string },
+  ) {
+    const order = await manager.findOne(PurchaseOrder, { where: { id: opts.purchaseOrderId }, lock: { mode: 'pessimistic_write' } });
+    if (!order) throw new NotFoundException('Purchase order not found');
+    if (order.status !== PurchaseOrderStatus.RECEIVED && order.status !== PurchaseOrderStatus.PARTIALLY_RECEIVED) {
+      throw new BadRequestException(`${order.poNumber}: nothing has been received yet, so nothing is owed to apply this to.`);
+    }
+    const amount = this.round3(opts.amount);
+    const due = this.round3(Number(order.receivedTotal || 0) - Number(order.paidAmount || 0));
+    if (amount > due + 0.001) {
+      throw new BadRequestException(`${order.poNumber}: only ${Math.max(0, due).toFixed(3)} OMR is still owed - apply at most that much.`);
+    }
+    await manager.save(
+      manager.create(SupplierPayment, {
+        purchaseOrderId: order.id,
+        supplierId: order.supplierId,
+        amount,
+        paymentDate: opts.date,
+        note: opts.note,
+        creditSource: opts.source,
+        creditSourceId: opts.sourceId,
+      }),
+    );
+    order.paidAmount = this.round3(Number(order.paidAmount || 0) + amount);
+    order.paymentStatus = computePaymentStatus(order.paidAmount, Number(order.receivedTotal || 0));
+    await manager.save(order);
+  }
+
+  // Recomputes paidAmount/paymentStatus from the rows (after a credit row
+  // is removed with its source record).
+  async recompute(manager: import('typeorm').EntityManager, purchaseOrderId: string) {
+    const order = await manager.findOne(PurchaseOrder, { where: { id: purchaseOrderId } });
+    if (!order) return;
+    const rows = await manager.find(SupplierPayment, { where: { purchaseOrderId } });
+    order.paidAmount = this.round3(rows.reduce((sum, p) => sum + Number(p.amount), 0));
+    order.paymentStatus = computePaymentStatus(order.paidAmount, Number(order.receivedTotal || 0));
+    await manager.save(order);
   }
 }

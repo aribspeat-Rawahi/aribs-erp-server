@@ -9,6 +9,7 @@ import { BankTransaction, BankTransactionType } from '../bank-account/bank-trans
 import { CreateVendorCreditDto, ApplyVendorCreditDto, RefundVendorCreditDto } from './dto/vendor-credit.dto';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { BankAccountService } from '../bank-account/bank-account.service';
+import { SupplierPaymentService } from './supplier-payment.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { rowForInsert } from '../common/bank-movement.util';
 
@@ -37,6 +38,7 @@ export class VendorCreditService {
     private activityLog: ActivityLogService,
     private bankAccountService: BankAccountService,
     private journalPosting: JournalPostingService,
+    private supplierPayments: SupplierPaymentService,
   ) {}
 
   private generateNumber() {
@@ -111,7 +113,7 @@ export class VendorCreditService {
     await this.dataSource.transaction(async (manager) => {
       item.appliedAmount = this.round3(Number(item.appliedAmount) + amount);
       await manager.save(item);
-      await manager.save(
+      const application = await manager.save(
         manager.create(VendorCreditApplication, {
           vendorCreditId: item.id,
           amount,
@@ -122,6 +124,17 @@ export class VendorCreditService {
           createdByEmail: actor.email,
         }),
       );
+      // applied to an order: it now owes that much less
+      if (dto.purchaseOrderId) {
+        await this.supplierPayments.addCreditRow(manager, {
+          purchaseOrderId: dto.purchaseOrderId,
+          amount,
+          date,
+          note: `Vendor credit ${item.creditNumber} applied`,
+          source: 'vendor_credit',
+          sourceId: application.id,
+        });
+      }
     });
 
     await this.activityLog.log({

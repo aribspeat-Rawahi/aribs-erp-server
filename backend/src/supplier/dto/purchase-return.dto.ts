@@ -38,3 +38,11 @@ export class RejectPurchaseReturnDto {
   @IsString()
   reason: string;
 }
+
+export class ApprovePurchaseReturnDto {
+  // Needed only when part of the return is refunded (the order had already
+  // been paid beyond what is still owed).
+  @IsOptional()
+  @IsString()
+  bankAccountId?: string;
+}

@@ -923,26 +923,67 @@ export class InvoiceService {
   // Sales Tax (Output VAT) report — every invoice issued within a date
   // range, its own subtotal/vatAmount/total broken out. Customer names
   // are attached by ReportingService (same split as getCustomerBreakdownInRange).
+  // Output VAT for a period (Oman VAT return, sales side):
+  //  - taxable value is AFTER the discount (VAT is charged on the
+  //    discounted price);
+  //  - approved sales returns in the period (credit notes) are deducted.
   async getSalesTaxReport(startDate: string, endDate: string) {
     const invoices = await this.invoiceRepo
       .createQueryBuilder('invoice')
       .where('invoice.issueDate BETWEEN :startDate AND :endDate', { startDate, endDate })
       .orderBy('invoice.issueDate', 'ASC')
       .getMany();
+    const returns = await this.dataSource
+      .getRepository(SalesReturn)
+      .createQueryBuilder('r')
+      .where('r.status = :status', { status: SalesReturnStatus.APPROVED })
+      .andWhere('r.date BETWEEN :startDate AND :endDate', { startDate, endDate })
+      .getMany();
+    const returnInvoices = returns.length ? await this.invoiceRepo.find({ where: { id: In(returns.map((r) => r.invoiceId)) } }) : [];
 
-    const rows = invoices.map((inv) => ({
-      id: inv.id,
-      invoiceNumber: inv.invoiceNumber,
-      customerId: inv.customerId,
-      issueDate: inv.issueDate,
-      subtotal: Number(inv.subtotal || 0),
-      vatAmount: Number(inv.vatAmount || 0),
-      total: Number(inv.total || 0),
-    }));
+    const rows = [
+      ...invoices.map((inv) => {
+        const taxable = this.round3(Number(inv.subtotal || 0) - Number(inv.discountAmount || 0));
+        return {
+          type: 'invoice' as const,
+          id: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          customerId: inv.customerId,
+          issueDate: inv.issueDate,
+          grossAmount: Number(inv.subtotal || 0),
+          discountAmount: Number(inv.discountAmount || 0),
+          subtotal: taxable, // taxable value (after discount)
+          vatAmount: Number(inv.vatAmount || 0),
+          total: Number(inv.total || 0),
+          vatExcluded: !!inv.vatExcluded,
+        };
+      }),
+      ...returns.map((r) => ({
+        type: 'credit_note' as const,
+        id: r.id,
+        invoiceNumber: `${r.returnNumber} (credit note for ${returnInvoices.find((i) => i.id === r.invoiceId)?.invoiceNumber || 'invoice'})`,
+        customerId: r.customerId,
+        issueDate: r.date,
+        grossAmount: -Number(r.subtotal || 0),
+        discountAmount: 0,
+        subtotal: -Number(r.subtotal || 0),
+        vatAmount: -Number(r.vatAmount || 0),
+        total: -Number(r.total || 0),
+        vatExcluded: false,
+      })),
+    ].sort((a, b) => (a.issueDate < b.issueDate ? -1 : a.issueDate > b.issueDate ? 1 : 0));
     const totalTaxableSales = this.round3(rows.reduce((sum, r) => sum + r.subtotal, 0));
     const totalVat = this.round3(rows.reduce((sum, r) => sum + r.vatAmount, 0));
-    return { period: { startDate, endDate }, rows, totalTaxableSales, totalVat, invoiceCount: rows.length };
+    return {
+      period: { startDate, endDate },
+      rows,
+      totalTaxableSales,
+      totalVat,
+      creditNotesVat: this.round3(returns.reduce((s, r) => s + Number(r.vatAmount || 0), 0)),
+      invoiceCount: invoices.length,
+    };
   }
+
 
   // Sales Tax — "Category Based" card. This system has a single product
   // line (no product-category field), so the accounting-meaningful
@@ -954,27 +995,51 @@ export class InvoiceService {
       .createQueryBuilder('invoice')
       .where('invoice.issueDate BETWEEN :startDate AND :endDate', { startDate, endDate })
       .getMany();
-    const invoiceIds = invoices.map((i) => i.id);
-    if (invoiceIds.length === 0) return { rows: [], totalTaxableSales: 0, totalVat: 0 };
-    const items = await this.itemRepo.find({ where: { invoiceId: In(invoiceIds) } });
-
+    const returns = await this.dataSource
+      .getRepository(SalesReturn)
+      .createQueryBuilder('r')
+      .leftJoinAndSelect('r.items', 'items')
+      .where('r.status = :status', { status: SalesReturnStatus.APPROVED })
+      .andWhere('r.date BETWEEN :startDate AND :endDate', { startDate, endDate })
+      .getMany();
     const byRate = new Map<number, { vatRate: number; taxableAmount: number; vatAmount: number }>();
-    for (const item of items) {
-      const rate = Number(item.vatRate);
-      const lineTotal = Number(item.lineTotal);
-      const vatAmount = this.round3(lineTotal * (rate / 100));
-      const existing = byRate.get(rate);
-      if (existing) {
-        existing.taxableAmount += lineTotal;
-        existing.vatAmount += vatAmount;
-      } else {
-        byRate.set(rate, { vatRate: rate, taxableAmount: lineTotal, vatAmount });
+    const add = (rate: number, taxable: number, vat: number) => {
+      const existing = byRate.get(rate) || { vatRate: rate, taxableAmount: 0, vatAmount: 0 };
+      existing.taxableAmount += taxable;
+      existing.vatAmount += vat;
+      byRate.set(rate, existing);
+    };
+
+    if (invoices.length) {
+      const items = await this.itemRepo.find({ where: { invoiceId: In(invoices.map((i) => i.id)) } });
+      for (const inv of invoices) {
+        // same pro-rata discount split the invoice used; VAT-excluded
+        // invoices carry no VAT at all
+        const lines = items.filter((i) => i.invoiceId === inv.id);
+        const sub = Number(inv.subtotal || 0);
+        const factor = sub > 0 ? (sub - Number(inv.discountAmount || 0)) / sub : 1;
+        for (const line of lines) {
+          const rate = inv.vatExcluded ? 0 : Number(line.vatRate);
+          const taxable = this.round3(Number(line.lineTotal) * factor);
+          add(rate, taxable, this.round3((taxable * rate) / 100));
+        }
+      }
+    }
+    // credit notes reduce the same rate bucket
+    for (const r of returns) {
+      const hasVat = Number(r.vatAmount || 0) > 0;
+      const sub = (r.items || []).reduce((s, i) => s + Number(i.quantity) * Number(i.unitPrice), 0);
+      for (const i of r.items || []) {
+        const rate = hasVat ? Number(i.vatRate) : 0;
+        const share = sub > 0 ? (Number(i.quantity) * Number(i.unitPrice)) / sub : 0;
+        const taxable = this.round3(Number(r.subtotal) * share);
+        add(rate, -taxable, -this.round3((taxable * rate) / 100));
       }
     }
     const rows = Array.from(byRate.values())
       .map((r) => ({
         vatRate: r.vatRate,
-        label: r.vatRate === 0 ? 'Zero-rated / Exempt (0%)' : `Standard Rate (${r.vatRate}%)`,
+        label: r.vatRate === 0 ? 'Zero-rated / Exempt / VAT excluded (0%)' : `Standard Rate (${r.vatRate}%)`,
         taxableAmount: this.round3(r.taxableAmount),
         vatAmount: this.round3(r.vatAmount),
       }))
@@ -985,6 +1050,7 @@ export class InvoiceService {
       totalVat: this.round3(rows.reduce((s, r) => s + r.vatAmount, 0)),
     };
   }
+
 
   // Product Sales report — revenue grouped by product (finishedGoodId)
   // across every invoice issued within a date range. Free-text lines with

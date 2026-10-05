@@ -47,7 +47,9 @@ export interface InvoicePdfData {
   // Reuses the exact same three layouts for Quotations and Delivery
   // Notes — only the title text changes. Defaults to invoice for
   // backward compatibility with existing call sites.
-  documentType?: 'invoice' | 'quotation' | 'delivery_note' | 'credit_note';
+  documentType?: 'invoice' | 'quotation' | 'delivery_note' | 'credit_note' | 'purchase_order' | 'debit_note';
+  // heading of the party box (default "BILL TO"); "SUPPLIER" on purchase documents
+  partyLabel?: string;
   // Label for the quotationNumber row (default "Quotation No"); a credit
   // note uses it for the original invoice number.
   referenceLabel?: string;
@@ -78,6 +80,12 @@ function docLabel(data: InvoicePdfData, base: string) {
   }
   if (data.documentType === 'delivery_note') {
     return base.replace(/INVOICE/g, 'DELIVERY NOTE').replace(/Invoice/g, 'Delivery Note');
+  }
+  if (data.documentType === 'purchase_order') {
+    return base.replace(/TAX INVOICE/g, 'PURCHASE ORDER').replace(/INVOICE/g, 'PURCHASE ORDER').replace(/Invoice/g, 'PO');
+  }
+  if (data.documentType === 'debit_note') {
+    return base.replace(/INVOICE/g, 'DEBIT NOTE').replace(/Invoice/g, 'Debit Note');
   }
   if (data.documentType === 'credit_note') {
     return base.replace(/INVOICE/g, 'CREDIT NOTE').replace(/Invoice/g, 'Credit Note');
@@ -144,7 +152,7 @@ async function renderClassic(doc: PDFKit.PDFDocument, data: InvoicePdfData) {
 
   // Bill To — field order: Name, Address, Phone, VATIN (same everywhere).
   let y = 154;
-  doc.fontSize(10).fillColor('#8a8f80').text('BILL TO', 40, y);
+  doc.fontSize(10).fillColor('#8a8f80').text(data.partyLabel || 'BILL TO', 40, y);
   y += 15;
   doc.fontSize(12).fillColor('#24291f').text(data.customerName, 40, y);
   y += 17;
@@ -262,7 +270,7 @@ async function renderFormal(doc: PDFKit.PDFDocument, data: InvoicePdfData) {
   doc.moveTo(midX, partyTop).lineTo(midX, partyTop + partyHeight).strokeColor(GREEN).lineWidth(1.5).stroke();
   doc.moveTo(boxLeft, partyTop + partyHeight).lineTo(boxRight, partyTop + partyHeight).strokeColor(GREEN).lineWidth(1.5).stroke();
 
-  doc.fontSize(9).fillColor(GREEN).text('BILL TO', boxLeft + pad, partyTop + pad);
+  doc.fontSize(9).fillColor(GREEN).text(data.partyLabel || 'BILL TO', boxLeft + pad, partyTop + pad);
   doc.fontSize(10.5).fillColor('#111').text(data.customerName, boxLeft + pad, partyTop + pad + 15);
   const custLines = [data.customerAddress, data.customerPhone, data.customerVatin ? `VATIN: ${data.customerVatin}` : undefined].filter(Boolean).join('\n');
   doc.fontSize(9).fillColor('#444').text(custLines, boxLeft + pad, partyTop + pad + 32, { width: midX - boxLeft - pad * 2, lineGap: 3 });
@@ -396,7 +404,7 @@ Tel: ${data.companyPhone || '-'} | VATIN: ${data.companyVatin}`,
   doc.moveTo(infoMid, infoTop).lineTo(infoMid, infoTop + infoH).strokeColor('#cfe0c8').lineWidth(1).stroke();
 
   const leftRows: [string, string][] = [
-    ['Customer', data.customerName],
+    [data.partyLabel ? 'Supplier' : 'Customer', data.customerName],
     ['Address', data.customerAddress || '-'],
     ['Tel No', data.customerPhone || '-'],
     ['VATIN', data.customerVatin || '-'],

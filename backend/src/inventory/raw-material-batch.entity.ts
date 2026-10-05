@@ -36,6 +36,10 @@ export class RawMaterialBatch {
   @Column({ nullable: true })
   purchaseOrderId: string;
 
+  // the goods receipt (GRN) that brought this lot in
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  goodsReceiptId: string | null;
+
   @Column({ nullable: true })
   supplierId: string;
 

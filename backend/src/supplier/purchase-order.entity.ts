@@ -4,12 +4,14 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Generated,
 } from 'typeorm';
 import { PaymentStatus } from '../common/payment-type.enum';
 
 export enum PurchaseOrderStatus {
   ORDERED = 'ordered', // sent to supplier, not yet received
-  RECEIVED = 'received', // goods arrived, stock updated
+  PARTIALLY_RECEIVED = 'partially_received', // some goods arrived (one or more GRNs)
+  RECEIVED = 'received', // everything arrived (or closed short), stock updated
   CANCELLED = 'cancelled',
 }
 
@@ -17,6 +19,14 @@ export enum PurchaseOrderStatus {
 export class PurchaseOrder {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ unique: true })
+  @Generated('increment')
+  sequenceNumber: number;
+
+  // PO-2026-0001
+  @Column({ type: 'varchar', length: 30, unique: true })
+  poNumber: string;
 
   @Column()
   supplierId: string;
@@ -52,6 +62,23 @@ export class PurchaseOrder {
   paidAmount?: number;
   @Column({ type: 'enum', enum: PaymentStatus, nullable: true })
   paymentStatus?: PaymentStatus;
+
+  // when the goods are expected (Not Received Yet list / overdue)
+  @Column({ type: 'date', nullable: true })
+  expectedDate: string | null;
+
+  // Value of what has actually been received (sum of its goods receipts).
+  // This - not the ordered total - is what is owed to the supplier.
+  @Column('decimal', { precision: 12, scale: 3, default: 0 })
+  receivedSubtotal: number;
+  @Column('decimal', { precision: 12, scale: 3, default: 0 })
+  receivedVat: number;
+  @Column('decimal', { precision: 12, scale: 3, default: 0 })
+  receivedTotal: number;
+
+  // true when the order was closed before everything arrived
+  @Column({ default: false })
+  closedShort: boolean;
 
   @CreateDateColumn()
   createdAt: Date;

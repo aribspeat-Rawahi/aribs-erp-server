@@ -1,9 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, Res } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { PurchaseOrderService } from './purchase-order.service';
-import { CreatePurchaseOrderDto } from './dto/supplier.dto';
+import { CreatePurchaseOrderDto, ReceivePurchaseOrderDto } from './dto/supplier.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
 import { ModuleAccess } from '../auth/module-access.decorator';
+
+interface AuthedRequest extends Request {
+  user?: { userId: string; email: string; role: string };
+}
 
 @ModuleAccess('suppliers')
 @Controller('purchase-orders')
@@ -13,6 +18,19 @@ export class PurchaseOrderController {
   @Get()
   findAll() {
     return this.service.findAll();
+  }
+
+  // Suppliers > Not Received Yet
+  @Get('pending-receipts')
+  findPendingReceipts() {
+    return this.service.findPendingReceipts();
+  }
+
+  @Get(':id/pdf')
+  async downloadPdf(@Param('id') id: string, @Res() res: Response) {
+    const buffer = await this.service.generatePdf(id);
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="purchase-order-${id}.pdf"` });
+    res.send(buffer);
   }
 
   @Get(':id')
@@ -39,13 +57,20 @@ export class PurchaseOrderController {
     return this.service.remove(id);
   }
 
-  // Marks goods as physically received — this is what increases raw
-  // material stock. Admin and Accountant only — a stock-moving,
-  // financially-relevant action.
+  // Goods receipt (GRN): records what arrived - all of it, or part of it
+  // (several deliveries per order). This is what adds raw material stock,
+  // the payable and the input VAT. Admin and Accountant only.
   @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)
   @Post(':id/receive')
-  receive(@Param('id') id: string) {
-    return this.service.receive(id);
+  receive(@Param('id') id: string, @Body() dto: ReceivePurchaseOrderDto, @Req() req: AuthedRequest) {
+    return this.service.receive(id, dto || {}, { userId: req.user?.userId, email: req.user?.email });
+  }
+
+  // The rest of a partially received order will not come.
+  @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @Post(':id/close')
+  closeShort(@Param('id') id: string) {
+    return this.service.closeShort(id);
   }
 
   @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)

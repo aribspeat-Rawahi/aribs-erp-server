@@ -32,6 +32,10 @@ export class PurchaseOrderItem {
   @Column('decimal', { precision: 6, scale: 3, default: 5 })
   vatRate: number;
 
+  // how much of this line has arrived so far (goods receipts)
+  @Column('decimal', { precision: 12, scale: 3, default: 0 })
+  receivedQuantity: number;
+
   @CreateDateColumn()
   createdAt: Date;
 }

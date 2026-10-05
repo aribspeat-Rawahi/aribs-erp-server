@@ -198,7 +198,7 @@ export class RawMaterialService {
     if (pendingPoItems.length > 0) {
       const pendingOrderIds = [...new Set(pendingPoItems.map((i) => i.purchaseOrderId))];
       const orderedCount = await this.purchaseOrderRepo.count({
-        where: { id: In(pendingOrderIds), status: PurchaseOrderStatus.ORDERED },
+        where: { id: In(pendingOrderIds), status: In([PurchaseOrderStatus.ORDERED, PurchaseOrderStatus.PARTIALLY_RECEIVED]) },
       });
       if (orderedCount > 0) {
         throw new BadRequestException(

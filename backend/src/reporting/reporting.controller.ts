@@ -89,6 +89,13 @@ export class ReportingController {
     return this.service.getPurchaseVatReport(startDate, endDate);
   }
 
+  // VAT return summary for a period: output VAT (sales, less credit
+  // notes) - input VAT (purchases, less debit notes) = net VAT payable.
+  @Get('vat-summary')
+  getVatSummary(@Query('startDate') startDate: string, @Query('endDate') endDate: string) {
+    return this.service.getVatSummary(startDate, endDate);
+  }
+
   // Reports Hub — e.g. GET /reports/income-statement?startDate=2026-09-01&endDate=2026-09-30
   @Get('income-statement')
   getIncomeStatement(@Query('startDate') startDate: string, @Query('endDate') endDate: string) {

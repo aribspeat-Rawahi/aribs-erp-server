@@ -41,6 +41,15 @@ export class SupplierPayment {
   @Column({ nullable: true })
   bankTransactionId?: string;
 
+  // Set when this row is not money paid but a credit that lowers what is
+  // owed on the order: 'debit_note' (approved purchase return),
+  // 'vendor_credit' or 'vendor_prepayment' (applied to this order). Its
+  // accounting is part of that record's own journal entry.
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  creditSource: string | null;
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  creditSourceId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

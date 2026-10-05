@@ -1,11 +1,22 @@
 import { IsString, IsNumber, IsOptional, IsArray, IsIn, IsEnum, ValidateNested, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { InteractionType } from '../../common/interaction-type.enum';
+import { SupplierVatStatus } from '../supplier.entity';
 import { PaymentType } from '../../common/payment-type.enum';
 
 export class CreateSupplierDto {
   @IsString()
   name: string;
+
+  // Oman VAT number of the supplier (needed to claim input VAT)
+  @IsOptional()
+  @IsString()
+  vatin?: string;
+
+  // registered | not_registered | foreign - sets the default VAT on its POs
+  @IsOptional()
+  @IsEnum(SupplierVatStatus)
+  vatStatus?: SupplierVatStatus;
 
   @IsOptional()
   @IsString()
@@ -116,6 +127,48 @@ export class CreatePurchaseOrderDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  // when the goods are expected (YYYY-MM-DD)
+  @IsOptional()
+  @IsString()
+  expectedDate?: string;
+}
+
+// One line of a goods receipt: how much of a PO line arrived.
+export class ReceiveLineDto {
+  @IsString()
+  purchaseOrderItemId: string;
+
+  @IsNumber()
+  @Min(0.001)
+  quantity: number;
+}
+
+// Goods receipt (GRN) against a purchase order. No lines = everything
+// still outstanding arrived.
+export class ReceivePurchaseOrderDto {
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReceiveLineDto)
+  items?: ReceiveLineDto[];
+
+  @IsOptional()
+  @IsString()
+  receivedDate?: string; // defaults to today
+
+  // The supplier's tax invoice - required when the delivery carries VAT.
+  @IsOptional()
+  @IsString()
+  supplierInvoiceNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  supplierInvoiceDate?: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
 }
 
 // Supplier Payment (Pay Bills) — records paying a RECEIVED purchase

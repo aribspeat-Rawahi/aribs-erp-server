@@ -14,6 +14,8 @@ import { VendorCredit } from './vendor-credit.entity';
 import { VendorCreditApplication } from './vendor-credit-application.entity';
 import { VendorCreditRefund } from './vendor-credit-refund.entity';
 import { SupplierPayment } from './supplier-payment.entity';
+import { GoodsReceipt } from './goods-receipt.entity';
+import { GoodsReceiptItem } from './goods-receipt-item.entity';
 import { SupplierService } from './supplier.service';
 import { SupplierBankAccountService } from './supplier-bank-account.service';
 import { SupplierDocumentService } from './supplier-document.service';
@@ -37,6 +39,7 @@ import { EmailService } from '../common/email.service';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 import { JournalModule } from '../journal/journal.module';
 import { BankAccountModule } from '../bank-account/bank-account.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
@@ -55,11 +58,14 @@ import { BankAccountModule } from '../bank-account/bank-account.module';
       VendorCreditApplication,
       VendorCreditRefund,
       SupplierPayment,
+      GoodsReceipt,
+      GoodsReceiptItem,
     ]),
     InventoryModule, // gives us RawMaterialService
     ActivityLogModule,
     JournalModule,
     BankAccountModule,
+    SettingsModule,
   ],
   controllers: [
     SupplierController,

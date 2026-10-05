@@ -76,6 +76,14 @@ export class PurchaseReturn {
   @Column({ nullable: true, type: 'text' })
   rejectionReason?: string;
 
+  // On approval: the part that lowered what is owed on the order (debit
+  // note), and the part the supplier paid back (only when the order had
+  // already been paid beyond what is now owed).
+  @Column('decimal', { precision: 12, scale: 3, default: 0 })
+  appliedToOrder: number;
+  @Column('decimal', { precision: 12, scale: 3, default: 0 })
+  refundAmount: number;
+
   @OneToMany(() => PurchaseReturnItem, (item) => item.purchaseReturn, { cascade: true })
   items: PurchaseReturnItem[];
 

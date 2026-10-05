@@ -13,6 +13,12 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService, PostingLine } from '../journal/journal-posting.service';
 import { assertQuantityForUnit } from '../units/units';
+import { BatchTrackingService } from '../inventory/batch-tracking.service';
+import { SupplierPaymentService } from './supplier-payment.service';
+import { SettingsService } from '../settings/settings.service';
+import { Supplier } from './supplier.entity';
+import { applyBankMovement } from '../common/bank-movement.util';
+import { generateInvoicePdf } from '../common/invoice-pdf.util';
 
 interface ActorRef {
   userId?: string;
@@ -41,6 +47,9 @@ export class PurchaseReturnService {
     private activityLog: ActivityLogService,
     private bankAccountService: BankAccountService,
     private journalPosting: JournalPostingService,
+    private batchTracking: BatchTrackingService,
+    private supplierPayments: SupplierPaymentService,
+    private settingsService: SettingsService,
   ) {}
 
   private generateReturnNumber() {
@@ -63,16 +72,15 @@ export class PurchaseReturnService {
     return item;
   }
 
-  // Already-APPROVED return quantity for a given PO+material, so a
-  // second (or third...) return request against the same order can never
-  // return more than was actually received.
+  // Quantity of a material already on approved OR pending returns of this
+  // order, so two open returns can't both claim the same goods.
   private async alreadyReturnedQty(purchaseOrderId: string, rawMaterialId: string) {
-    const approved = await this.repo.find({
-      where: { purchaseOrderId, status: PurchaseReturnStatus.APPROVED },
+    const returns = await this.repo.find({
+      where: { purchaseOrderId, status: In([PurchaseReturnStatus.APPROVED, PurchaseReturnStatus.PENDING]) },
       relations: ['items'],
     });
     let qty = 0;
-    for (const r of approved) {
+    for (const r of returns) {
       for (const i of r.items) {
         if (i.rawMaterialId === rawMaterialId) qty += Number(i.quantity);
       }
@@ -83,15 +91,22 @@ export class PurchaseReturnService {
   async create(dto: CreatePurchaseReturnDto, requestedBy: ActorRef) {
     const order = await this.dataSource.manager.findOne(PurchaseOrder, { where: { id: dto.purchaseOrderId } });
     if (!order) throw new NotFoundException('Purchase order not found');
-    if (order.status !== PurchaseOrderStatus.RECEIVED) {
-      throw new BadRequestException(`Only a received order can be returned (this one is ${order.status})`);
+    if (order.status !== PurchaseOrderStatus.RECEIVED && order.status !== PurchaseOrderStatus.PARTIALLY_RECEIVED) {
+      throw new BadRequestException(`Nothing has been received on ${order.poNumber} yet, so nothing can be returned.`);
     }
 
     const rawMaterialIds = dto.items.map((i) => i.rawMaterialId);
     const poItems = await this.poItemRepo.find({
       where: { purchaseOrderId: order.id, rawMaterialId: In(rawMaterialIds) },
     });
-    const poItemByMaterial = new Map(poItems.map((i) => [i.rawMaterialId, i]));
+    // the same material can be on several lines: returnable = everything
+    // RECEIVED of it on this order (price/VAT from its first line)
+    const poItemByMaterial = new Map<string, PurchaseOrderItem>();
+    const receivedByMaterial = new Map<string, number>();
+    for (const i of poItems) {
+      if (!poItemByMaterial.has(i.rawMaterialId)) poItemByMaterial.set(i.rawMaterialId, i);
+      receivedByMaterial.set(i.rawMaterialId, (receivedByMaterial.get(i.rawMaterialId) || 0) + Number(i.receivedQuantity || 0));
+    }
 
     let subtotal = 0;
     let vatAmount = 0;
@@ -102,10 +117,10 @@ export class PurchaseReturnService {
         throw new BadRequestException(`This purchase order has no line for the selected material (${line.rawMaterialId})`);
       }
       const alreadyReturned = await this.alreadyReturnedQty(order.id, line.rawMaterialId);
-      const remaining = this.round3(Number(poItem.quantity) - alreadyReturned);
+      const remaining = this.round3((receivedByMaterial.get(line.rawMaterialId) || 0) - alreadyReturned);
       if (Number(line.quantity) > remaining + 0.001) {
         throw new BadRequestException(
-          `Cannot return ${line.quantity} — only ${remaining} of this material remains returnable on this order.`,
+          `Cannot return ${line.quantity} — only ${remaining} of this material was received and is not already on a return.`,
         );
       }
       assertQuantityForUnit(line.quantity, poItem.unit, 'this material');
@@ -122,6 +137,7 @@ export class PurchaseReturnService {
     }
     subtotal = this.round3(subtotal);
     vatAmount = this.round3(vatAmount);
+    if (itemRows.length === 0) throw new BadRequestException('Add at least one item to return');
 
     const item = this.repo.create({
       returnNumber: this.generateReturnNumber(),
@@ -133,7 +149,6 @@ export class PurchaseReturnService {
       subtotal,
       vatAmount,
       total: this.round3(subtotal + vatAmount),
-      bankAccountId: dto.bankAccountId,
       requestedByUserId: requestedBy.userId,
       requestedByEmail: requestedBy.email,
       items: itemRows.map((i) => this.repo.manager.create(PurchaseReturnItem, i)),
@@ -169,50 +184,93 @@ export class PurchaseReturnService {
   // impossible here by construction (create() already capped the
   // returnable quantity against what was received), but the lock still
   // guards against a concurrent stock change from elsewhere.
-  async approve(id: string, decidedBy: ActorRef) {
+  // How approving would settle the money: first it lowers what is still
+  // owed on the order (debit note); only the rest - when the order was
+  // already paid beyond that - is refunded by the supplier.
+  async getSettlement(id: string) {
+    const item = await this.findOne(id);
+    const order = await this.dataSource.manager.findOne(PurchaseOrder, { where: { id: item.purchaseOrderId } });
+    if (!order) throw new NotFoundException('Purchase order not found');
+    return { ...this.splitSettlement(Number(item.total), order), poNumber: order.poNumber };
+  }
+
+  private splitSettlement(total: number, order: PurchaseOrder) {
+    const outstanding = this.round3(Math.max(0, Number(order.receivedTotal || 0) - Number(order.paidAmount || 0)));
+    const appliedToOrder = this.round3(Math.min(total, outstanding));
+    const refundAmount = this.round3(total - appliedToOrder);
+    return { total, outstanding, appliedToOrder, refundAmount, refundAccountRequired: refundAmount > 0.0005 };
+  }
+
+  // Approve: the goods leave stock (out of this order's batches first, cost
+  // adjusted), the debit note lowers what is owed on the order, any rest
+  // is refunded into the chosen account. One journal entry:
+  //   Dr Accounts Payable (debit note) + Dr Bank (refund)
+  //   Cr Raw Materials Inventory (cost) + Cr Input VAT (reversed)
+  // All stock/money writes in one transaction.
+  async approve(id: string, decidedBy: ActorRef, opts: { bankAccountId?: string } = {}) {
+    let poNumber = '';
     const saved = await this.dataSource.transaction(async (manager) => {
-      const item = await manager.findOne(PurchaseReturn, { where: { id }, relations: ['items'] });
+      const item = await manager.findOne(PurchaseReturn, { where: { id }, relations: ['items'], lock: { mode: 'pessimistic_write' } });
       if (!item) throw new NotFoundException('Purchase return not found');
       if (item.status !== PurchaseReturnStatus.PENDING) {
         throw new BadRequestException(`Only pending returns can be approved (this one is ${item.status})`);
       }
+      const order = await manager.findOne(PurchaseOrder, { where: { id: item.purchaseOrderId }, lock: { mode: 'pessimistic_write' } });
+      if (!order) throw new NotFoundException('Purchase order not found');
+      poNumber = order.poNumber;
+      const total = Number(item.total);
+      const { appliedToOrder, refundAmount } = this.splitSettlement(total, order);
+      if (refundAmount > 0.0005 && !opts.bankAccountId) {
+        throw new BadRequestException(
+          `${order.poNumber} has already been paid for these goods - choose the bank/cash account the supplier refunds ${refundAmount.toFixed(3)} OMR into.`,
+        );
+      }
 
       for (const line of item.items) {
-        const material = await manager.findOne(RawMaterial, {
-          where: { id: line.rawMaterialId },
-          lock: { mode: 'pessimistic_write' },
-        });
+        const material = await manager.findOne(RawMaterial, { where: { id: line.rawMaterialId }, lock: { mode: 'pessimistic_write' } });
         if (!material) throw new NotFoundException('Raw material not found');
-        const newQty = Number(material.quantityInStock) - Number(line.quantity);
-        if (newQty < 0) {
-          throw new BadRequestException(`Insufficient stock of ${material.name} to process this return.`);
+        const qty = Number(line.quantity);
+        const before = Number(material.quantityInStock);
+        if (before - qty < -0.0005) {
+          throw new BadRequestException(`Only ${before} ${material.unit} of ${material.name} is in stock - it can't send back ${qty}.`);
         }
-        material.quantityInStock = newQty;
+        // batches first (before the stock number changes)
+        await this.batchTracking.consumeRawMaterialForReturn(manager, { rawMaterialId: material.id, quantity: qty, purchaseOrderId: order.id });
+        // the goods leave at the price paid for them, so the remaining
+        // stock keeps the right value (weighted-average cost)
+        const after = this.round3(before - qty);
+        const valueAfter = before * Number(material.costPerUnit) - qty * Number(line.costPerUnit);
+        material.costPerUnit = after > 0.0005 ? Math.max(0, valueAfter) / after : Number(material.costPerUnit);
+        material.quantityInStock = after;
         await manager.save(material);
       }
 
-      let bankTransactionId: string | undefined;
-      if (item.bankAccountId) {
-        const account = await manager.findOne(BankAccount, {
-          where: { id: item.bankAccountId },
-          lock: { mode: 'pessimistic_write' },
+      if (appliedToOrder > 0.0005) {
+        await this.supplierPayments.addCreditRow(manager, {
+          purchaseOrderId: order.id,
+          amount: appliedToOrder,
+          date: item.date,
+          note: `Debit note - purchase return ${item.returnNumber}`,
+          source: 'debit_note',
+          sourceId: item.id,
         });
-        if (!account) throw new NotFoundException('Bank/cash account not found');
-        account.currentBalance = Number(account.currentBalance) + Number(item.total);
-        await manager.save(account);
-        const txn = await manager.save(
-          manager.create(BankTransaction, {
-            bankAccountId: account.id,
-            type: BankTransactionType.DEPOSIT,
-            amount: Number(item.total),
-            date: item.date,
-            note: `Purchase return refund — ${item.returnNumber}`,
-          }),
-        );
-        bankTransactionId = txn.id;
+      }
+
+      let bankTransactionId: string | undefined;
+      if (refundAmount > 0.0005) {
+        bankTransactionId = await applyBankMovement(manager, {
+          accountId: String(opts.bankAccountId),
+          type: BankTransactionType.DEPOSIT,
+          amount: refundAmount,
+          date: item.date,
+          note: `Purchase return refund — ${item.returnNumber}`,
+        });
       }
 
       item.status = PurchaseReturnStatus.APPROVED;
+      item.appliedToOrder = appliedToOrder;
+      item.refundAmount = refundAmount;
+      item.bankAccountId = refundAmount > 0.0005 ? opts.bankAccountId : undefined;
       item.bankTransactionId = bankTransactionId;
       item.decidedByUserId = decidedBy.userId;
       item.decidedByEmail = decidedBy.email;
@@ -226,37 +284,78 @@ export class PurchaseReturnService {
       entityId: saved.id,
       userId: decidedBy.userId,
       userEmail: decidedBy.email,
-      details: { returnNumber: saved.returnNumber, total: saved.total },
+      details: {
+        returnNumber: saved.returnNumber,
+        poNumber,
+        total: Number(saved.total),
+        appliedToOrder: Number(saved.appliedToOrder),
+        refundAmount: Number(saved.refundAmount),
+      },
     });
 
     try {
-      const inventoryAccountId = await this.journalPosting.findAccountIdByCode(INVENTORY_RAW_MATERIALS_CODE);
-      const lines: PostingLine[] = [{ accountId: inventoryAccountId, credit: Number(saved.subtotal), description: 'Raw materials returned to supplier' }];
+      const lines: PostingLine[] = [
+        { accountId: await this.journalPosting.findAccountIdByCode(INVENTORY_RAW_MATERIALS_CODE), credit: Number(saved.subtotal), description: 'Raw materials returned to supplier' },
+      ];
       if (Number(saved.vatAmount) > 0) {
-        const vatAccountId = await this.journalPosting.findAccountIdByCode(VAT_RECEIVABLE_CODE);
-        lines.push({ accountId: vatAccountId, credit: Number(saved.vatAmount), description: 'Input VAT reversed on return' });
+        lines.push({ accountId: await this.journalPosting.findAccountIdByCode(VAT_RECEIVABLE_CODE), credit: Number(saved.vatAmount), description: 'Input VAT reversed (debit note)' });
       }
-      if (saved.bankAccountId) {
-        const bankJournalAccountId = await this.bankAccountService.ensureJournalAccountId(saved.bankAccountId);
-        lines.push({ accountId: bankJournalAccountId, debit: Number(saved.total), description: 'Refund received' });
-      } else {
-        const apAccountId = await this.journalPosting.findAccountIdByCode(ACCOUNTS_PAYABLE_CODE);
-        lines.push({ accountId: apAccountId, debit: Number(saved.total), description: 'Credit against payable' });
+      if (Number(saved.appliedToOrder) > 0) {
+        lines.push({ accountId: await this.journalPosting.findAccountIdByCode(ACCOUNTS_PAYABLE_CODE), debit: Number(saved.appliedToOrder), description: `Debit note — ${poNumber}` });
       }
-      await this.journalPosting.postForSource(
-        'purchase_return',
-        saved.id,
-        saved.date,
-        `Purchase return ${saved.returnNumber}`,
-        lines,
-        decidedBy,
-        saved.returnNumber,
-      );
+      if (Number(saved.refundAmount) > 0 && saved.bankAccountId) {
+        lines.push({ accountId: await this.bankAccountService.ensureJournalAccountId(saved.bankAccountId), debit: Number(saved.refundAmount), description: 'Refund from supplier' });
+      }
+      await this.journalPosting.postForSource('purchase_return', saved.id, saved.date, `Purchase return ${saved.returnNumber} — ${poNumber}`, lines, decidedBy, saved.returnNumber);
     } catch (err) {
       console.error(`Auto-posting failed for purchase_return ${saved.id}:`, err);
     }
-
     return saved;
+  }
+
+  // Debit Note PDF - what was sent back, at the order's prices.
+  async generateDebitNotePdf(id: string) {
+    const item = await this.findOne(id);
+    const order = await this.dataSource.manager.findOne(PurchaseOrder, { where: { id: item.purchaseOrderId } });
+    const supplier = await this.dataSource.manager.findOne(Supplier, { where: { id: item.supplierId } });
+    if (!order || !supplier) throw new NotFoundException('Purchase order or supplier not found');
+    const settings = await this.settingsService.get();
+    const logoBase64 = await this.settingsService.getLogoBase64();
+    const materials = await this.dataSource.manager.find(RawMaterial, { where: { id: In(item.items.map((i) => i.rawMaterialId).concat('')) } });
+    const pdfItems = item.items.map((i) => ({
+      description: materials.find((m) => m.id === i.rawMaterialId)?.name || 'Item',
+      quantity: Number(i.quantity),
+      unit: i.unit,
+      unitPrice: Number(i.costPerUnit),
+      vatRate: Number(i.vatRate),
+      lineTotal: this.round3(Number(i.quantity) * Number(i.costPerUnit)),
+    }));
+    return generateInvoicePdf({
+      invoiceNumber: item.returnNumber,
+      version: 1,
+      issueDate: item.date,
+      quotationNumber: order.poNumber,
+      referenceLabel: 'PO No',
+      companyName: settings.companyName,
+      companyVatin: settings.companyVatin || 'OM1000000000',
+      companyAddress: settings.companyAddress,
+      companyPhone: settings.companyPhone,
+      customerName: supplier.name,
+      customerAddress: supplier.address,
+      customerPhone: supplier.phone,
+      customerVatin: supplier.vatin || undefined,
+      items: pdfItems,
+      grossAmount: Number(item.subtotal),
+      discountAmount: 0,
+      taxableAmount: Number(item.subtotal),
+      vatAmount: Number(item.vatAmount),
+      netAmount: Number(item.total),
+      vatExcluded: false,
+      logoBase64,
+      template: settings.defaultInvoiceTemplate,
+      documentType: 'debit_note',
+      partyLabel: 'SUPPLIER',
+    });
   }
 
   async reject(id: string, reason: string, decidedBy: ActorRef) {

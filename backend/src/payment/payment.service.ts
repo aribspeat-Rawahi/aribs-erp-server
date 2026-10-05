@@ -100,7 +100,8 @@ export class PaymentService {
     ] = await Promise.all([
       // credit notes from sales returns are not money received
       this.invoicePaymentRepo.find({ where: { salesReturnId: IsNull() }, order: { paymentDate: 'DESC' } }),
-      this.supplierPaymentRepo.find({ order: { paymentDate: 'DESC' } }),
+      // credits (debit notes, vendor credits/prepayments applied) are not money paid
+      this.supplierPaymentRepo.find({ where: { creditSource: IsNull() }, order: { paymentDate: 'DESC' } }),
       this.payrollRepo.find({ where: { isPaid: true } }),
       this.reimbursementRepo.find({ where: { status: ReimbursementStatus.PAID } }),
       this.taxPaymentRepo.find({ order: { datePaid: 'DESC' } }),
@@ -148,7 +149,7 @@ export class PaymentService {
         direction: 'out',
         date: p.paymentDate,
         partyName: supplierNameById.get(p.supplierId) || 'Unknown supplier',
-        reference: order ? `PO-${order.id.slice(0, 8).toUpperCase()}` : undefined,
+        reference: order?.poNumber,
         amount: Number(p.amount),
         method: methodFor(p.bankAccountId),
         note: p.note,
@@ -258,7 +259,8 @@ export class PaymentService {
     }
 
     for (const po of purchaseOrders) {
-      const due = Number(po.total || 0) - Number(po.paidAmount || 0);
+      // owed = value of the goods received so far
+      const due = Number(po.receivedTotal || 0) - Number(po.paidAmount || 0);
       if (due <= TOLERANCE) continue;
       rows.push({
         id: po.id,
@@ -267,7 +269,7 @@ export class PaymentService {
         awaitingApproval: false,
         date: (po.receivedAt ? new Date(po.receivedAt).toISOString().slice(0, 10) : '') || '',
         partyName: supplierNameById.get(po.supplierId) || 'Unknown supplier',
-        reference: `PO-${po.id.slice(0, 8).toUpperCase()}`,
+        reference: po.poNumber,
         amount: due,
       });
     }

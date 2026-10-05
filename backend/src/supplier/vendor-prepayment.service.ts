@@ -8,6 +8,7 @@ import { BankTransaction, BankTransactionType } from '../bank-account/bank-trans
 import { CreateVendorPrepaymentDto, ApplyVendorPrepaymentDto } from './dto/vendor-prepayment.dto';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { BankAccountService } from '../bank-account/bank-account.service';
+import { SupplierPaymentService } from './supplier-payment.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { applyBankMovement, rowForInsert } from '../common/bank-movement.util';
 
@@ -29,6 +30,7 @@ export class VendorPrepaymentService {
     private activityLog: ActivityLogService,
     private bankAccountService: BankAccountService,
     private journalPosting: JournalPostingService,
+    private supplierPayments: SupplierPaymentService,
   ) {}
 
   private generateNumber() {
@@ -126,7 +128,7 @@ export class VendorPrepaymentService {
     const application = await this.dataSource.transaction(async (manager) => {
       item.appliedAmount = this.round3(Number(item.appliedAmount) + amount);
       await manager.save(item);
-      return manager.save(
+      const saved = await manager.save(
         manager.create(VendorPrepaymentApplication, {
           vendorPrepaymentId: item.id,
           amount,
@@ -137,6 +139,18 @@ export class VendorPrepaymentService {
           createdByEmail: actor.email,
         }),
       );
+      // applied to an order: it now owes that much less
+      if (dto.purchaseOrderId) {
+        await this.supplierPayments.addCreditRow(manager, {
+          purchaseOrderId: dto.purchaseOrderId,
+          amount,
+          date,
+          note: `Vendor prepayment ${item.prepaymentNumber} applied`,
+          source: 'vendor_prepayment',
+          sourceId: saved.id,
+        });
+      }
+      return saved;
     });
 
     await this.activityLog.log({

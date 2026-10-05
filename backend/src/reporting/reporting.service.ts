@@ -114,6 +114,23 @@ export class ReportingService {
     };
   }
 
+  async getVatSummary(startDate: string, endDate: string) {
+    const sales = await this.invoiceService.getSalesTaxReport(startDate, endDate);
+    const purchases = await this.purchaseOrderService.getVatReportInRange(startDate, endDate);
+    const round3 = (n: number) => Math.round(n * 1000) / 1000;
+    return {
+      period: { startDate, endDate },
+      taxableSales: sales.totalTaxableSales,
+      outputVat: sales.totalVat,
+      creditNotesVat: sales.creditNotesVat,
+      taxablePurchases: purchases.totalTaxablePurchases,
+      inputVat: purchases.totalVat,
+      debitNotesVat: purchases.debitNotesVat,
+      netVatPayable: round3(sales.totalVat - purchases.totalVat), // negative = refundable
+      purchaseRowsMissingDocuments: purchases.rowsMissingDocuments,
+    };
+  }
+
   getIncomeStatement(startDate: string, endDate: string) {
     return this.journalEntryService.getIncomeStatement(startDate, endDate);
   }

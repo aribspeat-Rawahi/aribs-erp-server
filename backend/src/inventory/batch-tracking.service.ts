@@ -176,6 +176,27 @@ export class BatchTrackingService {
     }
   }
 
+  // Goods sent back to the supplier (approved purchase return): taken out
+  // of that order's own batches first (oldest first), then any other
+  // batch of the material, so batches keep matching real stock.
+  async consumeRawMaterialForReturn(manager: EntityManager, opts: { rawMaterialId: string; quantity: number; purchaseOrderId: string }) {
+    await this.ensureRawMaterialOpeningBalance(manager, opts.rawMaterialId);
+    let remaining = Number(opts.quantity);
+    const batches = await manager.find(RawMaterialBatch, {
+      where: { rawMaterialId: opts.rawMaterialId, quantityRemaining: MoreThan(0) },
+      order: { receivedDate: 'ASC', createdAt: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    const ordered = [...batches.filter((b) => b.purchaseOrderId === opts.purchaseOrderId), ...batches.filter((b) => b.purchaseOrderId !== opts.purchaseOrderId)];
+    for (const batch of ordered) {
+      if (remaining <= EPSILON) break;
+      const take = Math.min(Number(batch.quantityRemaining), remaining);
+      batch.quantityRemaining = Math.round((Number(batch.quantityRemaining) - take) * 1000) / 1000;
+      await manager.save(batch);
+      remaining -= take;
+    }
+  }
+
   // Same FIFO idea for finished goods — consumed by a Sales Order or a
   // manual/barcode stock-out. Call BEFORE mutating FinishedGood.quantityInStock.
   async consumeFinishedGoodFifo(
