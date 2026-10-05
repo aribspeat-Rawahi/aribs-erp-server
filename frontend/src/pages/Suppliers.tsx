@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronDown, Check, Eye, Pencil, Plus, RotateCcw, Trash2, Wallet, X } from 'lucide-react';
+import { ChevronDown, Check, Eye, Pencil, Plus, RotateCcw, Trash2, Upload, Wallet, X } from 'lucide-react';
+import ImportModal from '../components/ImportModal';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Pill, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
@@ -153,6 +154,7 @@ export default function Suppliers() {
   const [loading, setLoading] = useState(true);
   const [showNewPo, setShowNewPo] = useState(false);
   const [showNewSupplier, setShowNewSupplier] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [viewingSupplier, setViewingSupplier] = useState<Supplier | null>(null);
   const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null);
@@ -392,7 +394,12 @@ export default function Suppliers() {
           <PageHeader
             title="Suppliers"
             subtitle="Vendors you buy raw materials from"
-            action={<PrimaryButton icon={Plus} requires="edit" onClick={() => setShowNewSupplier(true)}>New supplier</PrimaryButton>}
+            action={
+              <div className="flex flex-wrap gap-2">
+                <SecondaryButton icon={Upload} requires="edit" onClick={() => setShowImport(true)}>Import</SecondaryButton>
+                <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowNewSupplier(true)}>New supplier</PrimaryButton>
+              </div>
+            }
           />
           {loading ? (
             <div className="text-sm text-muted">Loading…</div>
@@ -419,6 +426,7 @@ export default function Suppliers() {
               </div>
             </Card>
           )}
+          {showImport && <ImportModal type="suppliers" label="Suppliers" onClose={() => setShowImport(false)} onImported={loadSuppliers} />}
           {showNewSupplier && (
             <SupplierModal
               onClose={() => setShowNewSupplier(false)}

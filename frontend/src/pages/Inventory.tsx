@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { ScanLine, Plus, Pencil, Eye, Trash2, PackagePlus } from 'lucide-react';
+import { ScanLine, Plus, Pencil, Eye, Trash2, PackagePlus, Upload } from 'lucide-react';
+import ImportModal from '../components/ImportModal';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Pill, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
@@ -146,6 +147,7 @@ export default function Inventory() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editingItem, setEditingItem] = useState<StockItem | null>(null);
   const [viewingItem, setViewingItem] = useState<StockItem | null>(null);
   const [showScan, setShowScan] = useState(false);
@@ -358,6 +360,7 @@ export default function Inventory() {
                 {items.length > 0 && (
                   <SecondaryButton icon={PackagePlus} requires="edit" onClick={() => setShowAddStock(true)}>Add stock</SecondaryButton>
                 )}
+                <SecondaryButton icon={Upload} requires="edit" onClick={() => setShowImport(true)}>Import</SecondaryButton>
                 <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAdd(true)}>Add product</PrimaryButton>
               </div>
             }
@@ -412,6 +415,17 @@ export default function Inventory() {
               kind={tab}
               supplierName={tab === 'raw' ? supplierName(viewingItem.supplierId) : undefined}
               onClose={() => setViewingItem(null)}
+            />
+          )}
+          {showImport && (
+            <ImportModal
+              type={tab === 'finished' ? 'finished-goods' : 'raw-materials'}
+              label={tab === 'finished' ? 'Products' : 'Raw materials'}
+              onClose={() => setShowImport(false)}
+              onImported={() => {
+                loadItems();
+                refreshStockLookups();
+              }}
             />
           )}
           {showAdd && (

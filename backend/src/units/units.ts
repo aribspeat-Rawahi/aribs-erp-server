@@ -31,6 +31,11 @@ export function normalizeUnit(raw?: string | null): Unit {
   return SYNONYMS[key] || 'pcs';
 }
 
+// Strict version for imports: an unknown unit is an error, not "Pcs".
+export function parseUnit(raw?: string | null): Unit | null {
+  return SYNONYMS[String(raw || '').trim().toLowerCase().replace(/\.$/, '')] || null;
+}
+
 export function isDecimalUnit(unit?: string | null): boolean {
   return DECIMAL_UNITS.includes(normalizeUnit(unit));
 }

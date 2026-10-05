@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { ChevronDown, Plus, Eye, Pencil, Trash2, Download, FileText } from 'lucide-react';
+import { ChevronDown, Plus, Eye, Pencil, Trash2, Download, FileText, Upload } from 'lucide-react';
+import ImportModal from '../components/ImportModal';
 import api from '../api/client';
 import { viewPdf, downloadPdf } from '../api/docActions';
 import { useAuth } from '../context/AuthContext';
@@ -50,6 +51,7 @@ export default function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [viewing, setViewing] = useState<Customer | null>(null);
 
@@ -75,7 +77,12 @@ export default function Customers() {
       <PageHeader
         title="Customers"
         subtitle="Everyone you sell to"
-        action={<PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAdd(true)}>New customer</PrimaryButton>}
+        action={
+          <div className="flex flex-wrap gap-2">
+            <SecondaryButton icon={Upload} requires="edit" onClick={() => setShowImport(true)}>Import</SecondaryButton>
+            <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAdd(true)}>New customer</PrimaryButton>
+          </div>
+        }
       />
       {loading ? (
         <div className="text-sm text-muted">Loading…</div>
@@ -105,6 +112,7 @@ export default function Customers() {
           </div>
         </Card>
       )}
+      {showImport && <ImportModal type="customers" label="Customers" onClose={() => setShowImport(false)} onImported={load} />}
       {showAdd && (
         <CustomerModal
           onClose={() => setShowAdd(false)}
