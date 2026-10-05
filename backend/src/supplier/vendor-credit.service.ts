@@ -10,6 +10,7 @@ import { CreateVendorCreditDto, ApplyVendorCreditDto, RefundVendorCreditDto } fr
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
+import { rowForInsert } from '../common/bank-movement.util';
 
 interface ActorRef {
   userId?: string;
@@ -87,24 +88,7 @@ export class VendorCreditService {
       details: { creditNumber: saved.creditNumber, supplierId: saved.supplierId, amount: saved.amount },
     });
 
-    try {
-      const apAccountId = await this.journalPosting.findAccountIdByCode(ACCOUNTS_PAYABLE_CODE);
-      const creditAccountId = await this.journalPosting.findAccountIdByCode(INVENTORY_RAW_MATERIALS_CODE);
-      await this.journalPosting.postForSource(
-        'vendor_credit',
-        saved.id,
-        date,
-        `Vendor credit ${saved.creditNumber}`,
-        [
-          { accountId: apAccountId, debit: amount, description: 'Vendor credit received' },
-          { accountId: creditAccountId, credit: amount, description: 'Vendor credit received' },
-        ],
-        actor,
-        saved.creditNumber,
-      );
-    } catch (err) {
-      console.error(`Auto-posting failed for vendor_credit ${saved.id}:`, err);
-    }
+    await this.postCreditJournal(saved, actor);
 
     return this.findOne(saved.id);
   }
@@ -253,5 +237,37 @@ export class VendorCreditService {
       console.error(`Removing auto-posted journal entry failed for vendor_credit ${id}:`, err);
     }
     return { deleted: true };
+  }
+
+  // Dr Accounts Payable / Cr Raw Materials Inventory for the credit.
+  private async postCreditJournal(saved: VendorCredit, actor: ActorRef) {
+    try {
+      const amount = Number(saved.amount);
+      const apAccountId = await this.journalPosting.findAccountIdByCode(ACCOUNTS_PAYABLE_CODE);
+      const creditAccountId = await this.journalPosting.findAccountIdByCode(INVENTORY_RAW_MATERIALS_CODE);
+      await this.journalPosting.postForSource(
+        'vendor_credit',
+        saved.id,
+        saved.date,
+        `Vendor credit ${saved.creditNumber}`,
+        [
+          { accountId: apAccountId, debit: amount, description: 'Vendor credit received' },
+          { accountId: creditAccountId, credit: amount, description: 'Vendor credit received' },
+        ],
+        actor,
+        saved.creditNumber,
+      );
+    } catch (err) {
+      console.error(`Auto-posting failed for vendor_credit ${saved.id}:`, err);
+    }
+  }
+
+  // Undo of a deleted (never used) vendor credit: same id/number; its
+  // journal entry is posted again. No money moves.
+  async restoreDeleted(data: Record<string, unknown>, actor: ActorRef = {}) {
+    await this.repo.insert({ ...rowForInsert(data), appliedAmount: 0, refundedAmount: 0 } as any);
+    const saved = await this.repo.findOneOrFail({ where: { id: String(data.id) } });
+    await this.postCreditJournal(saved, actor);
+    return saved;
   }
 }

@@ -11,6 +11,27 @@ import { User, UserRole } from '../auth/user.entity';
 import { ActivityLog } from '../activity-log/activity-log.entity';
 import { EmailService } from '../common/email.service';
 import { InvoiceService } from '../invoice/invoice.service';
+import { ModuleRef } from '@nestjs/core';
+import { InvoicePaymentService } from '../invoice/invoice-payment.service';
+import { SupplierPaymentService } from '../supplier/supplier-payment.service';
+import { FundTransferService } from '../bank-account/fund-transfer.service';
+import { TaxPaymentService } from '../tax/tax-payment.service';
+import { VendorCreditService } from '../supplier/vendor-credit.service';
+import { VendorPrepaymentService } from '../supplier/vendor-prepayment.service';
+import { FixedAssetService } from '../fixed-asset/fixed-asset.service';
+import { RestoreService } from './deleted-records.registry';
+
+// The services that put money records back (resolved lazily so this
+// module doesn't have to import every module).
+const RESTORE_SERVICES: Record<RestoreService, any> = {
+  invoicePayment: InvoicePaymentService,
+  supplierPayment: SupplierPaymentService,
+  fundTransfer: FundTransferService,
+  taxPayment: TaxPaymentService,
+  vendorCredit: VendorCreditService,
+  vendorPrepayment: VendorPrepaymentService,
+  fixedAsset: FixedAssetService,
+};
 
 const UNDO_DAYS = 30;
 const NOTIFY_ROLES = [UserRole.ADMIN, UserRole.CEO, UserRole.MD, UserRole.ACCOUNTANT];
@@ -24,6 +45,12 @@ const NAME_FIELDS = [
   'poNumber',
   'batchNumber',
   'entryNumber',
+  'transferNumber',
+  'paymentNumber',
+  'creditNumber',
+  'prepaymentNumber',
+  'assetNumber',
+  'claimNumber',
   'name',
   'title',
   'originalName',
@@ -47,6 +74,7 @@ export class DeletedRecordsService {
     private config: ConfigService,
     private email: EmailService,
     private invoiceService: InvoiceService,
+    private moduleRef: ModuleRef,
   ) {}
 
   private get repo() {
@@ -68,11 +96,11 @@ export class DeletedRecordsService {
 
     let restorable = !!info.restore;
     let reason: string | null = null;
-    if (!info.restore) reason = 'Money, stock or accounting moved with this delete - re-enter it by hand if needed.';
+    if (!info.restore) reason = info.type === 'user' ? 'User accounts are restored with Team > Recall.' : 'This kind of record can\'t be undone - re-enter it by hand if needed.';
     else if (ctx.notRestorableReason) {
       restorable = false;
       reason = ctx.notRestorableReason;
-    } else if (info.restore === 'generic' && ctx.rows.length === 0) {
+    } else if ((info.restore === 'generic' || info.restore === 'service') && ctx.rows.length === 0) {
       restorable = false;
       reason = 'Nothing was captured to restore.';
     }
@@ -267,8 +295,13 @@ export class DeletedRecordsService {
       }
       if (info.restore === 'invoice') {
         await this.invoiceService.restoreDeleted(snap.rows, actor);
-      } else if (info.restore === 'reactivate') {
-        await this.dataSource.query('UPDATE `tax_rates` SET active = 1 WHERE id = ?', [rec.entityId]);
+      } else if (info.restore === 'reactivate' && info.table) {
+        await this.dataSource.query(`UPDATE \`${info.table}\` SET active = 1 WHERE id = ?`, [rec.entityId]);
+      } else if (info.restore === 'service' && info.service) {
+        const main = snap.rows.find((r) => r.entity === info.entity && r.data.id === rec.entityId) || snap.rows.find((r) => r.entity === info.entity);
+        if (!main) throw new BadRequestException('Nothing was captured to restore.');
+        const svc = this.moduleRef.get(RESTORE_SERVICES[info.service], { strict: false });
+        await svc.restoreDeleted(main.data, actor);
       } else {
         await this.insertRows(snap.rows);
       }

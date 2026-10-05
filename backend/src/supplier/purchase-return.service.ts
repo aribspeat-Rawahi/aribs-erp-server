@@ -155,6 +155,10 @@ export class PurchaseReturnService {
     if (item.status !== PurchaseReturnStatus.PENDING) {
       throw new BadRequestException(`Only pending returns can be deleted (this one is ${item.status})`);
     }
+    // items removed explicitly (not left to the DB cascade) so they are
+    // kept with the delete record and come back on "Undo"
+    if (item.items?.length) await this.repo.manager.remove(item.items);
+    item.items = [];
     await this.repo.remove(item);
     return { deleted: true };
   }

@@ -9,6 +9,7 @@ import { BankAccount } from '../bank-account/bank-account.entity';
 import { BankTransaction, BankTransactionType } from '../bank-account/bank-transaction.entity';
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
+import { applyBankMovement, rowForInsert } from '../common/bank-movement.util';
 
 interface ActorRef {
   userId?: string;
@@ -179,5 +180,40 @@ export class SupplierPaymentService {
       await this.orderRepo.save(order);
     }
     return { ok: true };
+  }
+
+  // Undo of a deleted supplier payment: same id and data, the bank
+  // withdrawal and journal entry are put back and the order's paid amount
+  // recomputed. Refused if the order is gone/not received, the payment no
+  // longer fits its balance, or the account can't cover it.
+  async restoreDeleted(data: Record<string, unknown>, actor: ActorRef = {}) {
+    const order = await this.orderRepo.findOne({ where: { id: String(data.purchaseOrderId) } });
+    if (!order) throw new BadRequestException('The purchase order of this payment no longer exists.');
+    if (order.status !== PurchaseOrderStatus.RECEIVED) throw new BadRequestException('The purchase order is no longer received, so it has nothing to pay.');
+    const amount = this.round3(Number(data.amount));
+    const paid = Number(order.paidAmount || 0);
+    if (paid + amount > Number(order.total || 0) + 0.001) {
+      throw new BadRequestException(`Putting this payment back (${amount.toFixed(3)} OMR) would exceed what is still owed on this order.`);
+    }
+    const payment = await this.dataSource.transaction(async (manager) => {
+      let bankTransactionId: string | null = null;
+      if (data.bankAccountId) {
+        bankTransactionId = await applyBankMovement(manager, {
+          accountId: String(data.bankAccountId),
+          type: BankTransactionType.WITHDRAWAL,
+          amount,
+          date: String(data.paymentDate),
+          note: `Payment to supplier — PO ${order.id}`,
+        });
+      }
+      await manager.insert(SupplierPayment, { ...rowForInsert(data), amount, bankTransactionId } as any);
+      return manager.findOneOrFail(SupplierPayment, { where: { id: String(data.id) } });
+    });
+    const all = await this.repo.find({ where: { purchaseOrderId: order.id } });
+    order.paidAmount = this.round3(all.reduce((sum, p) => sum + Number(p.amount), 0));
+    order.paymentStatus = computePaymentStatus(order.paidAmount, Number(order.total || 0));
+    await this.orderRepo.save(order);
+    await this.postJournalEntry(payment, actor);
+    return payment;
   }
 }

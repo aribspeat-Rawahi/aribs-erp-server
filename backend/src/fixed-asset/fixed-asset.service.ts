@@ -10,6 +10,7 @@ import { BankTransaction, BankTransactionType } from '../bank-account/bank-trans
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService, PostingLine } from '../journal/journal-posting.service';
+import { applyBankMovement, rowForInsert } from '../common/bank-movement.util';
 
 interface ActorRef {
   userId?: string;
@@ -142,28 +143,7 @@ export class FixedAssetService {
       details: { assetNumber: saved.savedItem.assetNumber, name: saved.savedItem.name, cost: saved.savedItem.cost },
     });
 
-    try {
-      const assetAccountId = await this.journalPosting.findAccountIdByCode(CATEGORY_ACCOUNT_CODE[saved.savedItem.category]);
-      const lines: PostingLine[] = [{ accountId: assetAccountId, debit: cost, description: 'Fixed asset purchase' }];
-      if (dto.bankAccountId) {
-        const bankJournalAccountId = await this.bankAccountService.ensureJournalAccountId(dto.bankAccountId);
-        lines.push({ accountId: bankJournalAccountId, credit: cost, description: 'Asset paid from account' });
-      } else {
-        const apAccountId = await this.journalPosting.findAccountIdByCode(ACCOUNTS_PAYABLE_CODE);
-        lines.push({ accountId: apAccountId, credit: cost, description: 'Asset purchased on credit' });
-      }
-      await this.journalPosting.postForSource(
-        'fixed_asset_purchase',
-        saved.savedItem.id,
-        date,
-        `Fixed asset purchase — ${saved.savedItem.assetNumber}`,
-        lines,
-        actor,
-        saved.savedItem.assetNumber,
-      );
-    } catch (err) {
-      console.error(`Auto-posting failed for fixed_asset_purchase ${saved.savedItem.id}:`, err);
-    }
+    await this.postPurchaseJournal(saved.savedItem, actor);
 
     return saved.savedItem;
   }
@@ -423,6 +403,56 @@ export class FixedAssetService {
       console.error(`Auto-posting failed for fixed_asset_disposal ${saved.id}:`, err);
     }
 
+    return saved;
+  }
+
+  // Dr the asset's category account / Cr the bank account it was paid
+  // from, or Cr Accounts Payable when bought on credit.
+  private async postPurchaseJournal(item: FixedAsset, actor: ActorRef) {
+    try {
+      const cost = Number(item.cost);
+      const assetAccountId = await this.journalPosting.findAccountIdByCode(CATEGORY_ACCOUNT_CODE[item.category]);
+      const lines: PostingLine[] = [{ accountId: assetAccountId, debit: cost, description: 'Fixed asset purchase' }];
+      if (item.bankAccountId) {
+        const bankJournalAccountId = await this.bankAccountService.ensureJournalAccountId(item.bankAccountId);
+        lines.push({ accountId: bankJournalAccountId, credit: cost, description: 'Asset paid from account' });
+      } else {
+        const apAccountId = await this.journalPosting.findAccountIdByCode(ACCOUNTS_PAYABLE_CODE);
+        lines.push({ accountId: apAccountId, credit: cost, description: 'Asset purchased on credit' });
+      }
+      await this.journalPosting.postForSource(
+        'fixed_asset_purchase',
+        item.id,
+        item.purchaseDate,
+        `Fixed asset purchase — ${item.assetNumber}`,
+        lines,
+        actor,
+        item.assetNumber,
+      );
+    } catch (err) {
+      console.error(`Auto-posting failed for fixed_asset_purchase ${item.id}:`, err);
+    }
+  }
+
+  // Undo of a deleted asset (no depreciation posted yet): same
+  // id/number/date. If it was paid from an account, the delete put the
+  // money back with a reversal deposit (kept in the bank history), so the
+  // undo takes it out again; the purchase journal entry is re-posted.
+  async restoreDeleted(data: Record<string, unknown>, actor: ActorRef = {}) {
+    const saved = await this.dataSource.transaction(async (manager) => {
+      if (data.bankAccountId) {
+        await applyBankMovement(manager, {
+          accountId: String(data.bankAccountId),
+          type: BankTransactionType.WITHDRAWAL,
+          amount: Number(data.cost),
+          date: String(data.purchaseDate),
+          note: `Fixed asset purchase — ${data.name} (restored)`,
+        });
+      }
+      await manager.insert(FixedAsset, { ...rowForInsert(data), accumulatedDepreciation: 0, status: FixedAssetStatus.ACTIVE } as any);
+      return manager.findOneOrFail(FixedAsset, { where: { id: String(data.id) } });
+    });
+    await this.postPurchaseJournal(saved, actor);
     return saved;
   }
 }

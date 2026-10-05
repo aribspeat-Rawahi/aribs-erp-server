@@ -15,6 +15,7 @@ import { BankAccountService } from '../bank-account/bank-account.service';
 import { BankTransactionType } from '../bank-account/bank-transaction.entity';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
+import { discardFile } from '../common/discard-file.util';
 
 interface ActorRef {
   userId?: string;
@@ -99,9 +100,8 @@ export class ReimbursementService {
         `Only pending claims can be deleted (this one is ${item.status}) — approved/rejected/paid claims are kept for the audit trail.`,
       );
     }
-    if (item.receiptFilePath && fs.existsSync(item.receiptFilePath)) {
-      fs.unlinkSync(item.receiptFilePath);
-    }
+    // parked, not deleted, so "Undo" can bring it back
+    discardFile(item.receiptFilePath);
     await this.repo.remove(item);
     await this.activityLog.log({
       action: 'reimbursement.deleted',

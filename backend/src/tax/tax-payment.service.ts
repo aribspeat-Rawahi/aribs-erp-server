@@ -12,6 +12,8 @@ import { verifyFileSignature } from '../common/file-signature.util';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
+import { applyBankMovement, rowForInsert } from '../common/bank-movement.util';
+import { discardFile } from '../common/discard-file.util';
 
 interface ActorRef {
   userId?: string;
@@ -241,9 +243,8 @@ export class TaxPaymentService {
         await manager.delete(BankTransaction, item.bankTransactionId);
       }
 
-      if (item.documentFilePath && fs.existsSync(item.documentFilePath)) {
-        fs.unlinkSync(item.documentFilePath);
-      }
+      // parked, not deleted, so "Undo" can bring it back
+      discardFile(item.documentFilePath);
       await manager.remove(item);
       return item;
     });
@@ -286,5 +287,27 @@ export class TaxPaymentService {
       throw new NotFoundException('No document uploaded for this tax payment');
     }
     return path.resolve(item.documentFilePath);
+  }
+
+  // Undo of a deleted tax payment: same id/number/date; the bank
+  // withdrawal and the journal entry (Dr VAT Payable / Cr bank) come back.
+  async restoreDeleted(data: Record<string, unknown>, actor: ActorRef = {}) {
+    const amount = Number(data.amount);
+    const saved = await this.dataSource.transaction(async (manager) => {
+      let bankTransactionId: string | null = null;
+      if (data.bankAccountId) {
+        bankTransactionId = await applyBankMovement(manager, {
+          accountId: String(data.bankAccountId),
+          type: BankTransactionType.WITHDRAWAL,
+          amount,
+          date: String(data.datePaid),
+          note: `Tax payment — ${data.period}`,
+        });
+      }
+      await manager.insert(TaxPayment, { ...rowForInsert(data), bankTransactionId } as any);
+      return manager.findOneOrFail(TaxPayment, { where: { id: String(data.id) } });
+    });
+    await this.postJournalEntry(saved, actor);
+    return saved;
   }
 }

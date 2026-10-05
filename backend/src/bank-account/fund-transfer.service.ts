@@ -13,6 +13,8 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { BankAccountService } from './bank-account.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { AccountService } from '../journal/account.service';
+import { applyBankMovement, rowForInsert } from '../common/bank-movement.util';
+import { discardFile } from '../common/discard-file.util';
 
 // Chart-of-Accounts code for the optional "Money in Transit" clearing
 // account (see account.service.ts's DEFAULT_ACCOUNTS) — used only for a
@@ -425,9 +427,8 @@ export class FundTransferService {
       if (item.fromTransactionId) await manager.delete(BankTransaction, item.fromTransactionId);
       if (item.toTransactionId) await manager.delete(BankTransaction, item.toTransactionId);
 
-      if (item.documentFilePath && fs.existsSync(item.documentFilePath)) {
-        fs.unlinkSync(item.documentFilePath);
-      }
+      // parked, not deleted, so "Undo" can bring it back
+      discardFile(item.documentFilePath);
       await manager.remove(item);
       return item;
     });
@@ -472,5 +473,32 @@ export class FundTransferService {
       throw new NotFoundException('No document uploaded for this transfer');
     }
     return path.resolve(item.documentFilePath);
+  }
+
+  // Undo of a deleted transfer: same id/number/date; the withdrawal (and
+  // the deposit, if it had arrived) and the journal entry are put back.
+  async restoreDeleted(data: Record<string, unknown>, actor: ActorRef = {}) {
+    const amount = Number(data.amount);
+    const date = String(data.date);
+    const inTransit = data.status === FundTransferStatus.IN_TRANSIT;
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const from = await manager.findOne(BankAccount, { where: { id: String(data.fromAccountId) } });
+      const to = await manager.findOne(BankAccount, { where: { id: String(data.toAccountId) } });
+      if (!from || !to) throw new BadRequestException('One of the accounts of this transfer no longer exists - restore it first.');
+      const fromTransactionId = await applyBankMovement(manager, {
+        accountId: from.id,
+        type: BankTransactionType.WITHDRAWAL,
+        amount,
+        date,
+        note: inTransit ? `Fund transfer to ${to.name} (in transit)` : `Fund transfer to ${to.name}`,
+      });
+      const toTransactionId = inTransit
+        ? null
+        : await applyBankMovement(manager, { accountId: to.id, type: BankTransactionType.DEPOSIT, amount, date, note: `Fund transfer from ${from.name}` });
+      await manager.insert(FundTransfer, { ...rowForInsert(data), fromTransactionId, toTransactionId } as any);
+      return manager.findOneOrFail(FundTransfer, { where: { id: String(data.id) } });
+    });
+    await this.postJournalEntry(saved, actor);
+    return saved;
   }
 }

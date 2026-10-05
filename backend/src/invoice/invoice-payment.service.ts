@@ -9,6 +9,7 @@ import { BankAccount } from '../bank-account/bank-account.entity';
 import { BankTransaction, BankTransactionType } from '../bank-account/bank-transaction.entity';
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
+import { applyBankMovement, rowForInsert } from '../common/bank-movement.util';
 
 interface ActorRef {
   userId?: string;
@@ -232,5 +233,41 @@ export class InvoicePaymentService {
       }
     }
     if (payments.length > 0) await this.repo.remove(payments);
+  }
+
+  // Undo of a deleted payment (Activity Log > Deleted): same id and data,
+  // the bank deposit and journal entry are put back and the invoice's
+  // paid amount recomputed. Refused if the invoice is gone or the payment
+  // no longer fits its balance due.
+  async restoreDeleted(data: Record<string, unknown>, actor: ActorRef = {}) {
+    const invoice = await this.invoiceRepo.findOne({ where: { id: String(data.invoiceId) } });
+    if (!invoice) throw new BadRequestException('The invoice of this payment no longer exists - restore the invoice first.');
+    const amount = this.round3(Number(data.amount));
+    const paid = Number(invoice.paidAmount || 0);
+    if (paid + amount > Number(invoice.total) + 0.001) {
+      throw new BadRequestException(
+        `Putting this payment back (${amount.toFixed(3)} OMR) would exceed what is still due on ${invoice.invoiceNumber} (${this.round3(Math.max(0, Number(invoice.total) - paid)).toFixed(3)} OMR).`,
+      );
+    }
+    const payment = await this.dataSource.transaction(async (manager) => {
+      let bankTransactionId: string | null = null;
+      if (data.bankAccountId) {
+        bankTransactionId = await applyBankMovement(manager, {
+          accountId: String(data.bankAccountId),
+          type: BankTransactionType.DEPOSIT,
+          amount,
+          date: String(data.paymentDate),
+          note: `Payment received — invoice ${invoice.invoiceNumber}`,
+        });
+      }
+      await manager.insert(InvoicePayment, { ...rowForInsert(data), amount, bankTransactionId } as any);
+      return manager.findOneOrFail(InvoicePayment, { where: { id: String(data.id) } });
+    });
+    const all = await this.repo.find({ where: { invoiceId: invoice.id } });
+    invoice.paidAmount = this.round3(all.reduce((sum, p) => sum + Number(p.amount), 0));
+    invoice.paymentStatus = computePaymentStatus(invoice.paidAmount, Number(invoice.total));
+    await this.invoiceRepo.save(invoice);
+    await this.postJournalEntry(payment, invoice.invoiceNumber, actor);
+    return payment;
   }
 }

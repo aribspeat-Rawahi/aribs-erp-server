@@ -9,6 +9,7 @@ import { CreateVendorPrepaymentDto, ApplyVendorPrepaymentDto } from './dto/vendo
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
+import { applyBankMovement, rowForInsert } from '../common/bank-movement.util';
 
 interface ActorRef {
   userId?: string;
@@ -102,24 +103,7 @@ export class VendorPrepaymentService {
       details: { prepaymentNumber: saved.prepaymentNumber, supplierId: saved.supplierId, amount: saved.amount },
     });
 
-    try {
-      const prepaymentAccountId = await this.journalPosting.findAccountIdByCode(VENDOR_PREPAYMENTS_CODE);
-      const bankJournalAccountId = await this.bankAccountService.ensureJournalAccountId(saved.bankAccountId);
-      await this.journalPosting.postForSource(
-        'vendor_prepayment',
-        saved.id,
-        date,
-        `Vendor prepayment ${saved.prepaymentNumber}`,
-        [
-          { accountId: prepaymentAccountId, debit: amount, description: 'Advance paid to supplier' },
-          { accountId: bankJournalAccountId, credit: amount, description: 'Prepayment paid out' },
-        ],
-        actor,
-        saved.prepaymentNumber,
-      );
-    } catch (err) {
-      console.error(`Auto-posting failed for vendor_prepayment ${saved.id}:`, err);
-    }
+    await this.postPrepaymentJournal(saved, actor);
 
     return this.findOne(saved.id);
   }
@@ -231,5 +215,48 @@ export class VendorPrepaymentService {
       console.error(`Removing auto-posted journal entry failed for vendor_prepayment ${id}:`, err);
     }
     return { deleted: true };
+  }
+
+  // Dr Vendor Prepayments (asset) / Cr the bank account it was paid from.
+  private async postPrepaymentJournal(saved: VendorPrepayment, actor: ActorRef) {
+    try {
+      const amount = Number(saved.amount);
+      const prepaymentAccountId = await this.journalPosting.findAccountIdByCode(VENDOR_PREPAYMENTS_CODE);
+      const bankJournalAccountId = await this.bankAccountService.ensureJournalAccountId(saved.bankAccountId);
+      await this.journalPosting.postForSource(
+        'vendor_prepayment',
+        saved.id,
+        saved.date,
+        `Vendor prepayment ${saved.prepaymentNumber}`,
+        [
+          { accountId: prepaymentAccountId, debit: amount, description: 'Advance paid to supplier' },
+          { accountId: bankJournalAccountId, credit: amount, description: 'Prepayment paid out' },
+        ],
+        actor,
+        saved.prepaymentNumber,
+      );
+    } catch (err) {
+      console.error(`Auto-posting failed for vendor_prepayment ${saved.id}:`, err);
+    }
+  }
+
+  // Undo of a deleted (never used) prepayment: same id/number/date. The
+  // delete put the money back with a reversal deposit (kept in the bank
+  // history), so the undo takes it out again with a new withdrawal and
+  // re-posts the journal entry.
+  async restoreDeleted(data: Record<string, unknown>, actor: ActorRef = {}) {
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const bankTransactionId = await applyBankMovement(manager, {
+        accountId: String(data.bankAccountId),
+        type: BankTransactionType.WITHDRAWAL,
+        amount: Number(data.amount),
+        date: String(data.date),
+        note: `Vendor prepayment ${data.prepaymentNumber} (restored)`,
+      });
+      await manager.insert(VendorPrepayment, { ...rowForInsert(data), appliedAmount: 0, bankTransactionId } as any);
+      return manager.findOneOrFail(VendorPrepayment, { where: { id: String(data.id) } });
+    });
+    await this.postPrepaymentJournal(saved, actor);
+    return saved;
   }
 }

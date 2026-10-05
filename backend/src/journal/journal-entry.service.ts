@@ -112,6 +112,10 @@ export class JournalEntryService {
         'This entry was posted automatically from another record (Expense, Invoice, Reimbursement, Fund Transfer, or Tax Payment) — edit or delete that record instead of this entry directly.',
       );
     }
+    // lines removed explicitly (not left to the DB cascade) so they are
+    // kept with the delete record and come back on "Undo"
+    if (item.lines?.length) await this.lineRepo.remove(item.lines);
+    item.lines = [];
     await this.repo.remove(item);
     await this.activityLog.log({
       action: 'journal_entry.deleted',

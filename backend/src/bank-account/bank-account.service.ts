@@ -97,7 +97,10 @@ export class BankAccountService {
 
   async remove(id: string) {
     const item = await this.findOne(id);
-    await this.txnRepo.delete({ bankAccountId: id });
+    // .remove() (not .delete()) so the transaction history is kept with
+    // the delete record and comes back on "Undo"
+    const txns = await this.txnRepo.find({ where: { bankAccountId: id } });
+    if (txns.length) await this.txnRepo.remove(txns);
     await this.accountRepo.remove(item);
     return { deleted: true };
   }
