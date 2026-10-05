@@ -484,6 +484,7 @@ function BalanceSheetReport() {
 
 interface SalesTaxRow {
   id: string;
+  type?: 'invoice' | 'credit_note';
   invoiceNumber: string;
   customerId: string;
   customerName: string;
@@ -494,7 +495,7 @@ interface SalesTaxRow {
 }
 
 const SALES_TAX_CARDS = [
-  { key: 'agency', icon: Landmark, title: 'Agency Based', description: 'VAT payable to the Oman Tax Authority (OTA) for the period.' },
+  { key: 'agency', icon: Landmark, title: 'Agency Based', description: 'Net VAT payable to the Oman Tax Authority (OTA): output VAT − input VAT.' },
   { key: 'transaction', icon: Receipt, title: 'Transaction Based', description: 'Sales tax report broken down by individual invoice.' },
   { key: 'customer', icon: Users, title: 'Customer Based', description: 'Sales tax report grouped by customer.' },
   { key: 'category', icon: Tags, title: 'Category Based', description: 'Sales tax report grouped by VAT rate (Standard / Zero-rated).' },
@@ -551,12 +552,23 @@ function SalesTaxHub() {
   );
 }
 
+// VAT return summary for the period: output VAT on sales (less credit
+// notes) minus input VAT on purchases (less debit notes).
 function SalesTaxAgencyView() {
   const [range, setRange] = useState(monthRange());
-  const [data, setData] = useState<{ totalTaxableSales: number; totalVat: number } | null>(null);
+  const [data, setData] = useState<{
+    taxableSales: number;
+    outputVat: number;
+    creditNotesVat: number;
+    taxablePurchases: number;
+    inputVat: number;
+    debitNotesVat: number;
+    netVatPayable: number;
+    purchaseRowsMissingDocuments: number;
+  } | null>(null);
 
   useEffect(() => {
-    api.get('/reports/sales-tax', { params: range }).then((res) => setData(res.data));
+    api.get('/reports/vat-summary', { params: range }).then((res) => setData(res.data));
   }, [range]);
 
   return (
@@ -568,18 +580,50 @@ function SalesTaxAgencyView() {
         <Card className="p-4">
           <PeriodLine startDate={range.startDate} endDate={range.endDate} />
           <p className="text-xs text-muted mb-3">
-            Oman has a single national VAT authority, so this shows one agency's totals rather than a multi-jurisdiction split.
+            Oman Tax Authority (OTA). Sales are after discounts and less credit notes; purchases are goods received (with the supplier's tax invoice) less debit notes.
           </p>
-          <ReportTable
-            columns={[{ label: 'Agency' }, { label: 'Taxable Sales', align: 'right' }, { label: 'VAT Collected', align: 'right' }]}
-            isEmpty={false}
-          >
-            <tr>
-              <td className="py-2 pl-3 text-ink font-medium">Oman Tax Authority (OTA)</td>
-              <td className="py-2 px-3 text-right">{money(data.totalTaxableSales)}</td>
-              <td className="py-2 px-3 text-right font-semibold">{money(data.totalVat)}</td>
-            </tr>
-          </ReportTable>
+          {/* Only three lines, so a plain table that wraps (no sideways scroll on a phone). */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-muted border-b border-black/10 bg-black/[0.02]">
+                  <th className="py-2 pl-3 font-medium">VAT return line</th>
+                  <th className="py-2 px-3 font-medium text-right">Taxable value</th>
+                  <th className="py-2 px-3 font-medium text-right">VAT</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/5">
+                <tr>
+                  <td className="py-2 pl-3 text-ink">
+                    Output VAT — sales
+                    {data.creditNotesVat ? <div className="text-xs text-muted">after {money(data.creditNotesVat)} credit notes</div> : null}
+                  </td>
+                  <td className="py-2 px-3 text-right whitespace-nowrap">{money(data.taxableSales)}</td>
+                  <td className="py-2 px-3 text-right whitespace-nowrap">{money(data.outputVat)}</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pl-3 text-ink">
+                    Input VAT — purchases
+                    {data.debitNotesVat ? <div className="text-xs text-muted">after {money(data.debitNotesVat)} debit notes</div> : null}
+                  </td>
+                  <td className="py-2 px-3 text-right whitespace-nowrap">{money(data.taxablePurchases)}</td>
+                  <td className="py-2 px-3 text-right whitespace-nowrap">− {money(data.inputVat)}</td>
+                </tr>
+                <tr className="border-t border-black/10 font-semibold">
+                  <td className="py-2 pl-3 text-ink">{data.netVatPayable >= 0 ? 'Net VAT payable to OTA' : 'Net VAT refundable from OTA'}</td>
+                  <td className="py-2 px-3"></td>
+                  <td className={`py-2 px-3 text-right whitespace-nowrap ${data.netVatPayable >= 0 ? 'text-red-600' : 'text-brand-700'}`}>
+                    {money(Math.abs(data.netVatPayable))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {data.purchaseRowsMissingDocuments > 0 && (
+            <p className="mt-3 text-xs text-amber-700">
+              {data.purchaseRowsMissingDocuments} purchase(s) with VAT are missing the supplier's VATIN or tax invoice number — input VAT on those may not be claimable. See the Purchase VAT report.
+            </p>
+          )}
         </Card>
       )}
     </>
@@ -652,7 +696,7 @@ function SalesTaxCustomerView() {
     g.taxable += r.subtotal;
     g.vat += r.vatAmount;
     g.total += r.total;
-    g.invoices += 1;
+    if (r.type !== 'credit_note') g.invoices += 1;
     acc.set(r.customerId, g);
     return acc;
   }, new Map<string, { customerName: string; taxable: number; vat: number; total: number; invoices: number }>());
@@ -762,17 +806,26 @@ function SalesTaxCategoryView() {
 
 interface PurchaseVatRow {
   id: string;
+  type?: 'goods_receipt' | 'debit_note';
+  reference?: string;
+  poNumber?: string;
   supplierId: string;
   supplierName: string;
+  supplierVatin?: string;
+  supplierInvoiceNumber?: string;
+  supplierInvoiceDate?: string;
   receivedAt: string;
   subtotal: number;
   vatAmount: number;
   total: number;
+  missing?: string[];
 }
 
+// Input VAT per goods receipt (less debit notes), with what is needed to
+// claim it: the supplier's VATIN and tax invoice number.
 function PurchaseVatReport() {
   const [range, setRange] = useState(monthRange());
-  const [data, setData] = useState<{ rows: PurchaseVatRow[]; totalTaxablePurchases: number; totalVat: number; orderCount: number } | null>(null);
+  const [data, setData] = useState<{ rows: PurchaseVatRow[]; totalTaxablePurchases: number; totalVat: number; orderCount: number; rowsMissingDocuments?: number } | null>(null);
 
   useEffect(() => {
     api.get('/reports/purchase-vat', { params: range }).then((res) => setData(res.data));
@@ -786,19 +839,27 @@ function PurchaseVatReport() {
       ) : (
         <Card className="p-4">
           <PeriodLine startDate={range.startDate} endDate={range.endDate} />
+          {!!data.rowsMissingDocuments && (
+            <p className="mb-3 text-xs text-amber-700">
+              {data.rowsMissingDocuments} row(s) are missing the supplier's VATIN or tax invoice number — add them (Suppliers) so the input VAT can be claimed.
+            </p>
+          )}
           <ReportTable
             columns={[
+              { label: 'Reference' },
               { label: 'Supplier' },
-              { label: 'Received' },
+              { label: 'Supplier VATIN' },
+              { label: 'Supplier invoice' },
+              { label: 'Date' },
               { label: 'Taxable', align: 'right' },
               { label: 'VAT', align: 'right' },
               { label: 'Total', align: 'right' },
             ]}
             isEmpty={data.rows.length === 0}
-            emptyMessage="No received purchase orders in this range."
+            emptyMessage="No goods received in this range."
             footer={
               <tr className="border-t border-black/10 font-semibold text-blue-700">
-                <td colSpan={2} className="py-2 pl-3">Total ({data.orderCount} orders)</td>
+                <td colSpan={5} className="py-2 pl-3">Total ({data.orderCount} goods receipts, net of debit notes)</td>
                 <td className="py-2 px-3 text-right">{money(data.totalTaxablePurchases)}</td>
                 <td className="py-2 px-3 text-right">{money(data.totalVat)}</td>
                 <td className="py-2 px-3 text-right"></td>
@@ -806,9 +867,19 @@ function PurchaseVatReport() {
             }
           >
             {data.rows.map((r) => (
-              <tr key={r.id}>
-                <td className="py-2 pl-3 text-ink">{r.supplierName}</td>
-                <td className="py-2 px-3 text-muted">{new Date(r.receivedAt).toLocaleDateString()}</td>
+              <tr key={r.id} className={r.missing?.length ? 'bg-amber-50/60' : ''}>
+                <td className="py-2 pl-3 text-ink whitespace-nowrap">
+                  {r.reference || '-'}
+                  {r.type === 'debit_note' ? ' (debit note)' : ''}
+                  {r.poNumber ? <div className="text-xs text-muted">{r.poNumber}</div> : null}
+                </td>
+                <td className="py-2 px-3 text-ink">{r.supplierName}</td>
+                <td className="py-2 px-3 text-muted whitespace-nowrap">{r.supplierVatin || (r.missing?.includes('supplier VATIN') ? <span className="text-amber-700">missing</span> : '-')}</td>
+                <td className="py-2 px-3 text-muted whitespace-nowrap">
+                  {r.supplierInvoiceNumber || (r.missing?.includes('tax invoice no.') ? <span className="text-amber-700">missing</span> : '-')}
+                  {r.supplierInvoiceDate ? <div className="text-xs">{r.supplierInvoiceDate}</div> : null}
+                </td>
+                <td className="py-2 px-3 text-muted whitespace-nowrap">{r.receivedAt}</td>
                 <td className="py-2 px-3 text-right">{money(r.subtotal)}</td>
                 <td className="py-2 px-3 text-right">{money(r.vatAmount)}</td>
                 <td className="py-2 px-3 text-right font-medium">{money(r.total)}</td>

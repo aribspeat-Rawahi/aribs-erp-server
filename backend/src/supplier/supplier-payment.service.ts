@@ -230,10 +230,13 @@ export class SupplierPaymentService {
   // applied to it. The journal entry belongs to that record.
   async addCreditRow(
     manager: import('typeorm').EntityManager,
-    opts: { purchaseOrderId: string; amount: number; date: string; note: string; source: 'debit_note' | 'vendor_credit' | 'vendor_prepayment'; sourceId: string },
+    opts: { purchaseOrderId: string; amount: number; date: string; note: string; source: 'debit_note' | 'vendor_credit' | 'vendor_prepayment'; sourceId: string; supplierId?: string },
   ) {
     const order = await manager.findOne(PurchaseOrder, { where: { id: opts.purchaseOrderId }, lock: { mode: 'pessimistic_write' } });
     if (!order) throw new NotFoundException('Purchase order not found');
+    if (opts.supplierId && order.supplierId !== opts.supplierId) {
+      throw new BadRequestException(`${order.poNumber} belongs to a different supplier.`);
+    }
     if (order.status !== PurchaseOrderStatus.RECEIVED && order.status !== PurchaseOrderStatus.PARTIALLY_RECEIVED) {
       throw new BadRequestException(`${order.poNumber}: nothing has been received yet, so nothing is owed to apply this to.`);
     }

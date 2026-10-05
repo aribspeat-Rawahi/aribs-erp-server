@@ -132,6 +132,7 @@ export class VendorCreditService {
           date,
           note: `Vendor credit ${item.creditNumber} applied`,
           source: 'vendor_credit',
+          supplierId: item.supplierId,
           sourceId: application.id,
         });
       }

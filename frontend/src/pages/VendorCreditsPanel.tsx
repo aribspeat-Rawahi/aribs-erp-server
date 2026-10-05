@@ -255,6 +255,19 @@ function ApplyCreditModal({
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // the supplier's purchase orders that still owe money (received value - paid)
+  const [orders, setOrders] = useState<{ id: string; poNumber?: string; due: number }[]>([]);
+  const [purchaseOrderId, setPurchaseOrderId] = useState('');
+  useEffect(() => {
+    api.get('/purchase-orders').then((res) => {
+      const list = (res.data as any[])
+        .filter((o) => o.supplierId === item.supplierId && (o.status === 'received' || o.status === 'partially_received'))
+        .map((o) => ({ id: o.id, poNumber: o.poNumber, due: Math.round((Number(o.receivedTotal || 0) - Number(o.paidAmount || 0)) * 1000) / 1000 }))
+        .filter((o) => o.due > 0.0005);
+      setOrders(list);
+      if (list.length) setPurchaseOrderId(list[0].id);
+    });
+  }, [item.supplierId]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -265,6 +278,7 @@ function ApplyCreditModal({
         amount: Number(amount),
         date,
         note: note || undefined,
+        purchaseOrderId,
       });
       onSaved();
     } catch (err: any) {
@@ -278,7 +292,7 @@ function ApplyCreditModal({
     <Modal title={`Apply credit — ${item.creditNumber}`} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-3">
         <div className="text-sm text-ink/80 bg-black/[0.03] rounded-lg p-3">
-          {money(remaining)} OMR remaining · applying is tracking-only — Accounts Payable was already reduced when this credit was issued.
+          {money(remaining)} OMR remaining · applying it lowers what is still owed on the chosen bill (Accounts Payable was already reduced when this credit was issued).
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Amount to apply (OMR)">
@@ -288,13 +302,23 @@ function ApplyCreditModal({
             <input className={inputClass} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
           </Field>
         </div>
-        <Field label="Note (optional — e.g. which bill this offsets)">
+        <Field label="Apply to purchase order (bill)">
+          <select className={inputClass} value={purchaseOrderId} onChange={(e) => setPurchaseOrderId(e.target.value)} required>
+            {orders.length === 0 && <option value="">No unpaid bills for this supplier</option>}
+            {orders.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.poNumber || o.id.slice(0, 8)} — {money(o.due)} OMR due
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Note (optional)">
           <input className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Applying…' : 'Apply'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy || !purchaseOrderId}>{busy ? 'Applying…' : 'Apply'}</PrimaryButton>
         </div>
       </form>
     </Modal>

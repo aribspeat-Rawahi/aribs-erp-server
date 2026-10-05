@@ -147,6 +147,7 @@ export class VendorPrepaymentService {
           date,
           note: `Vendor prepayment ${item.prepaymentNumber} applied`,
           source: 'vendor_prepayment',
+          supplierId: item.supplierId,
           sourceId: saved.id,
         });
       }

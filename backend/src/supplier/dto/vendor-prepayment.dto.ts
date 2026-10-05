@@ -29,9 +29,10 @@ export class ApplyVendorPrepaymentDto {
   @IsString()
   date?: string; // defaults to today
 
-  @IsOptional()
+  // required: applying is always against a bill (purchase order), so
+  // that order's balance due goes down by the same amount
   @IsString()
-  purchaseOrderId?: string;
+  purchaseOrderId: string;
 
   @IsOptional()
   @IsString()
