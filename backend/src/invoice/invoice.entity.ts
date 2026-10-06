@@ -64,6 +64,13 @@ export class Invoice {
   @Column({ default: false })
   vatExcluded: boolean;
 
+  // An unpaid invoice from the old books, brought in on the Opening
+  // Balances page. No items, no VAT, no stock; left out of sales and VAT
+  // reports (its VAT was filed in the old period) but still in AR aging,
+  // statements and Receive Payment.
+  @Column({ default: false })
+  isOpening: boolean;
+
   @Column({ type: 'enum', enum: PaymentType, nullable: true })
   paymentType: PaymentType;
 

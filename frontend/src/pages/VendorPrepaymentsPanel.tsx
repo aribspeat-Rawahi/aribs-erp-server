@@ -252,7 +252,7 @@ function ApplyPrepaymentModal({
     api.get('/purchase-orders').then((res) => {
       const list = (res.data as any[])
         .filter((o) => o.supplierId === item.supplierId && (o.status === 'received' || o.status === 'partially_received'))
-        .map((o) => ({ id: o.id, poNumber: o.poNumber, due: Math.round((Number(o.receivedTotal || 0) - Number(o.paidAmount || 0)) * 1000) / 1000 }))
+        .map((o) => ({ id: o.id, poNumber: o.openingReference ? `${o.poNumber} (bill ${o.openingReference})` : o.poNumber, due: Math.round((Number(o.receivedTotal || 0) - Number(o.paidAmount || 0)) * 1000) / 1000 }))
         .filter((o) => o.due > 0.0005);
       setOrders(list);
       if (list.length) setPurchaseOrderId(list[0].id);

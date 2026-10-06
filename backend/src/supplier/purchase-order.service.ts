@@ -106,6 +106,13 @@ export class PurchaseOrderService {
     return orders.map((o) => ({ ...o, items: byOrder.get(o.id) || [] }));
   }
 
+  // Opening bills (old books) are fixed once opening balances are finalized.
+  private assertNotOpening(order: PurchaseOrder, action: string) {
+    if (order.isOpening) {
+      throw new BadRequestException(`${order.poNumber} is an opening balance (supplier bill ${order.openingReference || ''}) and cannot be ${action}. Pay it with Pay Bill, or correct it with a journal entry.`);
+    }
+  }
+
   async findAll() {
     return this.withItems(await this.orderRepo.find({ order: { sequenceNumber: 'DESC' } }));
   }
@@ -226,6 +233,7 @@ export class PurchaseOrderService {
       }
 
       const receivedDate = dto.receivedDate || this.todayStr();
+      await this.journalPosting.assertDateOpen(receivedDate, 'This goods receipt', manager);
       const grn = await manager.save(
         manager.create(GoodsReceipt, {
           grnNumber: `TMP-${randomUUID().replace(/-/g, '').slice(0, 24)}`,
@@ -449,6 +457,7 @@ export class PurchaseOrderService {
   async cancel(id: string) {
     const order = await this.orderRepo.findOne({ where: { id } });
     if (!order) throw new NotFoundException('Purchase order not found');
+    this.assertNotOpening(order, 'cancelled');
     if (order.status !== PurchaseOrderStatus.ORDERED) {
       throw new BadRequestException(
         order.status === PurchaseOrderStatus.PARTIALLY_RECEIVED
@@ -463,6 +472,7 @@ export class PurchaseOrderService {
   async update(id: string, dto: Partial<CreatePurchaseOrderDto>) {
     const order = await this.orderRepo.findOne({ where: { id } });
     if (!order) throw new NotFoundException('Purchase order not found');
+    this.assertNotOpening(order, 'edited');
     if (order.status !== PurchaseOrderStatus.ORDERED) {
       throw new BadRequestException(`Only ordered POs can be edited (this one is ${order.status.replace('_', ' ')})`);
     }
@@ -493,6 +503,7 @@ export class PurchaseOrderService {
   async remove(id: string) {
     const order = await this.orderRepo.findOne({ where: { id } });
     if (!order) throw new NotFoundException('Purchase order not found');
+    this.assertNotOpening(order, 'deleted');
     if (order.status !== PurchaseOrderStatus.ORDERED) {
       throw new BadRequestException(
         `Only ordered POs can be deleted (this one is ${order.status.replace('_', ' ')}) — received/cancelled orders are kept for the audit trail.`,
@@ -509,6 +520,7 @@ export class PurchaseOrderService {
   // Purchase order to send to the supplier (same layouts as invoices).
   async generatePdf(id: string) {
     const order = await this.findOne(id);
+    if (order.isOpening) throw new NotFoundException('This is an opening balance from the old books - there is no purchase order PDF.');
     const supplier = await this.getSupplier(order.supplierId);
     const settings = await this.settingsService.get();
     const logoBase64 = await this.settingsService.getLogoBase64();

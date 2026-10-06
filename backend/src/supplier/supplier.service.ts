@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import * as fs from 'fs';
@@ -84,6 +84,12 @@ export class SupplierService {
   // no TypeORM cascade — plain FK columns, not relations) are cleaned up.
   async remove(id: string, deletedBy?: { userId?: string; email?: string }) {
     const item = await this.findOne(id);
+    // money still owed to this supplier would be left with no supplier
+    const orders = await this.purchaseOrderRepo.find({ where: { supplierId: id } });
+    const unpaid = orders.filter((o) => Number(o.receivedTotal || 0) - Number(o.paidAmount || 0) > 0.0005);
+    if (unpaid.length) {
+      throw new BadRequestException(`${item.name} is still owed money on ${unpaid.length} bill(s) (${unpaid.slice(0, 3).map((o) => o.poNumber).join(', ')}). Pay or delete those first.`);
+    }
 
     const bankAccounts = await this.bankAccountRepo.find({ where: { supplierId: id } });
     for (const acc of bankAccounts) {

@@ -209,6 +209,7 @@ export class PayrollService {
       row.bankTransactionId = txn.id;
     }
 
+    await this.journalPosting.assertDateOpen(new Date().toISOString().slice(0, 10), 'Paying salary today');
     row.isPaid = true;
     row.paidDate = new Date().toISOString().slice(0, 10);
     const saved = await this.repo.save(row);

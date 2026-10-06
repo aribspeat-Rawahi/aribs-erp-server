@@ -99,6 +99,7 @@ export class ExpenseService {
   // Journal Entry.
   async create(dto: CreateExpenseDto, actor: ActorRef = {}) {
     const date = dto.date || new Date().toISOString().slice(0, 10);
+    await this.journalPosting.assertDateOpen(date, 'This expense');
 
     const saved = await this.dataSource.transaction(async (manager) => {
       let bankTransactionId: string | undefined;
@@ -143,6 +144,8 @@ export class ExpenseService {
     const saved = await this.dataSource.transaction(async (manager) => {
       const item = await manager.findOne(Expense, { where: { id } });
       if (!item) throw new NotFoundException('Expense not found');
+      await this.journalPosting.assertDateOpen(item.date, 'This expense', manager);
+      if (dto.date) await this.journalPosting.assertDateOpen(dto.date, 'The new date', manager);
 
       if (item.bankAccountId && item.bankTransactionId) {
         const oldAccount = await manager.findOne(BankAccount, {

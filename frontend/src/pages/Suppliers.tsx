@@ -101,6 +101,10 @@ interface PurchaseOrder {
   paymentStatus?: string;
   goodsReceipts?: GoodsReceipt[];
   overdue?: boolean;
+  // unpaid supplier bill from the old books (Opening Balances)
+  isOpening?: boolean;
+  openingReference?: string | null;
+  dueDate?: string | null;
 }
 interface SupplierPayment {
   id: string;
@@ -182,8 +186,9 @@ const CREDIT_SOURCE_LABEL: Record<string, string> = {
   vendor_credit: 'Vendor credit applied',
   vendor_prepayment: 'Prepayment applied',
 };
-function poRef(o: { poNumber?: string; id: string }) {
-  return o.poNumber || `PO ${o.id.slice(0, 8)}`;
+function poRef(o: { poNumber?: string; id: string; openingReference?: string | null }) {
+  const n = o.poNumber || `PO ${o.id.slice(0, 8)}`;
+  return o.openingReference ? `${n} (bill ${o.openingReference})` : n;
 }
 
 const returnStatusTone: Record<string, string> = {
@@ -1175,13 +1180,21 @@ function PurchaseOrderRow({
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-sm font-medium text-ink whitespace-nowrap">{poRef(o)}</span>
-          <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${statusTone[o.status] || 'bg-black/5 text-ink/70'}`}>
-            {statusLabel[o.status] || o.status}
-          </span>
+          {o.isOpening ? (
+            <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-black/5 text-ink/70" title="Unpaid supplier bill from the old books">
+              Opening balance
+            </span>
+          ) : (
+            <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${statusTone[o.status] || 'bg-black/5 text-ink/70'}`}>
+              {statusLabel[o.status] || o.status}
+            </span>
+          )}
           {overdue && <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-red-600 text-white">Overdue</span>}
         </div>
         <div className="text-xs text-muted">
-          {supplierName} · {o.items?.length || 0} item(s) · {Number(o.total || 0).toFixed(3)} OMR
+          {o.isOpening
+            ? `${supplierName} · from the old books · ${Number(o.total || 0).toFixed(3)} OMR${o.dueDate ? ` · due ${o.dueDate}` : ''}`
+            : `${supplierName} · ${o.items?.length || 0} item(s) · ${Number(o.total || 0).toFixed(3)} OMR`}
           {o.expectedDate && !received ? ` · Expected ${o.expectedDate}` : ''}
           {o.status === 'partially_received' ? ` · Received ${Number(o.receivedTotal || 0).toFixed(3)} OMR so far` : ''}
         </div>
@@ -1205,12 +1218,16 @@ function PurchaseOrderRow({
                 Paid
               </button>
             )}
-            <SecondaryButton icon={RotateCcw} requires="edit" onClick={onReturn}>Return</SecondaryButton>
+            {!o.isOpening && <SecondaryButton icon={RotateCcw} requires="edit" onClick={onReturn}>Return</SecondaryButton>}
           </>
         )}
         <div className="flex items-center gap-1.5">
-          <IconButton icon={Eye} title="View purchase order" onClick={onView} />
-          <IconButton icon={Download} title="Download PO PDF" onClick={() => downloadPdf(`/purchase-orders/${o.id}/pdf`, `${poRef(o)}.pdf`)} />
+          {!o.isOpening && (
+            <>
+              <IconButton icon={Eye} title="View purchase order" onClick={onView} />
+              <IconButton icon={Download} title="Download PO PDF" onClick={() => downloadPdf(`/purchase-orders/${o.id}/pdf`, `${poRef(o)}.pdf`)} />
+            </>
+          )}
           {o.status === 'ordered' && (
             <>
               <IconButton icon={Pencil} title="Edit" requires="edit" onClick={onEdit} />

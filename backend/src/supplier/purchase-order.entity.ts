@@ -74,6 +74,20 @@ export class PurchaseOrder {
   @Column({ default: false })
   closedShort: boolean;
 
+  // An unpaid supplier bill from the old books (Opening Balances page).
+  // No items or goods receipts; left out of purchase and VAT reports,
+  // but payable with Pay Bill like any received order.
+  @Column({ default: false })
+  isOpening: boolean;
+
+  // The supplier's own bill number for an opening bill.
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  openingReference: string | null;
+
+  // When the bill has to be paid (opening bills).
+  @Column({ type: 'date', nullable: true })
+  dueDate: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -96,6 +96,14 @@ export class InvoiceService {
     return this.invoiceRepo.find({ order: { createdAt: 'DESC' } });
   }
 
+  // Opening invoices (old books) are fixed once opening balances are
+  // finalized; corrections go through a journal entry.
+  private assertNotOpening(invoice: Invoice, action: string) {
+    if (invoice.isOpening) {
+      throw new BadRequestException(`${invoice.invoiceNumber} is an opening balance from the old books and cannot be ${action}. Record a payment against it, or correct it with a journal entry.`);
+    }
+  }
+
   async findOne(id: string) {
     const invoice = await this.invoiceRepo.findOne({ where: { id } });
     if (!invoice) throw new NotFoundException('Invoice not found');
@@ -446,6 +454,8 @@ export class InvoiceService {
   // from Settings (so switching the default in Settings changes future
   // invoices without touching old ones).
   async create(dto: CreateInvoiceDto, opts?: { skipApprovalGates?: boolean; requestedBy?: { userId?: string; email?: string } }) {
+    // invoices are dated today; refused if today is still inside the closed books
+    await this.journalPosting.assertDateOpen(this.todayStr(), 'This invoice');
     const customer = await this.customerService.findOne(dto.customerId);
     const vatExcluded = dto.vatExcluded ?? !customer.vatApplicable;
     const settings = await this.settingsService.get();
@@ -547,6 +557,8 @@ export class InvoiceService {
   async update(id: string, dto: UpdateInvoiceDto, opts?: { skipApprovalGates?: boolean; requestedBy?: { userId?: string; email?: string } }) {
     const invoice = await this.invoiceRepo.findOne({ where: { id } });
     if (!invoice) throw new NotFoundException('Invoice not found');
+    this.assertNotOpening(invoice, 'edited');
+    await this.journalPosting.assertDateOpen(invoice.issueDate, 'This invoice');
 
     // customerService.findOne throws NotFoundException if the id is bad,
     // which doubles as validation before we commit to the change.
@@ -725,6 +737,7 @@ export class InvoiceService {
   async convertToDeliveryNote(id: string) {
     const invoice = await this.invoiceRepo.findOne({ where: { id } });
     if (!invoice) throw new NotFoundException('Invoice not found');
+    this.assertNotOpening(invoice, 'turned into a delivery note');
     const items = await this.itemRepo.find({ where: { invoiceId: id } });
 
     return this.deliveryNoteService.create({
@@ -747,6 +760,7 @@ export class InvoiceService {
   async getPdfPath(id: string) {
     const invoice = await this.invoiceRepo.findOne({ where: { id } });
     if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.isOpening) throw new NotFoundException('This is an opening balance from the old books - its PDF is in the old system.');
     if (!invoice.pdfPath) throw new NotFoundException('No PDF generated yet for this invoice');
     return invoice.pdfPath;
   }
@@ -756,6 +770,8 @@ export class InvoiceService {
   async remove(id: string, deletedBy?: { userId?: string; email?: string }) {
     const invoice = await this.invoiceRepo.findOne({ where: { id } });
     if (!invoice) throw new NotFoundException('Invoice not found');
+    this.assertNotOpening(invoice, 'deleted');
+    await this.journalPosting.assertDateOpen(invoice.issueDate, 'This invoice');
     if (await this.hasApprovedReturns(id)) {
       throw new BadRequestException('This invoice has an approved sales return and cannot be deleted.');
     }
@@ -852,6 +868,8 @@ export class InvoiceService {
     const invoices = await this.invoiceRepo
       .createQueryBuilder('invoice')
       .where('invoice.issueDate BETWEEN :startDate AND :endDate', { startDate, endDate })
+      // opening balances (old books) are not sales of this period
+      .andWhere('invoice.isOpening = :opening', { opening: false })
       .getMany();
 
     let subtotal = 0;
@@ -871,6 +889,8 @@ export class InvoiceService {
     const invoices = await this.invoiceRepo
       .createQueryBuilder('invoice')
       .where('invoice.issueDate BETWEEN :startDate AND :endDate', { startDate, endDate })
+      // opening balances (old books) are not sales of this period
+      .andWhere('invoice.isOpening = :opening', { opening: false })
       .getMany();
 
     const byCustomer = new Map<string, { customerId: string; total: number; count: number }>();
@@ -916,6 +936,8 @@ export class InvoiceService {
     const invoices = await this.invoiceRepo
       .createQueryBuilder('invoice')
       .where('invoice.issueDate BETWEEN :startDate AND :endDate', { startDate, endDate })
+      // opening balances (old books) are not sales of this period
+      .andWhere('invoice.isOpening = :opening', { opening: false })
       .getMany();
 
     const byDate = new Map<string, number>();
@@ -936,6 +958,8 @@ export class InvoiceService {
     const invoices = await this.invoiceRepo
       .createQueryBuilder('invoice')
       .where('invoice.issueDate BETWEEN :startDate AND :endDate', { startDate, endDate })
+      // opening balances (old books) are not sales of this period
+      .andWhere('invoice.isOpening = :opening', { opening: false })
       .orderBy('invoice.issueDate', 'ASC')
       .getMany();
     const returns = await this.dataSource
@@ -999,6 +1023,8 @@ export class InvoiceService {
     const invoices = await this.invoiceRepo
       .createQueryBuilder('invoice')
       .where('invoice.issueDate BETWEEN :startDate AND :endDate', { startDate, endDate })
+      // opening balances (old books) are not sales of this period
+      .andWhere('invoice.isOpening = :opening', { opening: false })
       .getMany();
     const returns = await this.dataSource
       .getRepository(SalesReturn)
@@ -1065,6 +1091,8 @@ export class InvoiceService {
     const invoices = await this.invoiceRepo
       .createQueryBuilder('invoice')
       .where('invoice.issueDate BETWEEN :startDate AND :endDate', { startDate, endDate })
+      // opening balances (old books) are not sales of this period
+      .andWhere('invoice.isOpening = :opening', { opening: false })
       .getMany();
     const invoiceIds = invoices.map((i) => i.id);
     if (invoiceIds.length === 0) return [];

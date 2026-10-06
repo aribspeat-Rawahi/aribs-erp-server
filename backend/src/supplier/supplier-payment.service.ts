@@ -81,6 +81,7 @@ export class SupplierPaymentService {
   // paidAmount/paymentStatus, so the Suppliers list and Dashboard's
   // Payable Bills stay correct without re-summing this table.
   async create(purchaseOrderId: string, dto: CreateSupplierPaymentDto, actor: ActorRef = {}) {
+    await this.journalPosting.assertDateOpen(dto.paymentDate || this.todayStr(), 'This payment');
     const order = await this.orderRepo.findOne({ where: { id: purchaseOrderId } });
     if (!order) throw new NotFoundException('Purchase order not found');
     if (order.status !== PurchaseOrderStatus.RECEIVED && order.status !== PurchaseOrderStatus.PARTIALLY_RECEIVED) {
@@ -153,6 +154,7 @@ export class SupplierPaymentService {
   async remove(purchaseOrderId: string, paymentId: string) {
     const payment = await this.repo.findOne({ where: { id: paymentId, purchaseOrderId } });
     if (!payment) throw new NotFoundException('Payment not found');
+    await this.journalPosting.assertDateOpen(payment.paymentDate, 'This payment');
     if (payment.creditSource) {
       throw new BadRequestException('This row is a credit from a purchase return, vendor credit or prepayment - it is removed together with that record, not here.');
     }

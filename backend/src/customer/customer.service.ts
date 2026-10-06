@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as fs from 'fs';
@@ -83,6 +83,12 @@ export class CustomerService {
   // as Employee's own photo/document cleanup in HR.
   async remove(id: string, deletedBy?: { userId?: string; email?: string }) {
     const item = await this.findOne(id);
+    // money still owed by this customer would be left with no customer
+    const invoices = await this.invoiceRepo.find({ where: { customerId: id } });
+    const unpaid = invoices.filter((i) => Number(i.total) - Number(i.paidAmount || 0) > 0.0005);
+    if (unpaid.length) {
+      throw new BadRequestException(`${item.name} still owes money on ${unpaid.length} invoice(s) (${unpaid.slice(0, 3).map((i) => i.invoiceNumber).join(', ')}). Settle or delete those first.`);
+    }
 
     const bankAccounts = await this.bankAccountRepo.find({ where: { customerId: id } });
     for (const acc of bankAccounts) {

@@ -74,6 +74,18 @@ export class Settings {
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 15 })
   incomeTaxRatePercent: number;
 
+  // Opening balances (Accounting > Opening Balances): the last day of the
+  // old books. Once finalized, nothing can be posted on or before this
+  // date (see JournalPostingService.assertDateOpen).
+  @Column({ type: 'date', nullable: true })
+  openingBalanceDate: string | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  openingBalanceFinalizedAt: Date | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  openingBalanceFinalizedBy: string | null;
+
   @UpdateDateColumn()
   updatedAt: Date;
 }

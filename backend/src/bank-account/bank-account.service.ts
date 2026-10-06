@@ -64,7 +64,7 @@ export class BankAccountService {
     return item;
   }
 
-  async create(dto: CreateBankAccountDto) {
+  async create(dto: CreateBankAccountDto, actor: { userId?: string; email?: string } = {}) {
     const opening = dto.openingBalance ?? 0;
     const item = this.accountRepo.create({
       ...dto,
@@ -86,6 +86,25 @@ export class BankAccountService {
       /* linked lazily later if this failed */
     }
 
+    // Before opening balances are finalized, finalize posts this balance.
+    // After that (books started), post it now so the bank page and the
+    // Balance Sheet always agree: Dr bank, Cr 3900 Opening Balance Equity.
+    if (opening > 0 && (await this.journalPosting.lockedThrough())) {
+      const bankGl = await this.ensureJournalAccountId(saved.id);
+      const equity = await this.journalPosting.findAccountIdByCode('3900');
+      await this.journalPosting.postForSource(
+        'bank_opening',
+        saved.id,
+        new Date().toISOString().slice(0, 10),
+        `Opening balance - ${saved.name}`,
+        [
+          { accountId: bankGl, debit: opening, description: `Opening balance - ${saved.name}` },
+          { accountId: equity, credit: opening, description: `Opening balance - ${saved.name}` },
+        ],
+        actor,
+      );
+    }
+
     return saved;
   }
 
@@ -97,10 +116,16 @@ export class BankAccountService {
 
   async remove(id: string) {
     const item = await this.findOne(id);
+    // its balance is part of the books - deleting the account would leave
+    // money in the Balance Sheet with no account behind it
+    if ((await this.journalPosting.lockedThrough()) && Number(item.currentBalance) !== 0) {
+      throw new BadRequestException(`${item.name} still has a balance of ${Number(item.currentBalance).toFixed(3)} OMR. Move it to another account first (Fund Transfer).`);
+    }
     // .remove() (not .delete()) so the transaction history is kept with
     // the delete record and comes back on "Undo"
     const txns = await this.txnRepo.find({ where: { bankAccountId: id } });
     if (txns.length) await this.txnRepo.remove(txns);
+    await this.journalPosting.removeForSource('bank_opening', id);
     await this.accountRepo.remove(item);
     return { deleted: true };
   }
@@ -118,6 +143,7 @@ export class BankAccountService {
   // for why this is optional rather than always-on.
   async addTransaction(bankAccountId: string, dto: CreateBankTransactionDto, actor: ActorRef = {}) {
     const account = await this.findOne(bankAccountId);
+    await this.journalPosting.assertDateOpen(dto.date || new Date().toISOString().slice(0, 10), 'This transaction');
     const amount = Number(dto.amount);
 
     if (dto.type === BankTransactionType.WITHDRAWAL && Number(account.currentBalance) < amount) {

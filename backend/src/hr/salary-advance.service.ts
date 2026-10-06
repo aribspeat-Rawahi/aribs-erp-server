@@ -125,6 +125,7 @@ export class SalaryAdvanceService {
     }
 
     advance.disbursed = true;
+    await this.journalPosting.assertDateOpen(new Date().toISOString().slice(0, 10), 'Paying an advance today');
     advance.disbursedDate = new Date().toISOString().slice(0, 10);
     const saved = await this.repo.save(advance);
 

@@ -57,6 +57,7 @@ export class VendorPrepaymentService {
   // as FundTransfer/FixedAsset) and immediately posts Dr 1310 / Cr {bank}.
   async create(dto: CreateVendorPrepaymentDto, actor: ActorRef) {
     const date = dto.date || new Date().toISOString().slice(0, 10);
+    await this.journalPosting.assertDateOpen(date, 'This entry');
     const amount = Number(dto.amount);
 
     const saved = await this.dataSource.transaction(async (manager) => {
@@ -124,6 +125,7 @@ export class VendorPrepaymentService {
       throw new BadRequestException(`Cannot apply ${amount} — only ${remaining} of this prepayment remains unapplied.`);
     }
     const date = dto.date || new Date().toISOString().slice(0, 10);
+    await this.journalPosting.assertDateOpen(date, 'This entry');
 
     const application = await this.dataSource.transaction(async (manager) => {
       item.appliedAmount = this.round3(Number(item.appliedAmount) + amount);

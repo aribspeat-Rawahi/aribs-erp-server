@@ -383,6 +383,7 @@ function AccountModal({
               value={openingBalance}
               onChange={(e) => setOpeningBalance(e.target.value)}
             />
+            <span className="block text-xs text-muted mt-1">Money already in this account. The other side goes to 3900 Opening Balance Equity (see Opening Balances).</span>
           </Field>
         )}
         {error && <p className="text-sm text-red-600">{error}</p>}

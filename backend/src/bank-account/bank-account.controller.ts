@@ -28,8 +28,8 @@ export class BankAccountController {
   }
 
   @Post()
-  create(@Body() dto: CreateBankAccountDto) {
-    return this.service.create(dto);
+  create(@Body() dto: CreateBankAccountDto, @Req() req: AuthedRequest) {
+    return this.service.create(dto, { userId: req.user?.userId, email: req.user?.email });
   }
 
   @Patch(':id')

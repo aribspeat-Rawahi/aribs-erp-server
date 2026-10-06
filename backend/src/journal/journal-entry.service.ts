@@ -5,6 +5,7 @@ import { JournalEntry } from './journal-entry.entity';
 import { JournalEntryLine } from './journal-entry-line.entity';
 import { Account, AccountType } from './account.entity';
 import { CreateJournalEntryDto } from './dto/journal-entry.dto';
+import { JournalPostingService } from './journal-posting.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 
 interface ActorRef {
@@ -22,6 +23,7 @@ export class JournalEntryService {
     @InjectRepository(Account)
     private accountRepo: Repository<Account>,
     private activityLog: ActivityLogService,
+    private journalPosting: JournalPostingService,
   ) {}
 
   // Same generator convention as Reimbursement.claimNumber / batch numbers.
@@ -42,6 +44,7 @@ export class JournalEntryService {
   }
 
   async create(dto: CreateJournalEntryDto, createdBy: ActorRef) {
+    await this.journalPosting.assertDateOpen(dto.date || new Date().toISOString().slice(0, 10), 'This journal entry');
     // Every line must be a pure Debit or a pure Credit (not both, not
     // neither), and must reference a real account.
     const accountIds = new Set(dto.lines.map((l) => l.accountId));
@@ -107,6 +110,7 @@ export class JournalEntryService {
   // references a JournalEntry yet) but logged, mirroring Reimbursement.
   async remove(id: string, actor: ActorRef) {
     const item = await this.findOne(id);
+    await this.journalPosting.assertDateOpen(item.date, 'This journal entry');
     if (item.autoPosted) {
       throw new BadRequestException(
         'This entry was posted automatically from another record (Expense, Invoice, Reimbursement, Fund Transfer, or Tax Payment) — edit or delete that record instead of this entry directly.',

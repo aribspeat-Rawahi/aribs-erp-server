@@ -32,6 +32,7 @@ interface Invoice {
   dueDate?: string;
   deliveryDate?: string;
   vatExcluded?: boolean;
+  isOpening?: boolean; // unpaid invoice from the old books (Opening Balances)
   template?: string;
   deliveryStatus?: string;
   waitingForStock?: boolean;
@@ -261,10 +262,18 @@ export default function Invoices() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-sm font-medium text-ink whitespace-nowrap">{inv.invoiceNumber}</span>
-                    <DeliveryBadge invoice={inv} />
+                    {inv.isOpening ? (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-black/5 text-ink/70" title="Unpaid invoice from the old books">
+                        Opening balance
+                      </span>
+                    ) : (
+                      <DeliveryBadge invoice={inv} />
+                    )}
                   </div>
                   <div className="text-xs text-muted">
-                    {customerName(inv.customerId)} · {labelFor(PAYMENT_TYPE_OPTIONS, inv.paymentType)} · {labelFor(DELIVERY_METHOD_OPTIONS, inv.deliveryMethod)}
+                    {inv.isOpening
+                      ? `${customerName(inv.customerId)} · from the old books${inv.dueDate ? ` · due ${inv.dueDate}` : ''}`
+                      : `${customerName(inv.customerId)} · ${labelFor(PAYMENT_TYPE_OPTIONS, inv.paymentType)} · ${labelFor(DELIVERY_METHOD_OPTIONS, inv.deliveryMethod)}`}
                     {inv.deliveryDate && inv.deliveryStatus !== 'delivered' ? ` · Delivery ${inv.deliveryDate}` : ''}
                   </div>
                 </div>
@@ -279,23 +288,31 @@ export default function Invoices() {
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <IconButton icon={Eye} title="View PDF" onClick={() => viewPdf(`/invoices/${inv.id}/pdf`)} />
-                    <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => startEdit(inv)} />
-                    <IconButton icon={Download} title="Download PDF" onClick={() => downloadPdf(`/invoices/${inv.id}/pdf`, `${inv.invoiceNumber}.pdf`)} />
-                    <IconButton icon={MessageCircle} title="Send on WhatsApp" onClick={() => openWhatsapp(`/invoices/${inv.id}/whatsapp-link`)} />
-                    <IconButton icon={Share2} title="Share PDF (attach the file)" onClick={() => sharePdf(`/invoices/${inv.id}/pdf`, `${inv.invoiceNumber}.pdf`, `Invoice ${inv.invoiceNumber}`)} />
+                    {!inv.isOpening && (
+                      <>
+                        <IconButton icon={Eye} title="View PDF" onClick={() => viewPdf(`/invoices/${inv.id}/pdf`)} />
+                        <IconButton icon={Pencil} title="Edit" requires="edit" onClick={() => startEdit(inv)} />
+                        <IconButton icon={Download} title="Download PDF" onClick={() => downloadPdf(`/invoices/${inv.id}/pdf`, `${inv.invoiceNumber}.pdf`)} />
+                        <IconButton icon={MessageCircle} title="Send on WhatsApp" onClick={() => openWhatsapp(`/invoices/${inv.id}/whatsapp-link`)} />
+                        <IconButton icon={Share2} title="Share PDF (attach the file)" onClick={() => sharePdf(`/invoices/${inv.id}/pdf`, `${inv.invoiceNumber}.pdf`, `Invoice ${inv.invoiceNumber}`)} />
+                      </>
+                    )}
                     <IconButton
                       icon={Wallet}
                       tone={inv.paymentStatus === 'paid' ? 'success' : 'default'}
                       title="Record payment"
                       onClick={() => setPayingInvoice(inv)}
                     />
-                    <IconButton icon={Truck} title="Convert to delivery note" requires="edit" onClick={() => convert(inv.id)} />
-                    <IconButton icon={RotateCcw} title="Return items from this invoice" requires="edit" onClick={() => startReturn(inv)} />
+                    {!inv.isOpening && (
+                      <>
+                        <IconButton icon={Truck} title="Convert to delivery note" requires="edit" onClick={() => convert(inv.id)} />
+                        <IconButton icon={RotateCcw} title="Return items from this invoice" requires="edit" onClick={() => startReturn(inv)} />
+                      </>
+                    )}
                     {inv.paymentStatus !== 'paid' && inv.dueDate && (
                       <IconButton icon={Bell} title="Send payment reminder now" requires="edit" onClick={() => sendReminder(inv.id)} />
                     )}
-                    {canDelete && (
+                    {canDelete && !inv.isOpening && (
                       <IconButton icon={Trash2} tone="danger" title="Delete" requires="full" onClick={() => remove(inv.id)} />
                     )}
                   </div>

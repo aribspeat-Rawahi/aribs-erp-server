@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
+import { Settings } from '../settings/settings.entity';
 import { JournalEntry } from './journal-entry.entity';
 import { JournalEntryLine } from './journal-entry-line.entity';
 import { Account } from './account.entity';
@@ -49,6 +50,25 @@ export class JournalPostingService {
     return Math.round(n * 1000) / 1000;
   }
 
+  // The last day of the closed (old) books, once opening balances are
+  // finalized; null before that. Nothing may be posted on or before it.
+  async lockedThrough(manager: EntityManager = this.dataSource.manager): Promise<string | null> {
+    const s = await manager.findOne(Settings, { where: { id: 1 } });
+    return s?.openingBalanceFinalizedAt && s.openingBalanceDate ? String(s.openingBalanceDate).slice(0, 10) : null;
+  }
+
+  // Call BEFORE saving anything dated, so a record is never half-saved.
+  async assertDateOpen(date: string | Date | null | undefined, what = 'This entry', manager?: EntityManager): Promise<void> {
+    if (!date) return;
+    const lock = await this.lockedThrough(manager);
+    const d = (date instanceof Date ? date.toISOString() : String(date)).slice(0, 10);
+    if (lock && d <= lock) {
+      throw new BadRequestException(
+        `${what} is dated ${d}, on or before the opening balance date (${lock}). The books up to that date are closed - use a later date.`,
+      );
+    }
+  }
+
   async findAccountIdByCode(code: string): Promise<string> {
     const account = await this.dataSource.manager.findOne(Account, { where: { code } });
     if (!account) {
@@ -71,9 +91,17 @@ export class JournalPostingService {
     lines: PostingLine[],
     actor: ActorRef,
     reference?: string,
+    outerManager?: EntityManager,
   ): Promise<JournalEntry | null> {
-    return this.dataSource.transaction(async (manager) => {
+    const run = async (manager: EntityManager) => {
       const existing = await manager.findOne(JournalEntry, { where: { sourceType, sourceId } });
+      // Closed books: neither a new entry nor a change to an old one may
+      // land on or before the opening balance date (safety net - services
+      // also check before saving their own record).
+      if (sourceType !== 'opening_balance') {
+        if (lines.length) await this.assertDateOpen(date, 'This entry', manager);
+        if (existing) await this.assertDateOpen(existing.date, 'The existing journal entry', manager);
+      }
       if (existing) {
         await manager.delete(JournalEntryLine, { journalEntryId: existing.id });
         await manager.delete(JournalEntry, { id: existing.id });
@@ -116,12 +144,14 @@ export class JournalPostingService {
         ),
       });
       return manager.save(entry);
-    });
+    };
+    return outerManager ? run(outerManager) : this.dataSource.transaction(run);
   }
 
   async removeForSource(sourceType: string, sourceId: string) {
     const existing = await this.dataSource.manager.findOne(JournalEntry, { where: { sourceType, sourceId } });
     if (!existing) return;
+    if (sourceType !== 'opening_balance') await this.assertDateOpen(existing.date, 'The journal entry being removed');
     await this.dataSource.manager.delete(JournalEntryLine, { journalEntryId: existing.id });
     await this.dataSource.manager.delete(JournalEntry, { id: existing.id });
   }

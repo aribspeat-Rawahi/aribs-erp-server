@@ -98,6 +98,7 @@ export class TaxPaymentService {
   // payments can't both pass the balance check.
   async create(dto: CreateTaxPaymentDto, actor: ActorRef) {
     const date = dto.datePaid || new Date().toISOString().slice(0, 10);
+    await this.journalPosting.assertDateOpen(date, 'This tax payment');
     const amount = Number(dto.amount);
 
     const saved = await this.dataSource.transaction(async (manager) => {
@@ -161,6 +162,7 @@ export class TaxPaymentService {
     const saved = await this.dataSource.transaction(async (manager) => {
       const item = await manager.findOne(TaxPayment, { where: { id } });
       if (!item) throw new NotFoundException('Tax payment not found');
+      await this.journalPosting.assertDateOpen(item.datePaid, 'This tax payment', manager);
 
       if (item.bankAccountId && item.bankTransactionId) {
         const oldAccount = await manager.findOne(BankAccount, {
@@ -230,6 +232,7 @@ export class TaxPaymentService {
     const removed = await this.dataSource.transaction(async (manager) => {
       const item = await manager.findOne(TaxPayment, { where: { id } });
       if (!item) throw new NotFoundException('Tax payment not found');
+      await this.journalPosting.assertDateOpen(item.datePaid, 'This tax payment', manager);
 
       if (item.bankAccountId && item.bankTransactionId) {
         const account = await manager.findOne(BankAccount, {

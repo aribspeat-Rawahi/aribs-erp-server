@@ -108,6 +108,10 @@ const DEFAULT_ACCOUNTS: { code: string; name: string; type: AccountType }[] = [
   // one-third of share capital — a restricted equity account, not
   // available for dividends/draws.
   { code: '340', name: 'Legal Reserve (Statutory)', type: AccountType.EQUITY },
+  // Other side of every opening balance (Accounting > Opening Balances).
+  // Its final balance is the company's equity on the opening date; the
+  // accountant moves it to Capital / Retained Earnings with a journal.
+  { code: '3900', name: 'Opening Balance Equity', type: AccountType.EQUITY },
   { code: '1301', name: "Owner's Equity", type: AccountType.EQUITY },
   { code: '1302', name: 'Paid-in Capital in Excess of Par — Common Stock', type: AccountType.EQUITY },
   { code: '1303', name: 'Paid-in Capital in Excess of Par — Preferred Stock', type: AccountType.EQUITY },

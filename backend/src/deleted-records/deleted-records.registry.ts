@@ -62,6 +62,8 @@ export const DELETE_ROUTES: Record<string, DeleteRouteInfo> = {
   'invoices/:id': { type: 'invoice', label: 'Invoice', restore: 'invoice' },
   'invoices/:invoiceId/payments/:paymentId': { type: 'invoice_payment', label: 'Invoice payment', restore: 'service', service: 'invoicePayment', entity: 'InvoicePayment' },
   'journal-entries/:id': { type: 'journal_entry', label: 'Journal entry', restore: 'generic' },
+  // a draft line - typed again in a moment, and must not come back after finalize
+  'opening-balances/lines/:id': { type: 'opening_balance_line', label: 'Opening balance line' },
   'leave-requests/:id': { type: 'leave_request', label: 'Leave request', restore: 'generic' },
   'notices/:id': { type: 'notice', label: 'Notice', restore: 'generic' },
   'payroll/:id': { type: 'payroll', label: 'Payroll record', restore: 'generic' },

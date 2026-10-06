@@ -108,6 +108,7 @@ export class InvoicePaymentService {
   async create(invoiceId: string, dto: CreateInvoicePaymentDto, actor: ActorRef = {}) {
     const invoice = await this.invoiceRepo.findOne({ where: { id: invoiceId } });
     if (!invoice) throw new NotFoundException('Invoice not found');
+    await this.journalPosting.assertDateOpen(dto.paymentDate || this.todayStr(), 'This payment');
 
     const amount = this.round3(Number(dto.amount));
     const alreadyPaid = Number(invoice.paidAmount || 0);
@@ -171,6 +172,7 @@ export class InvoicePaymentService {
   async remove(invoiceId: string, paymentId: string) {
     const payment = await this.repo.findOne({ where: { id: paymentId, invoiceId } });
     if (!payment) throw new NotFoundException('Payment not found');
+    await this.journalPosting.assertDateOpen(payment.paymentDate, 'This payment');
     if (payment.salesReturnId) {
       throw new BadRequestException('This is the credit note of an approved sales return and cannot be deleted.');
     }

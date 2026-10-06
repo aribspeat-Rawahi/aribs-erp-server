@@ -11,6 +11,7 @@ import AccountsPanel from './AccountsPanel';
 import TaxPanel from './TaxPanel';
 import FixedAssetsPanel from './FixedAssetsPanel';
 import AnalyticsPanel from './AnalyticsPanel';
+import OpeningBalancesPanel from './OpeningBalancesPanel';
 
 const EXPENSE_CATEGORY_OPTIONS = [
   { value: 'rent', label: 'Rent' },
@@ -90,9 +91,9 @@ function monthRange() {
   return { startDate: iso(start), endDate: iso(end) };
 }
 
-type Tab = 'expenses' | 'reimbursements' | 'reports' | 'analytics' | 'journals' | 'accounts' | 'tax' | 'fixedAssets';
+type Tab = 'expenses' | 'reimbursements' | 'reports' | 'analytics' | 'journals' | 'accounts' | 'tax' | 'fixedAssets' | 'opening';
 
-const VALID_TABS: Tab[] = ['expenses', 'reimbursements', 'reports', 'analytics', 'journals', 'accounts', 'tax', 'fixedAssets'];
+const VALID_TABS: Tab[] = ['expenses', 'reimbursements', 'reports', 'analytics', 'journals', 'accounts', 'tax', 'fixedAssets', 'opening'];
 
 export default function Accounting() {
   const { hasAnyRole } = useAuth();
@@ -234,6 +235,7 @@ export default function Accounting() {
             { value: 'accounts', label: 'Accounts' },
             { value: 'tax', label: 'Tax' },
             { value: 'fixedAssets', label: 'Fixed Assets' },
+            { value: 'opening', label: 'Opening Balances' },
           ]}
         />
       </div>
@@ -483,6 +485,8 @@ export default function Accounting() {
       {tab === 'tax' && <TaxPanel />}
 
       {tab === 'fixedAssets' && <FixedAssetsPanel />}
+
+      {tab === 'opening' && <OpeningBalancesPanel />}
     </div>
   );
 }

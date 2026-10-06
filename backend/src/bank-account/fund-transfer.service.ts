@@ -124,6 +124,7 @@ export class FundTransferService {
       throw new BadRequestException('Source and destination accounts must be different');
     }
     const date = dto.date || new Date().toISOString().slice(0, 10);
+    await this.journalPosting.assertDateOpen(date, 'This transfer');
     const amount = Number(dto.amount);
     const inTransit = !!dto.inTransit;
 
@@ -222,6 +223,7 @@ export class FundTransferService {
     const saved = await this.dataSource.transaction(async (manager) => {
       const item = await manager.findOne(FundTransfer, { where: { id } });
       if (!item) throw new NotFoundException('Fund transfer not found');
+      await this.journalPosting.assertDateOpen(item.date, 'This transfer', manager);
       if (item.status !== FundTransferStatus.IN_TRANSIT) {
         throw new BadRequestException('This transfer is not in transit — nothing to clear.');
       }
@@ -279,6 +281,7 @@ export class FundTransferService {
     const saved = await this.dataSource.transaction(async (manager) => {
       const item = await manager.findOne(FundTransfer, { where: { id } });
       if (!item) throw new NotFoundException('Fund transfer not found');
+      await this.journalPosting.assertDateOpen(item.date, 'This transfer', manager);
       const wasInTransit = item.status === FundTransferStatus.IN_TRANSIT;
 
       const oldFrom = await manager.findOne(BankAccount, {
@@ -395,6 +398,7 @@ export class FundTransferService {
     const removed = await this.dataSource.transaction(async (manager) => {
       const item = await manager.findOne(FundTransfer, { where: { id } });
       if (!item) throw new NotFoundException('Fund transfer not found');
+      await this.journalPosting.assertDateOpen(item.date, 'This transfer', manager);
       // An IN_TRANSIT transfer never credited the destination account, so
       // there is nothing to reverse on that side (and no toTransactionId).
       const wasInTransit = item.status === FundTransferStatus.IN_TRANSIT;

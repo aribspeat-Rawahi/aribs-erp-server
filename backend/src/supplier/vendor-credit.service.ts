@@ -65,6 +65,7 @@ export class VendorCreditService {
   // 1200 (Inventory — Raw Materials) — no bank/cash movement at this step.
   async create(dto: CreateVendorCreditDto, actor: ActorRef) {
     const date = dto.date || new Date().toISOString().slice(0, 10);
+    await this.journalPosting.assertDateOpen(date, 'This vendor credit');
     const amount = Number(dto.amount);
 
     const saved = await this.repo.save(
@@ -109,6 +110,7 @@ export class VendorCreditService {
       throw new BadRequestException(`Cannot apply ${amount} — only ${remaining} of this credit remains unused.`);
     }
     const date = dto.date || new Date().toISOString().slice(0, 10);
+    await this.journalPosting.assertDateOpen(date, 'This entry');
 
     await this.dataSource.transaction(async (manager) => {
       item.appliedAmount = this.round3(Number(item.appliedAmount) + amount);
@@ -162,6 +164,7 @@ export class VendorCreditService {
       throw new BadRequestException(`Cannot refund ${amount} — only ${remaining} of this credit remains unused.`);
     }
     const date = dto.date || new Date().toISOString().slice(0, 10);
+    await this.journalPosting.assertDateOpen(date, 'This entry');
 
     const refund = await this.dataSource.transaction(async (manager) => {
       const account = await manager.findOne(BankAccount, {

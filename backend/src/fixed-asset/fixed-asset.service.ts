@@ -84,6 +84,7 @@ export class FixedAssetService {
   // 2000) — useful when the supplier bill hasn't been paid yet.
   async create(dto: CreateFixedAssetDto, actor: ActorRef) {
     const date = dto.purchaseDate || new Date().toISOString().slice(0, 10);
+    await this.journalPosting.assertDateOpen(date, 'This asset purchase');
     const cost = Number(dto.cost);
     const salvageValue = Number(dto.salvageValue || 0);
     if (salvageValue >= cost) {
@@ -330,6 +331,7 @@ export class FixedAssetService {
       throw new BadRequestException('Select the account disposal proceeds were deposited into.');
     }
     const date = dto.disposalDate || new Date().toISOString().slice(0, 10);
+    await this.journalPosting.assertDateOpen(date, 'This disposal');
     const netBookValue = this.round3(Number(asset.cost) - Number(asset.accumulatedDepreciation));
     const gainLoss = this.round3(proceeds - netBookValue);
 
