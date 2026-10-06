@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { VendorPrepayment } from './vendor-prepayment.entity';
 
 // One "use" of a Vendor Prepayment against what we owe the supplier — its
@@ -6,6 +6,7 @@ import { VendorPrepayment } from './vendor-prepayment.entity';
 // each application has a unique id to auto-post its own Journal Entry
 // against (Dr 2000 Accounts Payable / Cr 1310 Vendor Prepayments), and so
 // the prepayment's full application history stays visible.
+@Index(['purchaseOrderId'])
 @Entity('vendor_prepayment_applications')
 export class VendorPrepaymentApplication {
   @PrimaryGeneratedColumn('uuid')

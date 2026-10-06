@@ -1,9 +1,12 @@
-import { Column, CreateDateColumn, Entity, Generated, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Generated, OneToMany, PrimaryGeneratedColumn, Index } from 'typeorm';
 import { GoodsReceiptItem } from './goods-receipt-item.entity';
 
 // Goods Received Note (GRN): one delivery from the supplier against a
 // purchase order. A PO can arrive in several deliveries; each one adds
 // stock (traceable batches) and its own payable + input VAT journal entry.
+@Index(['purchaseOrderId'])
+@Index(['supplierId'])
+@Index(['receivedDate'])
 @Entity('goods_receipts')
 export class GoodsReceipt {
   @PrimaryGeneratedColumn('uuid')

@@ -1,14 +1,9 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  Generated,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Generated, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 import { PaymentType, PaymentStatus, DeliveryMethod } from '../common/payment-type.enum';
 import { InvoiceTemplate } from '../settings/settings.entity';
 
+@Index(['customerId'])
+@Index(['salesOrderId'])
 @Entity('invoices')
 export class Invoice {
   @PrimaryGeneratedColumn('uuid')

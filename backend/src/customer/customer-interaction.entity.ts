@@ -1,10 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 import { InteractionType } from '../common/interaction-type.enum';
 
 // CRM Step 6 — Activity/Interaction Log. One row per logged interaction
 // with a customer (a call, meeting, email, note, ...). Append-only from
 // the UI (add + delete, no edit) since it's a chronological record of
 // what happened, not editable business data.
+@Index(['customerId'])
 @Entity('customer_interactions')
 export class CustomerInteraction {
   @PrimaryGeneratedColumn('uuid')

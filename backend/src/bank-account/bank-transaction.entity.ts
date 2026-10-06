@@ -1,9 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 import { BankTransactionCategory } from './bank-transaction-category.enum';
 
 export enum BankTransactionType {
@@ -11,6 +6,7 @@ export enum BankTransactionType {
   WITHDRAWAL = 'withdrawal',
 }
 
+@Index(['bankAccountId', 'date'])
 @Entity('bank_transactions')
 export class BankTransaction {
   @PrimaryGeneratedColumn('uuid')

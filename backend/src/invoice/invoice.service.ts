@@ -27,6 +27,7 @@ import { BatchSource } from '../inventory/batch-source.enum';
 import { BackorderService } from '../stock-alerts/backorder.service';
 import { SalesReturn, SalesReturnStatus } from './sales-return.entity';
 import { buildWhatsappLinks, toWhatsappPhone } from '../common/whatsapp-phone.util';
+import { runInBackground } from '../common/background.util';
 
 // Auto-posted Chart-of-Accounts codes for invoice issuance (Dr Accounts
 // Receivable / Cr Sales Revenue [+ Cr VAT Payable]) — matches the
@@ -526,7 +527,8 @@ export class InvoiceService {
     await this.invoiceRepo.save(saved);
 
     if (vatExcluded) {
-      await this.emailService.sendVatExcludedNotice(saved.invoiceNumber, customer.name, total);
+      // Background: an SMTP failure must not stop the journal entry below.
+      runInBackground('VAT excluded email', () => this.emailService.sendVatExcludedNotice(saved.invoiceNumber, customer.name, total));
       await this.activityLog.log({
         action: 'invoice.vat_excluded',
         entityType: 'invoice',
@@ -666,7 +668,10 @@ export class InvoiceService {
     await this.invoiceRepo.save(invoice);
 
     if (vatExcludedChanged && invoice.vatExcluded) {
-      await this.emailService.sendVatExcludedNotice(invoice.invoiceNumber, customer.name, Number(invoice.total));
+      // Background: an SMTP failure must not stop the journal entry below.
+      runInBackground('VAT excluded email', () =>
+        this.emailService.sendVatExcludedNotice(invoice.invoiceNumber, customer.name, Number(invoice.total)),
+      );
       await this.activityLog.log({
         action: 'invoice.vat_excluded',
         entityType: 'invoice',

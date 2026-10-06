@@ -12,6 +12,7 @@ import { CreateSupplierDto } from './dto/supplier.dto';
 import { EmailService } from '../common/email.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { discardFile } from '../common/discard-file.util';
+import { runInBackground } from '../common/background.util';
 
 @Injectable()
 export class SupplierService {
@@ -108,7 +109,9 @@ export class SupplierService {
       userEmail: deletedBy?.email,
       details: { name: item.name },
     });
-    await this.emailService.sendSupplierDeletedNotice(item.name, deletedBy?.email);
+    // Email after the delete is done; an SMTP problem must not turn a
+    // finished delete into an error.
+    runInBackground('Supplier deleted email', () => this.emailService.sendSupplierDeletedNotice(item.name, deletedBy?.email));
     return { deleted: true };
   }
 }

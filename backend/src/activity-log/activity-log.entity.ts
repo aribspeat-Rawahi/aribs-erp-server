@@ -11,6 +11,7 @@ import {
 // edits, VAT-exclude overrides, manual price changes, stock adjustments,
 // user role changes, etc. This is what lets "who changed this price and
 // when" be answered later.
+@Index(['createdAt'])
 @Entity('activity_logs')
 export class ActivityLog {
   @PrimaryGeneratedColumn('uuid')

@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 import { BatchSource } from './batch-source.enum';
 
 // One row per "lot" of a finished good that entered stock — either from a
@@ -6,6 +6,7 @@ import { BatchSource } from './batch-source.enum';
 // that existed before this feature was added) an auto-created Opening
 // Balance batch. Consumed FIFO by Sales Orders / stock-out scans (see
 // BatchTrackingService.consumeFinishedGoodFifo).
+@Index(['finishedGoodId'])
 @Entity('finished_good_batches')
 export class FinishedGoodBatch {
   @PrimaryGeneratedColumn('uuid')

@@ -1,11 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  Generated,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Generated, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 import { PaymentType, DeliveryMethod } from '../common/payment-type.enum';
 
 export enum DeliveryNoteStatus {
@@ -13,6 +6,7 @@ export enum DeliveryNoteStatus {
   DELIVERED = 'delivered', // customer/driver has confirmed receipt
 }
 
+@Index(['customerId'])
 @Entity('delivery_notes')
 export class DeliveryNote {
   @PrimaryGeneratedColumn('uuid')

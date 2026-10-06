@@ -1,10 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 import { BatchSource } from './batch-source.enum';
 
 // One row per "lot" of a raw material that entered stock — either from a
 // received Purchase Order line item, or (for stock that existed before
 // this feature was added) an auto-created Opening Balance batch. Consumed
 // FIFO by Production Orders (see BatchTrackingService.consumeRawMaterialFifo).
+@Index(['rawMaterialId'])
+@Index(['purchaseOrderId'])
 @Entity('raw_material_batches')
 export class RawMaterialBatch {
   @PrimaryGeneratedColumn('uuid')

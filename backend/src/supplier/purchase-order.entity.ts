@@ -1,11 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  Generated,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Generated, Index } from 'typeorm';
 import { PaymentStatus } from '../common/payment-type.enum';
 
 export enum PurchaseOrderStatus {
@@ -15,6 +8,7 @@ export enum PurchaseOrderStatus {
   CANCELLED = 'cancelled',
 }
 
+@Index(['supplierId'])
 @Entity('purchase_orders')
 export class PurchaseOrder {
   @PrimaryGeneratedColumn('uuid')

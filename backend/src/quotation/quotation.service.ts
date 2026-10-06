@@ -17,6 +17,7 @@ import { DocumentLinkService } from '../document-link/document-link.service';
 import { buildWhatsappLinks, toWhatsappPhone } from '../common/whatsapp-phone.util';
 import { EmailService } from '../common/email.service';
 import { UnitService } from '../units/unit.service';
+import { runInBackground } from '../common/background.util';
 
 @Injectable()
 export class QuotationService {
@@ -157,7 +158,7 @@ export class QuotationService {
     );
 
     if (vatExcluded && customer.vatApplicable) {
-      await this.emailService.sendVatExcludedNotice(saved.quotationNumber, customer.name, total);
+      runInBackground('VAT excluded email', () => this.emailService.sendVatExcludedNotice(saved.quotationNumber, customer.name, total));
     }
 
     return { ...saved, items };

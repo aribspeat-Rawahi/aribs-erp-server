@@ -1,9 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
 export enum AttendanceStatus {
   PRESENT = 'present',
@@ -14,6 +9,7 @@ export enum AttendanceStatus {
   WEEKEND = 'weekend', // company-wide weekly off day (see Settings.weeklyOffDays)
 }
 
+@Index(['employeeId', 'date'])
 @Entity('attendance_records')
 export class AttendanceRecord {
   @PrimaryGeneratedColumn('uuid')

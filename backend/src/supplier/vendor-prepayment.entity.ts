@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany, Index } from 'typeorm';
 import { VendorPrepaymentApplication } from './vendor-prepayment-application.entity';
 
 // An advance paid to a supplier before a bill arrives (e.g. a 50% deposit
@@ -6,6 +6,7 @@ import { VendorPrepaymentApplication } from './vendor-prepayment-application.ent
 // {bank} in full as soon as it's paid — an asset until later applied
 // against what we owe that supplier (see VendorPrepaymentService.apply()),
 // partially or across several applications over time.
+@Index(['supplierId'])
 @Entity('vendor_prepayments')
 export class VendorPrepayment {
   @PrimaryGeneratedColumn('uuid')

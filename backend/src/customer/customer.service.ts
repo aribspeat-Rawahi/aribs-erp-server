@@ -13,6 +13,7 @@ import { Invoice } from '../invoice/invoice.entity';
 import { Quotation } from '../quotation/quotation.entity';
 import { DeliveryNote } from '../delivery-note/delivery-note.entity';
 import { discardFile } from '../common/discard-file.util';
+import { runInBackground } from '../common/background.util';
 
 @Injectable()
 export class CustomerService {
@@ -107,7 +108,9 @@ export class CustomerService {
       userEmail: deletedBy?.email,
       details: { name: item.name },
     });
-    await this.emailService.sendCustomerDeletedNotice(item.name, deletedBy?.email);
+    // Email after the delete is done; an SMTP problem must not turn a
+    // finished delete into an error.
+    runInBackground('Customer deleted email', () => this.emailService.sendCustomerDeletedNotice(item.name, deletedBy?.email));
     return { deleted: true };
   }
 }

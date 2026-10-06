@@ -1,10 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 
 export enum ProductionOrderStatus {
   PLANNED = 'planned', // created, materials not yet consumed
@@ -12,6 +6,7 @@ export enum ProductionOrderStatus {
   CANCELLED = 'cancelled',
 }
 
+@Index(['finishedGoodId'])
 @Entity('production_orders')
 export class ProductionOrder {
   @PrimaryGeneratedColumn('uuid')

@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 import { PaymentType, DeliveryMethod } from '../common/payment-type.enum';
 import { InvoiceTemplate } from '../settings/settings.entity';
 
@@ -16,6 +16,7 @@ export enum RecurringFrequency {
   YEARLY = 'yearly',
 }
 
+@Index(['customerId'])
 @Entity('recurring_invoices')
 export class RecurringInvoice {
   @PrimaryGeneratedColumn('uuid')

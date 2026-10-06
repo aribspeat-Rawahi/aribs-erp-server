@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany, Index } from 'typeorm';
 import { JournalEntryLine } from './journal-entry-line.entity';
 
 // A full double-entry Journal Entry — one transaction, made up of two or
@@ -8,6 +8,8 @@ import { JournalEntryLine } from './journal-entry-line.entity';
 // Invoice — those stay the day-to-day operational records; Journal Entries
 // are for adjusting entries, opening balances, depreciation, corrections,
 // and anything else that needs proper double-entry treatment.
+@Index(['date'])
+@Index(['sourceId'])
 @Entity('journal_entries')
 export class JournalEntry {
   @PrimaryGeneratedColumn('uuid')

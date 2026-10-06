@@ -1,10 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
 // Links one Production Order run to the specific raw material batch(es) it
 // drew from (FIFO), and to the finished good batch it produced. This is
 // the core "which raw material lots went into this product lot" record —
 // a production run needing 3 raw materials, each drawn from 2 batches,
 // produces 6 rows here, all sharing the same finishedGoodBatchId.
+@Index(['productionOrderId'])
+@Index(['rawMaterialBatchId'])
 @Entity('production_batch_consumptions')
 export class ProductionBatchConsumption {
   @PrimaryGeneratedColumn('uuid')

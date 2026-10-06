@@ -1,10 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { VendorCredit } from './vendor-credit.entity';
 
 // Tracking-only — recorded so it's visible which bill/PO a credit was
 // used to offset, but posts no Journal Entry of its own: the credit
 // already reduced Accounts Payable in full when it was created (see
 // VendorCredit's own doc comment).
+@Index(['purchaseOrderId'])
 @Entity('vendor_credit_applications')
 export class VendorCreditApplication {
   @PrimaryGeneratedColumn('uuid')

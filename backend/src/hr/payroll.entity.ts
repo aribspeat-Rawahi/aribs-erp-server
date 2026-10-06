@@ -1,9 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
 // One row per employee per generated pay period. Rows are created/refreshed
 // by POST /payroll/generate (which reads real Attendance records for the
@@ -12,6 +7,7 @@ import {
 // (so re-running Generate updates the same row instead of duplicating it)
 // but, same as every other HR Step so far, it's not a real foreign key —
 // staffName is stored as a plain snapshot string.
+@Index(['employeeId'])
 @Entity('hr_payroll')
 export class PayrollRecord {
   @PrimaryGeneratedColumn('uuid')

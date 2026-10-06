@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
 // CRM Step 7 — Approval Workflow. A generic "this needs sign-off before
 // it takes effect" row, used for the gates that can block a self-serve
@@ -36,6 +36,7 @@ export enum ApprovalRequestStatus {
   REJECTED = 'rejected',
 }
 
+@Index(['status'])
 @Entity('approval_requests')
 export class ApprovalRequest {
   @PrimaryGeneratedColumn('uuid')

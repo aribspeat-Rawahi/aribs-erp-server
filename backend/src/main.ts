@@ -7,6 +7,7 @@ import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
+import compression from 'compression';
 import { AppModule } from './app.module';
 import { AlertingLogger } from './monitoring/alerting-logger';
 import { AllExceptionsFilter } from './monitoring/all-exceptions.filter';
@@ -41,6 +42,10 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: new AlertingLogger() });
   app.useGlobalFilters(new AllExceptionsFilter(app.get(HttpAdapterHost).httpAdapter));
+  // gzip API responses and frontend files (JSON lists shrink ~80-90%).
+  // Already-compressed types (PDF, xlsx, images) are skipped by the filter;
+  // responses under 1 KB are not worth compressing.
+  app.use(compression({ threshold: 1024 }));
   app.setGlobalPrefix(API_PREFIX);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 

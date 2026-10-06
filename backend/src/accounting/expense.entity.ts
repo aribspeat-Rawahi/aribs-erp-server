@@ -1,9 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
 export enum ExpenseCategory {
   RENT = 'rent',
@@ -15,6 +10,7 @@ export enum ExpenseCategory {
   OTHER = 'other',
 }
 
+@Index(['date'])
 @Entity('expenses')
 export class Expense {
   @PrimaryGeneratedColumn('uuid')

@@ -1,14 +1,9 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 
 // Represents raw materials used to manufacture finished goods.
 // Stock here goes DOWN when a Production Order consumes materials (via BOM),
 // and goes UP when new raw material is purchased/received from a Supplier.
+@Index(['supplierId'])
 @Entity('raw_materials')
 export class RawMaterial {
   @PrimaryGeneratedColumn('uuid')

@@ -1,11 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  Generated,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Generated, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 import { DeliveryMethod, PaymentType } from '../common/payment-type.enum';
 import { InvoiceTemplate } from '../settings/settings.entity';
 
@@ -16,6 +9,7 @@ export enum QuotationStatus {
   EXPIRED = 'expired',
 }
 
+@Index(['customerId'])
 @Entity('quotations')
 export class Quotation {
   @PrimaryGeneratedColumn('uuid')

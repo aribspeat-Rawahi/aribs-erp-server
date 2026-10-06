@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany, Index } from 'typeorm';
 import { SalesReturnItem } from './sales-return-item.entity';
 
 export enum SalesReturnStatus {
@@ -13,6 +13,9 @@ export enum SalesReturnStatus {
 // anything actually moves. Only approve() increases finished-good stock
 // and (optionally) records a bank/cash withdrawal + auto-posts the
 // Journal Entry; reject() has no stock/ledger effect.
+@Index(['customerId'])
+@Index(['invoiceId'])
+@Index(['date'])
 @Entity('sales_returns')
 export class SalesReturn {
   @PrimaryGeneratedColumn('uuid')

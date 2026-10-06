@@ -1,10 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
 // Links a Sales Order (or a manual/barcode stock-out) to the specific
 // finished good batch(es) it drew from (FIFO) — the "which product lot did
 // this customer's order ship from" record, which combined with
 // ProductionBatchConsumption traces all the way back to raw material lots
 // and their suppliers.
+@Index(['invoiceId'])
+@Index(['salesOrderId'])
+@Index(['finishedGoodBatchId'])
 @Entity('sales_batch_consumptions')
 export class SalesBatchConsumption {
   @PrimaryGeneratedColumn('uuid')

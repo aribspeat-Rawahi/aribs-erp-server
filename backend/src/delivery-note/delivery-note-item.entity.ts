@@ -1,10 +1,6 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
+@Index(['deliveryNoteId'])
 @Entity('delivery_note_items')
 export class DeliveryNoteItem {
   @PrimaryGeneratedColumn('uuid')

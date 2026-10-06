@@ -1,9 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
 // One row per uploaded document for an employee — Residence ID, Passport,
 // Visa, Employment Contract, or any other type the office needs to keep
 // on file. `label` is free text (not a fixed enum) since the list of
 // document types varies and can grow ("and many more").
+@Index(['employeeId'])
 @Entity('employee_documents')
 export class EmployeeDocument {
   @PrimaryGeneratedColumn('uuid')

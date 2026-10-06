@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { JournalEntry } from './journal-entry.entity';
 
 // One Debit-or-Credit line of a Journal Entry, posted against a single
@@ -6,6 +6,7 @@ import { JournalEntry } from './journal-entry.entity';
 // non-zero per line (the service validates this on create), and the sum
 // of all lines' debit must equal the sum of all lines' credit for the
 // parent entry to be considered balanced.
+@Index(['accountId'])
 @Entity('journal_entry_lines')
 export class JournalEntryLine {
   @PrimaryGeneratedColumn('uuid')

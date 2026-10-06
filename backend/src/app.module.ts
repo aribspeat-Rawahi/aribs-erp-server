@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { SlowQueryLogger, slowQueryThresholdMs } from './monitoring/slow-query-logger';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { InventoryModule } from './inventory/inventory.module';
 import { ManufacturingModule } from './manufacturing/manufacturing.module';
@@ -64,6 +65,9 @@ import { ImportModule } from './import/import.module';
         entities: undefined,
         autoLoadEntities: true,
         migrationsRun: true,
+        // Slow queries are logged + emailed (monitoring/slow-query-logger.ts).
+        maxQueryExecutionTime: slowQueryThresholdMs(),
+        logger: new SlowQueryLogger(),
       }),
       dataSourceFactory: async (options) => {
         if (!options) throw new Error('Missing database options');

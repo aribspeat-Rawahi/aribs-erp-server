@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 import { PaymentType } from '../common/payment-type.enum';
 
 // One row per payment received against an invoice — an invoice can be
@@ -7,6 +7,8 @@ import { PaymentType } from '../common/payment-type.enum';
 // in sync (denormalized) every time a row here is added or removed, so
 // the invoice list and Aging Report don't need to sum this table on
 // every read.
+@Index(['invoiceId'])
+@Index(['paymentDate'])
 @Entity('invoice_payments')
 export class InvoicePayment {
   @PrimaryGeneratedColumn('uuid')

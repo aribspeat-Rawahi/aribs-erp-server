@@ -1,9 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
 // One row per uploaded document for a customer — CR Paper, Vat Reg.
 // Paper, Riyada, or Others (fixed dropdown, see PARTY_DOCUMENT_TYPES in
 // dto/customer.dto.ts). A customer can have several, added via the "Add
 // Another Document" button.
+@Index(['customerId'])
 @Entity('customer_documents')
 export class CustomerDocument {
   @PrimaryGeneratedColumn('uuid')

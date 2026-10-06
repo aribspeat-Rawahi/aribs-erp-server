@@ -1,14 +1,9 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 
 // One row = "to make 1 unit of this finished good, you need this much
 // of this raw material". A finished good will have several BOM rows
 // (one per raw material it needs).
+@Index(['finishedGoodId'])
 @Entity('bill_of_materials')
 export class BillOfMaterial {
   @PrimaryGeneratedColumn('uuid')

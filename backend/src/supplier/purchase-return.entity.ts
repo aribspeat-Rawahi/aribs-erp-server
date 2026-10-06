@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany, Index } from 'typeorm';
 import { PurchaseReturnItem } from './purchase-return-item.entity';
 
 export enum PurchaseReturnStatus {
@@ -15,6 +15,9 @@ export enum PurchaseReturnStatus {
 // it actually decrease raw material stock and (optionally) record a
 // bank/cash deposit + auto-post the Journal Entry; reject() has no
 // stock/ledger effect at all.
+@Index(['purchaseOrderId'])
+@Index(['supplierId'])
+@Index(['date'])
 @Entity('purchase_returns')
 export class PurchaseReturn {
   @PrimaryGeneratedColumn('uuid')

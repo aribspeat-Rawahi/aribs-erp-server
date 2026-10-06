@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany, Index } from 'typeorm';
 import { VendorCreditApplication } from './vendor-credit-application.entity';
 import { VendorCreditRefund } from './vendor-credit-refund.entity';
 
@@ -11,6 +11,7 @@ import { VendorCreditRefund } from './vendor-credit-refund.entity';
 // bill (apply()) is then just bookkeeping with no further ledger effect,
 // and only refund() — receiving actual cash back instead — posts a
 // further entry. See VendorCreditService for the full accounting.
+@Index(['supplierId'])
 @Entity('vendor_credits')
 export class VendorCredit {
   @PrimaryGeneratedColumn('uuid')

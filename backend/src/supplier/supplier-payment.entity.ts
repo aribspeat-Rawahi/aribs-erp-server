@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 import { PaymentType } from '../common/payment-type.enum';
 
 // One row per payment made to a supplier against a RECEIVED purchase
@@ -7,6 +7,9 @@ import { PaymentType } from '../common/payment-type.enum';
 // exactly (the sales-side equivalent), just Dr Accounts Payable instead
 // of Cr Accounts Receivable. PurchaseOrder.paidAmount/paymentStatus are
 // kept in sync (denormalized) every time a row here is added or removed.
+@Index(['purchaseOrderId'])
+@Index(['supplierId'])
+@Index(['paymentDate'])
 @Entity('supplier_payments')
 export class SupplierPayment {
   @PrimaryGeneratedColumn('uuid')

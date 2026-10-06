@@ -1,10 +1,6 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
+@Index(['salesOrderId'])
 @Entity('sales_order_items')
 export class SalesOrderItem {
   @PrimaryGeneratedColumn('uuid')

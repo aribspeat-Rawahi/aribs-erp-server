@@ -1,15 +1,10 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 
 // One row per bank account a customer has given us. A customer can have
 // more than one (different currencies/branches), added via the "Add
 // Another Account" button on the Bank Details form — hence its own table
 // rather than columns on Customer.
+@Index(['customerId'])
 @Entity('customer_bank_accounts')
 export class CustomerBankAccount {
   @PrimaryGeneratedColumn('uuid')

@@ -1,8 +1,9 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 import { InteractionType } from '../common/interaction-type.enum';
 
 // CRM Step 6 — Activity/Interaction Log, supplier side (mirrors
 // CustomerInteraction). Append-only from the UI (add + delete, no edit).
+@Index(['supplierId'])
 @Entity('supplier_interactions')
 export class SupplierInteraction {
   @PrimaryGeneratedColumn('uuid')
