@@ -23,6 +23,7 @@ import { ApprovalModule } from './approval/approval.module';
 import { RecurringInvoiceModule } from './recurring-invoice/recurring-invoice.module';
 import { ReimbursementModule } from './reimbursement/reimbursement.module';
 import { OpeningBalanceModule } from './opening-balance/opening-balance.module';
+import { VatPeriodModule } from './vat-period/vat-period.module';
 import { JournalModule } from './journal/journal.module';
 import { TaxModule } from './tax/tax.module';
 import { FixedAssetModule } from './fixed-asset/fixed-asset.module';
@@ -94,6 +95,7 @@ import { ImportModule } from './import/import.module';
     RecurringInvoiceModule,
     ReimbursementModule,
     OpeningBalanceModule,
+    VatPeriodModule,
     JournalModule,
     TaxModule,
     FixedAssetModule,

@@ -86,6 +86,16 @@ export class Settings {
   @Column({ type: 'varchar', length: 255, nullable: true })
   openingBalanceFinalizedBy: string | null;
 
+  // VAT return periods (Accounting > Tax > VAT Returns): length in months
+  // (3 = quarterly, the Oman default; 1 = monthly) and the month a period
+  // cycle starts in (1 = Jan-Mar, Apr-Jun...; 2 = Feb-Apr...). As on the
+  // OTA registration.
+  @Column({ type: 'int', default: 3 })
+  vatPeriodMonths: number;
+
+  @Column({ type: 'int', default: 1 })
+  vatPeriodStartMonth: number;
+
   @UpdateDateColumn()
   updatedAt: Date;
 }

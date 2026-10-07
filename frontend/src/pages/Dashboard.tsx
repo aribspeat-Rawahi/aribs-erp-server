@@ -43,6 +43,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import api from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { PageHeader, Card, StatCard, Pill } from '../components/ui';
 import { formatQuantityWithUnit } from '../utils/formatQuantity';
 
@@ -238,6 +239,17 @@ export default function Dashboard() {
   const [bankAccounts, setBankAccounts] = useState<{ accounts: BankAccount[]; total: number } | null>(null);
   const [stockValue, setStockValue] = useState<{ value: number; productCount: number } | null>(null);
   const [alerts, setAlerts] = useState<DashboardAlerts | null>(null);
+  // next VAT return that is due (Accounting > Tax > VAT Returns)
+  const { canAccessModule } = useAuth();
+  const [vatDue, setVatDue] = useState<{ label: string; dueDate: string; daysToDue: number; overdue: boolean } | null>(null);
+  const seesAccounting = canAccessModule('accounting');
+  useEffect(() => {
+    if (!seesAccounting) return;
+    api
+      .get('/vat-periods')
+      .then((res) => setVatDue(res.data.nextDue))
+      .catch(() => undefined);
+  }, [seesAccounting]);
   const [extra, setExtra] = useState<DashboardExtra | null>(null);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -670,6 +682,22 @@ export default function Dashboard() {
               <span className="text-xs text-muted">{alerts.totalAlertCount} item(s) need attention</span>
             )}
           </div>
+
+          {vatDue && (vatDue.overdue || vatDue.daysToDue <= 7) && (
+            <Link
+              to="/accounting?tab=tax"
+              className={`mb-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                vatDue.overdue ? 'border-red-300 bg-red-50 text-red-700' : 'border-amber-300 bg-amber-50 text-amber-800'
+              }`}
+            >
+              <AlertTriangle size={16} className="shrink-0" />
+              <span>
+                {vatDue.overdue
+                  ? `${vatDue.label} return is overdue - it was due ${vatDue.dueDate}. File it with the OTA and mark it as filed.`
+                  : `${vatDue.label} return is due ${vatDue.dueDate} (${vatDue.daysToDue} day(s) left).`}
+              </span>
+            </Link>
+          )}
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
             <Link

@@ -42,5 +42,7 @@ import { RecurringInvoice } from '../recurring-invoice/recurring-invoice.entity'
   ],
   controllers: [ReportingController],
   providers: [ReportingService],
+  // VatPeriodModule takes its VAT return snapshot from getVatSummary()
+  exports: [ReportingService],
 })
 export class ReportingModule {}

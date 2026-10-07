@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Plus, Percent, Receipt, Pencil, Trash2, Eye, Upload } from 'lucide-react';
 import api from '../api/client';
+import VatReturnsPanel from './VatReturnsPanel';
 import { viewFile } from '../api/docActions';
 import { useAuth } from '../context/AuthContext';
 import { PrimaryButton, SecondaryButton, IconButton, Pill, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
@@ -31,7 +32,7 @@ interface TaxPayment {
   bankAccountId?: string;
 }
 
-type TaxTab = 'rates' | 'payments';
+type TaxTab = 'vat' | 'rates' | 'payments';
 
 // "Tax" tab inside Accounting — Tax Rates (a reference list, not yet
 // applied automatically anywhere) and Tax Payments (a record of VAT
@@ -41,7 +42,7 @@ type TaxTab = 'rates' | 'payments';
 export default function TaxPanel() {
   const { hasAnyRole } = useAuth();
   const canManage = hasAnyRole(['admin', 'accountant', 'ceo', 'md']);
-  const [subTab, setSubTab] = useState<TaxTab>('rates');
+  const [subTab, setSubTab] = useState<TaxTab>('vat');
 
   const [rates, setRates] = useState<TaxRate[]>([]);
   const [ratesLoading, setRatesLoading] = useState(true);
@@ -101,6 +102,7 @@ export default function TaxPanel() {
           value={subTab}
           onChange={(v) => setSubTab(v as TaxTab)}
           options={[
+            { value: 'vat', label: 'VAT Returns' },
             { value: 'rates', label: 'Tax Rates' },
             { value: 'payments', label: 'Tax Payments' },
           ]}
@@ -112,6 +114,8 @@ export default function TaxPanel() {
           <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAddPayment(true)}>Record tax payment</PrimaryButton>
         )}
       </div>
+
+      {subTab === 'vat' && <VatReturnsPanel />}
 
       {subTab === 'rates' && (
         <>
@@ -309,6 +313,13 @@ function TaxPaymentModal({
   onSaved: () => void;
 }) {
   const [period, setPeriod] = useState(payment?.period || '');
+  const [vatLabels, setVatLabels] = useState<string[]>([]);
+  useEffect(() => {
+    api
+      .get('/vat-periods')
+      .then((res) => setVatLabels((res.data.periods as { label: string }[]).map((p) => p.label)))
+      .catch(() => undefined);
+  }, []);
   const [amount, setAmount] = useState(payment ? String(payment.amount) : '0');
   const [datePaid, setDatePaid] = useState(payment?.datePaid || new Date().toISOString().slice(0, 10));
   const [reference, setReference] = useState(payment?.reference || '');
@@ -359,7 +370,20 @@ function TaxPaymentModal({
       <form onSubmit={onSubmit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Period">
-            <input className={inputClass} value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="Q1 2026" required />
+            <input
+              className={inputClass}
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+              placeholder="VAT Oct-Dec 2026"
+              list="vat-period-labels"
+              required
+            />
+            {/* pick a VAT return period so the payment shows against it on VAT Returns */}
+            <datalist id="vat-period-labels">
+              {vatLabels.map((l) => (
+                <option key={l} value={l} />
+              ))}
+            </datalist>
           </Field>
           <Field label="Amount (OMR)">
             <input className={inputClass} type="number" step="0.001" min="0.001" value={amount} onChange={(e) => setAmount(e.target.value)} required />

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import { Settings } from '../settings/settings.entity';
+import { VatPeriod, VatPeriodStatus } from '../vat-period/vat-period.entity';
 import { JournalEntry } from './journal-entry.entity';
 import { JournalEntryLine } from './journal-entry-line.entity';
 import { Account } from './account.entity';
@@ -50,21 +51,35 @@ export class JournalPostingService {
     return Math.round(n * 1000) / 1000;
   }
 
-  // The last day of the closed (old) books, once opening balances are
-  // finalized; null before that. Nothing may be posted on or before it.
-  async lockedThrough(manager: EntityManager = this.dataSource.manager): Promise<string | null> {
+  // The last day of the closed books, or null. The books are closed up to
+  // the later of: the opening balance date (once finalized) and the end
+  // of the last VAT return marked as filed.
+  async lockInfo(manager: EntityManager = this.dataSource.manager): Promise<{ date: string; reason: string } | null> {
     const s = await manager.findOne(Settings, { where: { id: 1 } });
-    return s?.openingBalanceFinalizedAt && s.openingBalanceDate ? String(s.openingBalanceDate).slice(0, 10) : null;
+    let best: { date: string; reason: string } | null =
+      s?.openingBalanceFinalizedAt && s.openingBalanceDate
+        ? { date: String(s.openingBalanceDate).slice(0, 10), reason: 'opening balance date' }
+        : null;
+    const filed = await manager.findOne(VatPeriod, { where: { status: VatPeriodStatus.FILED }, order: { endDate: 'DESC' } });
+    if (filed) {
+      const end = String(filed.endDate).slice(0, 10);
+      if (!best || end > best.date) best = { date: end, reason: `${filed.label} return is filed` };
+    }
+    return best;
+  }
+
+  async lockedThrough(manager: EntityManager = this.dataSource.manager): Promise<string | null> {
+    return (await this.lockInfo(manager))?.date || null;
   }
 
   // Call BEFORE saving anything dated, so a record is never half-saved.
   async assertDateOpen(date: string | Date | null | undefined, what = 'This entry', manager?: EntityManager): Promise<void> {
     if (!date) return;
-    const lock = await this.lockedThrough(manager);
+    const lock = await this.lockInfo(manager);
     const d = (date instanceof Date ? date.toISOString() : String(date)).slice(0, 10);
-    if (lock && d <= lock) {
+    if (lock && d <= lock.date) {
       throw new BadRequestException(
-        `${what} is dated ${d}, on or before the opening balance date (${lock}). The books up to that date are closed - use a later date.`,
+        `${what} is dated ${d}, but the books are closed up to ${lock.date} (${lock.reason}). Use a later date.`,
       );
     }
   }
