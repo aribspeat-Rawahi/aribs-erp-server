@@ -109,14 +109,17 @@ export class VatPeriodService {
     const candidates: string[] = [];
     if (s.openingBalanceDate) candidates.push(this.addDays(String(s.openingBalanceDate).slice(0, 10), 1));
     else {
+      // formatted in SQL: a raw MIN() of a DATE column comes back as a JS
+      // Date object (not 'YYYY-MM-DD'), which broke the period maths
       const first = await this.dataSource.manager
         .createQueryBuilder(JournalEntry, 'e')
-        .select('MIN(e.date)', 'min')
+        .select("DATE_FORMAT(MIN(e.date), '%Y-%m-%d')", 'min')
         .getRawOne();
       if (first?.min) candidates.push(String(first.min).slice(0, 10));
     }
     for (const r of rows) candidates.push(String(r.startDate).slice(0, 10));
-    return candidates.length ? candidates.sort()[0] : this.today();
+    const valid = candidates.filter((c) => /^\d{4}-\d{2}-\d{2}$/.test(c));
+    return valid.length ? valid.sort()[0] : this.today();
   }
 
   async list() {
