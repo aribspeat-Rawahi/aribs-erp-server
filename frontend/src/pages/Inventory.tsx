@@ -140,9 +140,6 @@ function formatRatio(qty: number | string): string {
 export default function Inventory() {
   const { hasAnyRole, canAccessModule } = useAuth();
   const canDelete = hasAnyRole(['admin']);
-  // Manual stock-in / Add stock create stock value with no source
-  // document — backend allows only these roles (strictRoles).
-  const canStockIn = hasAnyRole(['admin', 'ceo', 'md', 'accountant']);
   const [tab, setTab] = useState<Tab>('finished');
 
   // Stock items (Finished Goods / Raw Materials)
@@ -360,7 +357,7 @@ export default function Inventory() {
             action={
               <div className="flex flex-wrap gap-2">
                 {tab === 'finished' && <SecondaryButton icon={ScanLine} requires="edit" onClick={() => setShowScan(true)}>Scan stock</SecondaryButton>}
-                {canStockIn && items.length > 0 && (
+                {items.length > 0 && (
                   <SecondaryButton icon={PackagePlus} requires="edit" onClick={() => setShowAddStock(true)}>Add stock</SecondaryButton>
                 )}
                 <SecondaryButton icon={Upload} requires="edit" onClick={() => setShowImport(true)}>Import</SecondaryButton>
@@ -459,7 +456,6 @@ export default function Inventory() {
           {showScan && (
             <ScanStockModal
               finishedGoods={finishedGoods}
-              canStockIn={canStockIn}
               onClose={() => setShowScan(false)}
               onSaved={() => {
                 setShowScan(false);
@@ -1048,12 +1044,10 @@ function StockItemDetailModal({
 
 function ScanStockModal({
   finishedGoods,
-  canStockIn,
   onClose,
   onSaved,
 }: {
   finishedGoods: StockItem[];
-  canStockIn: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -1063,8 +1057,7 @@ function ScanStockModal({
   // to 3 decimals for Kgs/Litre/Tons).
   const scanned = finishedGoods.find((f) => f.barcode && f.barcode === barcode.trim());
   const unit = scanned?.unit;
-  // Users who may not stock in only get "Stock out".
-  const [direction, setDirection] = useState<'in' | 'out'>(canStockIn ? 'in' : 'out');
+  const [direction, setDirection] = useState<'in' | 'out'>('in');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -1090,14 +1083,10 @@ function ScanStockModal({
           <Pill
             value={direction}
             onChange={(v) => setDirection(v as any)}
-            options={
-              canStockIn
-                ? [
-                    { value: 'in', label: 'Stock in' },
-                    { value: 'out', label: 'Stock out' },
-                  ]
-                : [{ value: 'out', label: 'Stock out' }]
-            }
+            options={[
+              { value: 'in', label: 'Stock in' },
+              { value: 'out', label: 'Stock out' },
+            ]}
           />
         </div>
         <Field label="Barcode">

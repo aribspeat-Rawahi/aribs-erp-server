@@ -45,11 +45,6 @@ export class FinishedGoodController {
 
   // Called after a production run finishes. `barcode` can come from a
   // handheld scanner, a phone camera scan, or manual typing — same endpoint.
-  // Manual stock-in creates stock value with no source document (posts
-  // Dr Inventory / Cr 5110), so only Admin/CEO/MD/Accountant may use it.
-  // strictRoles: an Inventory "edit" grant must NOT unlock it for others.
-  @ModuleAccess('inventory', { strictRoles: true })
-  @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD, UserRole.ACCOUNTANT)
   @Post('stock-in')
   stockIn(@Body() dto: ScanStockDto) {
     return this.service.stockIn(dto);

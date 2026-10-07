@@ -55,11 +55,6 @@ export class RawMaterialController {
   // Inventory "Add stock" modal — direct, batch-tracked stock-in (opening
   // stock, stock-count correction, a sample delivery, etc.) with no
   // Purchase Order needed. Creates a traceable RawMaterialBatch.
-  // Lets the caller set costPerUnit and creates stock value with no
-  // supplier document, so only Admin/CEO/MD/Accountant may use it.
-  // strictRoles: an Inventory "edit" grant must NOT unlock it for others.
-  @ModuleAccess('inventory', { strictRoles: true })
-  @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD, UserRole.ACCOUNTANT)
   @Post(':id/add-stock')
   addStock(@Param('id') id: string, @Body() dto: AddStockDto) {
     return this.service.addStock(id, dto);
