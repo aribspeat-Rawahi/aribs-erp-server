@@ -1,11 +1,15 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ReportingService } from './reporting.service';
+import { BooksCheckService } from './books-check.service';
 import { ModuleAccess } from '../auth/module-access.decorator';
 
 @ModuleAccess('dashboard', { readAlso: ['accounting'] })
 @Controller('reports')
 export class ReportingController {
-  constructor(private service: ReportingService) {}
+  constructor(
+    private service: ReportingService,
+    private booksCheck: BooksCheckService,
+  ) {}
 
   @Get('low-stock')
   getLowStockReport() {
@@ -94,6 +98,14 @@ export class ReportingController {
   @Get('vat-summary')
   getVatSummary(@Query('startDate') startDate: string, @Query('endDate') endDate: string) {
     return this.service.getVatSummary(startDate, endDate);
+  }
+
+  // Books Health Check: each control account in the ledger vs the records
+  // it summarises (customers, suppliers, stock, bank, VAT).
+  @ModuleAccess('accounting')
+  @Get('books-check')
+  getBooksCheck() {
+    return this.booksCheck.run();
   }
 
   // Reports Hub — e.g. GET /reports/income-statement?startDate=2026-09-01&endDate=2026-09-30

@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, Min, IsNotEmpty } from 'class-validator';
 
 export class CreateTaxPaymentDto {
   @IsString()
@@ -22,9 +22,11 @@ export class CreateTaxPaymentDto {
 
   // If set, also records an automatic withdrawal on this bank/cash
   // account. Omit for a record-only payment.
-  @IsOptional()
+  // Required: every payment moves money in or out of a bank/cash account,
+  // and that movement must reach the books (Cash in Hand is an account too).
   @IsString()
-  bankAccountId?: string;
+  @IsNotEmpty({ message: 'Choose the bank or cash account.' })
+  bankAccountId: string;
 }
 
 export class UpdateTaxPaymentDto {

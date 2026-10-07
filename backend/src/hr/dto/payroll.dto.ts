@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Min, MinLength, IsNotEmpty } from 'class-validator';
 
 export class GeneratePayrollDto {
   @IsString()
@@ -27,9 +27,11 @@ export class UpdatePayrollDto {
 // bank movement, no auto-posted journal entry), same optional-bank-sync
 // convention used by Expense/Reimbursement/InvoicePayment/SupplierPayment.
 export class MarkPayrollPaidDto {
-  @IsOptional()
+  // Required: every payment moves money in or out of a bank/cash account,
+  // and that movement must reach the books (Cash in Hand is an account too).
   @IsString()
-  bankAccountId?: string;
+  @IsNotEmpty({ message: 'Choose the bank or cash account.' })
+  bankAccountId: string;
 }
 
 export class UploadPayrollDocumentDto {

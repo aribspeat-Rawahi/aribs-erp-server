@@ -29,6 +29,7 @@ const REPORT_TITLES: Record<string, string> = {
   'product-purchase': 'Product Purchase',
   'inventory-report': 'Inventory Report',
   'reimbursements': 'Reimbursements',
+  'books-check': 'Books Health Check',
 };
 
 const BUILT_REPORTS = new Set([
@@ -44,6 +45,7 @@ const BUILT_REPORTS = new Set([
   'product-sales',
   'product-purchase',
   'inventory-report',
+  'books-check',
 ]);
 
 // One route (/accounting/reports/:reportKey) handles every Reports Hub
@@ -88,6 +90,7 @@ export default function ReportDetail() {
       {reportKey === 'product-sales' && <ProductSalesReport />}
       {reportKey === 'product-purchase' && <ProductPurchaseReport />}
       {reportKey === 'inventory-report' && <InventoryReport />}
+      {reportKey === 'books-check' && <BooksCheckReport />}
       {!BUILT_REPORTS.has(reportKey) && (
         <EmptyState>This report is coming soon.</EmptyState>
       )}
@@ -806,7 +809,7 @@ function SalesTaxCategoryView() {
 
 interface PurchaseVatRow {
   id: string;
-  type?: 'goods_receipt' | 'debit_note';
+  type?: 'goods_receipt' | 'debit_note' | 'fixed_asset';
   reference?: string;
   poNumber?: string;
   supplierId: string;
@@ -870,7 +873,7 @@ function PurchaseVatReport() {
               <tr key={r.id} className={r.missing?.length ? 'bg-amber-50/60' : ''}>
                 <td className="py-2 pl-3 text-ink whitespace-nowrap">
                   {r.reference || '-'}
-                  {r.type === 'debit_note' ? ' (debit note)' : ''}
+                  {r.type === 'debit_note' ? ' (debit note)' : r.type === 'fixed_asset' ? ' (fixed asset)' : ''}
                   {r.poNumber ? <div className="text-xs text-muted">{r.poNumber}</div> : null}
                 </td>
                 <td className="py-2 px-3 text-ink">{r.supplierName}</td>
@@ -1521,5 +1524,83 @@ function InventoryReport() {
         </ReportTable>
       </Card>
     </>
+  );
+}
+
+// ------------------------ Books Health Check ---------------------------
+
+interface BooksCheckRow {
+  key: string;
+  title: string;
+  ledgerLabel: string;
+  ledger: number;
+  recordsLabel: string;
+  records: number;
+  difference: number;
+  ok: boolean;
+  explain: string;
+}
+
+// Each control account in the ledger must equal the records behind it
+// (customers, suppliers, stock, bank, VAT). A difference means an entry
+// reached one side but not the other.
+function BooksCheckReport() {
+  const [data, setData] = useState<{ checkedAt: string; ok: boolean; checks: BooksCheckRow[] } | null>(null);
+  const [error, setError] = useState('');
+
+  function load() {
+    setData(null);
+    setError('');
+    api
+      .get('/reports/books-check')
+      .then((res) => setData(res.data))
+      .catch((err) => setError(err?.response?.data?.message || 'Could not run the check.'));
+  }
+  useEffect(load, []);
+
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
+  if (!data) return <div className="text-sm text-muted">Checking the books…</div>;
+  const failed = data.checks.filter((c) => !c.ok).length;
+
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="text-sm text-muted">Checked {new Date(data.checkedAt).toLocaleString()}</div>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs px-2 py-1 rounded-full font-medium ${data.ok ? 'bg-brand-50 text-brand-700' : 'bg-red-50 text-red-600'}`}>
+            {data.ok ? 'All checks passed' : `${failed} check(s) need attention`}
+          </span>
+          <button
+            type="button"
+            onClick={load}
+            className="print:hidden text-sm font-medium text-ink/70 hover:text-ink border border-black/10 rounded-lg px-3 py-1.5"
+          >
+            Run again
+          </button>
+          <PrintButton />
+        </div>
+      </div>
+      <div className="divide-y divide-black/5 border border-black/10 rounded-lg overflow-hidden">
+        {data.checks.map((c) => (
+          <div key={c.key} className={`px-3 py-3 ${c.ok ? '' : 'bg-red-50/60'}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm font-medium text-ink">{c.title}</div>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.ok ? 'bg-brand-50 text-brand-700' : 'bg-red-100 text-red-700'}`}>
+                {c.ok ? 'OK' : `Difference ${money(c.difference)}`}
+              </span>
+            </div>
+            <div className="mt-1 grid grid-cols-1 gap-1 text-xs text-muted sm:grid-cols-2">
+              <div>
+                {c.ledgerLabel}: <span className="text-ink">{money(c.ledger)}</span>
+              </div>
+              <div>
+                {c.recordsLabel}: <span className="text-ink">{money(c.records)}</span>
+              </div>
+            </div>
+            <div className="mt-1 text-xs text-muted">{c.explain}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }

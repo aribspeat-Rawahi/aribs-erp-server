@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
+import { FixedAsset } from '../fixed-asset/fixed-asset.entity';
 import { PurchaseOrder, PurchaseOrderStatus } from './purchase-order.entity';
 import { PurchaseOrderItem } from './purchase-order-item.entity';
 import { GoodsReceipt } from './goods-receipt.entity';
@@ -108,6 +109,9 @@ export class PurchaseOrderService {
 
   // Opening bills (old books) are fixed once opening balances are finalized.
   private assertNotOpening(order: PurchaseOrder, action: string) {
+    if (order.fixedAssetId) {
+      throw new BadRequestException(`${order.poNumber} is the bill of a fixed asset and cannot be ${action} here. Pay it with Pay Bill; change it from Accounting > Fixed Assets.`);
+    }
     if (order.isOpening) {
       throw new BadRequestException(`${order.poNumber} is an opening balance (supplier bill ${order.openingReference || ''}) and cannot be ${action}. Pay it with Pay Bill, or correct it with a journal entry.`);
     }
@@ -370,6 +374,15 @@ export class PurchaseOrderService {
     const supplierIds = [...new Set([...grns.map((g) => g.supplierId), ...returns.map((r) => r.supplierId)])];
     const suppliers = supplierIds.length ? await this.dataSource.manager.find(Supplier, { where: { id: In(supplierIds) } }) : [];
     const supplierOf = (sid: string) => suppliers.find((s) => s.id === sid);
+    const assets = (
+      await this.dataSource.manager
+        .createQueryBuilder(FixedAsset, 'a')
+        .where('a.purchaseDate BETWEEN :startDate AND :endDate', { startDate, endDate })
+        .andWhere('a.vatAmount > 0')
+        .getMany()
+    );
+    const assetSupplierIds = [...new Set(assets.map((a) => a.supplierId).filter((x): x is string => !!x))];
+    const assetSuppliers = assetSupplierIds.length ? await this.dataSource.manager.find(Supplier, { where: { id: In(assetSupplierIds) } }) : [];
     const poNumberOf = (pid: string) => orders.find((o) => o.id === pid)?.poNumber || '';
 
     const rows = [
@@ -412,6 +425,28 @@ export class PurchaseOrderService {
           vatAmount: -Number(r.vatAmount || 0),
           total: -Number(r.total || 0),
           missing: [] as string[],
+        };
+      }),
+      // fixed assets bought with VAT (input VAT 1400, claimable)
+      ...assets.map((a) => {
+        const s = a.supplierId ? assetSuppliers.find((x) => x.id === a.supplierId) : undefined;
+        const vat = Number(a.vatAmount || 0);
+        return {
+          type: 'fixed_asset' as const,
+          id: a.id,
+          reference: a.assetNumber,
+          poNumber: '',
+          supplierId: a.supplierId || '',
+          supplierName: s?.name || '',
+          supplierVatin: s?.vatin || '',
+          supplierInvoiceNumber: a.supplierInvoiceNumber || '',
+          supplierInvoiceDate: '',
+          date: a.purchaseDate,
+          receivedAt: a.purchaseDate,
+          subtotal: Number(a.cost || 0),
+          vatAmount: vat,
+          total: this.round3(Number(a.cost || 0) + vat),
+          missing: [!s?.vatin && 'supplier VATIN', !a.supplierInvoiceNumber && 'tax invoice no.'].filter(Boolean) as string[],
         };
       }),
     ].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));

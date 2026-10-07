@@ -10,6 +10,8 @@ import { ReportingService } from '../reporting/reporting.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { EmailService } from '../common/email.service';
 import { User, UserRole } from '../auth/user.entity';
+import { JournalPostingService } from '../journal/journal-posting.service';
+import { randomUUID } from 'crypto';
 
 interface Actor {
   userId?: string;
@@ -48,6 +50,7 @@ export class VatPeriodService {
     private reporting: ReportingService,
     private activityLog: ActivityLogService,
     private email: EmailService,
+    private journalPosting: JournalPostingService,
   ) {}
 
   private round3(n: number) {
@@ -227,6 +230,29 @@ export class VatPeriodService {
         filedAt: new Date(),
         filedBy: actor.email || null,
       });
+      row.id = randomUUID();
+      // VAT settlement: input VAT is set off against output VAT, so 2100
+      // is left with only the net payable (or 1400 with the net refundable).
+      // Posted BEFORE the filed row is saved - once it is saved, the period
+      // is closed and nothing can be dated in it.
+      const setOff = this.round3(Math.min(Number(row.outputVat), Number(row.inputVat)));
+      if (setOff > 0) {
+        const vatPayable = await this.journalPosting.findAccountIdByCode('2100');
+        const vatReceivable = await this.journalPosting.findAccountIdByCode('1400');
+        await this.journalPosting.postForSource(
+          'vat_settlement',
+          row.id,
+          row.endDate,
+          `VAT settlement ${row.label} - input VAT set off against output VAT`,
+          [
+            { accountId: vatPayable, debit: setOff, description: `Output VAT set off - ${row.label}` },
+            { accountId: vatReceivable, credit: setOff, description: `Input VAT set off - ${row.label}` },
+          ],
+          actor,
+          row.label,
+          m,
+        );
+      }
       return m.save(row);
     });
     await this.activityLog.log({
@@ -266,7 +292,10 @@ export class VatPeriodService {
       r.reopenedAt = new Date();
       r.reopenedBy = actor.email || null;
       r.reopenReason = reason.trim();
-      return m.save(r);
+      const saved = await m.save(r);
+      // the set-off goes with the filing; filing again posts it again
+      await this.journalPosting.postForSource('vat_settlement', r.id, r.endDate, '', [], actor, undefined, m);
+      return saved;
     });
     await this.activityLog.log({
       userId: actor.userId,

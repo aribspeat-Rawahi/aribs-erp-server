@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsArray, IsBoolean, IsEnum, ValidateNested, Min, IsIn } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsArray, IsBoolean, IsEnum, ValidateNested, Min, IsIn, IsNotEmpty } from 'class-validator';
 import { UNITS } from '../../units/units';
 import { Type } from 'class-transformer';
 import { PaymentType, DeliveryMethod } from '../../common/payment-type.enum';
@@ -169,7 +169,9 @@ export class CreateInvoicePaymentDto {
   // and auto-posts Dr {this account} / Cr 1100 Accounts Receivable.
   // Omit for a record-only payment (e.g. it was already recorded via a
   // Fund Transfer or elsewhere).
-  @IsOptional()
+  // Required: every payment moves money in or out of a bank/cash account,
+  // and that movement must reach the books (Cash in Hand is an account too).
   @IsString()
-  bankAccountId?: string;
+  @IsNotEmpty({ message: 'Choose the bank or cash account.' })
+  bankAccountId: string;
 }

@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Plus, Banknote } from 'lucide-react';
+import BankAccountSelect from '../components/BankAccountSelect';
 import api from '../api/client';
 import { PageHeader, PrimaryButton, SecondaryButton, Card, StatCard, EmptyState, Modal, Field, inputClass } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
@@ -273,16 +274,7 @@ function DisburseModal({
     <Modal title={`Disburse advance — ${row.employeeName}`} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-3">
         <div className="text-sm text-ink/80 bg-black/[0.03] rounded-lg p-3">{Number(row.amount).toFixed(3)} OMR to be paid out</div>
-        <Field label="Pay from account (optional — auto-deducts balance)">
-          <select className={inputClass} value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
-            <option value="">— Record only, no auto-deduction —</option>
-            {bankAccounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({Number(a.currentBalance).toFixed(3)} OMR)
-              </option>
-            ))}
-          </select>
-        </Field>
+        <BankAccountSelect label="Paid from account" value={bankAccountId} onChange={setBankAccountId} accounts={bankAccounts as any} />
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>

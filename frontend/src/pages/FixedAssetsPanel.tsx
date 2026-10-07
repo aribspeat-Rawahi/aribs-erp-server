@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Plus, Landmark, Pencil, Trash2, RotateCcw, Zap } from 'lucide-react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import BankAccountSelect from '../components/BankAccountSelect';
 import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Card, EmptyState, Modal, Field, inputClass, StatCard } from '../components/ui';
 
 const CATEGORY_OPTIONS = [
@@ -31,7 +32,16 @@ interface FixedAsset {
   disposalDate?: string;
   disposalProceeds?: number | string;
   bankAccountId?: string;
+  vatAmount?: number | string;
+  supplierId?: string;
+  supplierInvoiceNumber?: string;
+  purchaseOrderId?: string;
   notes?: string;
+}
+
+interface SupplierOption {
+  id: string;
+  name: string;
 }
 
 interface BankAccount {
@@ -136,6 +146,8 @@ export default function FixedAssetsPanel() {
                     <div className="text-xs text-muted">
                       <span className="whitespace-nowrap">{a.assetNumber}</span> · {categoryLabel(a.category)} · Purchased {a.purchaseDate}
                       {bankAccountName(a.bankAccountId) ? ` · from ${bankAccountName(a.bankAccountId)}` : ''}
+                      {!a.bankAccountId && a.purchaseOrderId ? ' · on credit (supplier bill)' : ''}
+                      {Number(a.vatAmount || 0) > 0 ? ` · VAT ${money(a.vatAmount || 0)} OMR (inv ${a.supplierInvoiceNumber})` : ''}
                       {a.status === 'disposed' ? ` · Disposed ${a.disposalDate} (proceeds ${money(a.disposalProceeds || 0)} OMR)` : ''}
                     </div>
                     <div className="text-xs text-muted mt-0.5">
@@ -218,9 +230,26 @@ function AssetModal({
   const [salvageValue, setSalvageValue] = useState(asset ? String(asset.salvageValue) : '0');
   const [usefulLifeMonths, setUsefulLifeMonths] = useState(asset ? String(asset.usefulLifeMonths) : '36');
   const [bankAccountId, setBankAccountId] = useState(asset?.bankAccountId || '');
+  const [payMode, setPayMode] = useState<'paid' | 'credit'>('paid');
+  const [vatAmount, setVatAmount] = useState('0');
+  const [supplierId, setSupplierId] = useState('');
+  const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState('');
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [notes, setNotes] = useState(asset?.notes || '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (isEdit) return;
+    api
+      .get('/suppliers')
+      .then((res) => setSuppliers(res.data))
+      .catch(() => setSuppliers([]));
+  }, [isEdit]);
+
+  const vatNum = Number(vatAmount || 0);
+  const needsSupplier = payMode === 'credit' || vatNum > 0;
+  const gross = Number(cost || 0) + vatNum;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -242,7 +271,10 @@ function AssetModal({
           cost: Number(cost),
           salvageValue: Number(salvageValue),
           usefulLifeMonths: Number(usefulLifeMonths),
-          bankAccountId: bankAccountId || undefined,
+          bankAccountId: payMode === 'paid' ? bankAccountId || undefined : undefined,
+          vatAmount: vatNum > 0 ? vatNum : undefined,
+          supplierId: supplierId || undefined,
+          supplierInvoiceNumber: supplierInvoiceNumber.trim() || undefined,
           notes: notes || undefined,
         });
       }
@@ -273,7 +305,7 @@ function AssetModal({
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Cost (OMR)">
+          <Field label={isEdit ? 'Cost (OMR)' : 'Cost excl. VAT (OMR)'}>
             <input className={inputClass} type="number" step="0.001" min="0.001" value={cost} onChange={(e) => setCost(e.target.value)} required disabled={isEdit} />
           </Field>
           <Field label="Salvage value (OMR)">
@@ -284,21 +316,45 @@ function AssetModal({
           <input className={inputClass} type="number" step="1" min="1" value={usefulLifeMonths} onChange={(e) => setUsefulLifeMonths(e.target.value)} required />
         </Field>
         {!isEdit && (
-          <Field label="Paid from account (optional)">
-            <select className={inputClass} value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
-              <option value="">On credit — record against Accounts Payable</option>
-              {bankAccounts.map((b) => (
-                <option key={b.id} value={b.id}>{b.name} ({money(b.currentBalance)} OMR)</option>
-              ))}
-            </select>
-          </Field>
+          <>
+            <Field label="VAT on the supplier's tax invoice (OMR)">
+              <input className={inputClass} type="number" step="0.001" min="0" value={vatAmount} onChange={(e) => setVatAmount(e.target.value)} />
+              <span className="mt-1 block text-xs text-muted">Claimed as input VAT. Leave 0 if there is no tax invoice (then put the VAT in the cost).</span>
+            </Field>
+            <Field label="Payment">
+              <select className={inputClass} value={payMode} onChange={(e) => setPayMode(e.target.value as 'paid' | 'credit')}>
+                <option value="paid">Paid now from a bank / cash account</option>
+                <option value="credit">On credit - creates a supplier bill</option>
+              </select>
+            </Field>
+            {payMode === 'paid' && (
+              <BankAccountSelect label="Paid from account" value={bankAccountId} onChange={setBankAccountId} accounts={bankAccounts} />
+            )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={needsSupplier ? 'Supplier' : 'Supplier (optional)'}>
+                <select className={inputClass} value={supplierId} onChange={(e) => setSupplierId(e.target.value)} required={needsSupplier}>
+                  <option value="">Choose supplier</option>
+                  {suppliers.map((sp) => (
+                    <option key={sp.id} value={sp.id}>{sp.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={vatNum > 0 ? 'Supplier invoice no.' : 'Supplier invoice no. (optional)'}>
+                <input className={inputClass} value={supplierInvoiceNumber} onChange={(e) => setSupplierInvoiceNumber(e.target.value)} required={vatNum > 0} />
+              </Field>
+            </div>
+            <div className="text-sm text-ink/80 bg-black/[0.03] rounded-lg p-3">
+              Total {payMode === 'paid' ? 'paid' : 'owed to the supplier'}: {money(gross)} OMR
+              {vatNum > 0 ? ` (cost ${money(Number(cost || 0))} + VAT ${money(vatNum)})` : ''}
+            </div>
+          </>
         )}
         <Field label="Notes (optional)">
           <input className={inputClass} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
         {isEdit && (
           <p className="text-xs text-muted">
-            Category, cost, purchase date and paid-from account can't be changed after registering — this keeps the posted purchase entry consistent. Delete and re-register instead if these were entered wrong (only possible before any depreciation has posted).
+            Category, cost, VAT, purchase date, supplier and payment can't be changed after registering — this keeps the posted purchase entry consistent. Delete and re-register instead if these were entered wrong (only possible before any depreciation has posted).
           </p>
         )}
         {error && <p className="text-sm text-red-600">{error}</p>}

@@ -88,6 +88,11 @@ export class PurchaseOrder {
   @Column({ type: 'date', nullable: true })
   dueDate: string | null;
 
+  // A supplier bill for a fixed asset bought on credit (no items or
+  // goods receipts; edited only through the fixed asset).
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  fixedAssetId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -181,6 +181,7 @@ export class TaxPaymentService {
       const amount = dto.amount != null ? Number(dto.amount) : Number(item.amount);
       const date = dto.datePaid ?? item.datePaid;
       const bankAccountId = dto.bankAccountId !== undefined ? dto.bankAccountId : item.bankAccountId;
+      if (!bankAccountId) throw new BadRequestException('Choose the bank or cash account this tax was paid from.');
 
       let bankTransactionId: string | undefined;
       if (bankAccountId) {

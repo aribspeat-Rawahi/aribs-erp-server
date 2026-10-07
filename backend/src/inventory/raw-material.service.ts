@@ -1,4 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { JournalPostingService } from '../journal/journal-posting.service';
+import { assertNoUnpostedStock, booksStarted, postStockAdjustment, RAW_MATERIAL_INVENTORY_CODE } from './stock-journal.util';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { RawMaterial } from './raw-material.entity';
@@ -24,6 +26,7 @@ export class RawMaterialService {
     @InjectDataSource()
     private dataSource: DataSource,
     private batchTrackingService: BatchTrackingService,
+    private journal: JournalPostingService,
   ) {}
 
   findAll() {
@@ -36,7 +39,8 @@ export class RawMaterialService {
     return item;
   }
 
-  create(dto: CreateRawMaterialDto) {
+  async create(dto: CreateRawMaterialDto) {
+    await assertNoUnpostedStock(this.journal, dto.quantityInStock, dto.name);
     if (dto.quantityInStock !== undefined) {
       assertQuantityForUnit(dto.quantityInStock, dto.unit, dto.name, { allowZero: true });
     }
@@ -56,6 +60,18 @@ export class RawMaterialService {
     if (safeDto.unit && !isDecimalUnit(safeDto.unit) && !Number.isInteger(Number(item.quantityInStock))) {
       throw new BadRequestException(
         `${item.name} has ${Number(item.quantityInStock)} in stock - ${unitLabel(safeDto.unit)} needs a whole number. Adjust the stock first.`,
+      );
+    }
+    // stock value = quantity x cost; changing the cost of stock on hand by
+    // hand would change its value with no entry in the books
+    if (
+      safeDto.costPerUnit !== undefined &&
+      Math.abs(Number(safeDto.costPerUnit) - Number(item.costPerUnit)) > 0.0005 &&
+      Number(item.quantityInStock) !== 0 &&
+      (await booksStarted(this.journal))
+    ) {
+      throw new BadRequestException(
+        `${item.name} has stock on hand, so its cost comes from purchases and production. To revalue the stock, post a journal entry.`,
       );
     }
     Object.assign(item, safeDto);
@@ -80,8 +96,14 @@ export class RawMaterialService {
           `Insufficient stock for ${item.name}. Available: ${item.quantityInStock}`,
         );
       }
+      const oldQty = Number(item.quantityInStock);
       item.quantityInStock = newQty;
       const saved = await manager.save(item);
+      await postStockAdjustment(this.journal, manager, {
+        inventoryCode: RAW_MATERIAL_INVENTORY_CODE,
+        amount: (newQty - oldQty) * Number(item.costPerUnit),
+        memo: `Stock adjustment - ${item.name}${dto.reason ? ` (${dto.reason})` : ''}`,
+      });
       return {
         item: saved,
         isLowStock: newQty <= Number(item.lowStockThreshold),
@@ -123,6 +145,11 @@ export class RawMaterialService {
         costPerUnit: batchCost,
         source: BatchSource.MANUAL,
         notes: dto.notes,
+      });
+      await postStockAdjustment(this.journal, manager, {
+        inventoryCode: RAW_MATERIAL_INVENTORY_CODE,
+        amount: addQty * batchCost,
+        memo: `Stock added - ${item.name}${dto.notes ? ` (${dto.notes})` : ''}`,
       });
 
       return saved;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  ShieldCheck,
   Receipt,
   TrendingUp,
   PackageCheck,
@@ -28,6 +29,7 @@ import { formatQuantityWithUnit } from '../utils/formatQuantity';
 // picks which report to render). Reports not built yet still get a working
 // card — the detail page shows "coming soon" for those keys.
 const REPORT_CARDS: { key: string; title: string; description: string; icon: any }[] = [
+  { key: 'books-check', title: 'Books Health Check', description: 'Checks that customers, suppliers, stock, bank and VAT in the ledger match their records.', icon: ShieldCheck },
   { key: 'trial-balance', title: 'Trial Balance', description: "Every account's total debit/credit and net balance, all-time.", icon: Scale },
   { key: 'ledger-report', title: 'Ledger Report', description: 'Line-by-line transactions and running balance for one account.', icon: BookOpen },
   { key: 'income-statement', title: 'Income Statement', description: 'Revenue vs Expenses and Net Profit for a chosen date range.', icon: TrendingUp },

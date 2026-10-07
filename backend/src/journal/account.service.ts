@@ -191,6 +191,8 @@ const DEFAULT_ACCOUNTS: { code: string; name: string; type: AccountType }[] = [
   { code: '1507', name: 'Asset Purchase', type: AccountType.EXPENSE },
   { code: '1509', name: 'Purchase VAT', type: AccountType.EXPENSE },
   { code: '5100', name: 'Raw Material Purchases', type: AccountType.EXPENSE },
+  // stock count corrections, manual stock in/out, write-offs (at cost)
+  { code: '5110', name: 'Inventory Adjustments', type: AccountType.EXPENSE },
   { code: '5600', name: 'Office Supplies Expense', type: AccountType.EXPENSE },
   { code: '5700', name: 'Employee Reimbursements', type: AccountType.EXPENSE },
 ];

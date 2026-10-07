@@ -77,6 +77,21 @@ export class FixedAsset {
   @Column({ nullable: true })
   bankAccountId?: string;
 
+  // Input VAT on the purchase (Dr 1400, claimable with the supplier's tax
+  // invoice). Not part of the asset cost or its depreciation.
+  @Column('decimal', { precision: 12, scale: 3, default: 0 })
+  vatAmount: number;
+
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  supplierId: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  supplierInvoiceNumber: string | null;
+
+  // bought on credit: the supplier bill (a purchase order) it created
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  purchaseOrderId: string | null;
+
   @Column({ nullable: true, type: 'text' })
   notes?: string;
 

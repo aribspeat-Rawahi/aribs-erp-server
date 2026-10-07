@@ -7,6 +7,7 @@ import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Pill, Card, Emp
 import { Can } from '../components/Permission';
 import { labelFor, PAYMENT_TYPE_OPTIONS, DELIVERY_METHOD_OPTIONS } from '../constants';
 import NewDocumentModal, { ExistingDoc } from '../components/NewDocumentModal';
+import BankAccountSelect from '../components/BankAccountSelect';
 import { formatQuantityWithUnit, quantityInputStep, snapQuantityToUnit } from '../utils/formatQuantity';
 
 interface Customer {
@@ -477,6 +478,7 @@ function PaymentLedgerModal({
 
   const [amount, setAmount] = useState('');
   const [paymentType, setPaymentType] = useState('cash');
+  const [bankAccountId, setBankAccountId] = useState('');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -508,6 +510,7 @@ function PaymentLedgerModal({
       await api.post(`/invoices/${invoice.id}/payments`, {
         amount: Number(amount),
         paymentType,
+        bankAccountId,
         paymentDate,
         note: note || undefined,
       });
@@ -606,10 +609,16 @@ function PaymentLedgerModal({
                   ))}
                 </select>
               </Field>
-              <Field label="Note (optional)">
-                <input className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. cheque number" />
-              </Field>
+              <BankAccountSelect
+                label="Received into"
+                value={bankAccountId}
+                onChange={setBankAccountId}
+                prefer={paymentType === 'cash' ? 'cash' : 'bank'}
+              />
             </div>
+            <Field label="Note (optional)">
+              <input className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. cheque number" />
+            </Field>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end">
               <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Recording…' : 'Record Payment'}</PrimaryButton>

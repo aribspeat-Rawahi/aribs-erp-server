@@ -1,4 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { JournalPostingService } from '../journal/journal-posting.service';
+import { assertNoUnpostedStock, booksStarted, postStockAdjustment, FINISHED_GOODS_INVENTORY_CODE } from './stock-journal.util';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { FinishedGood } from './finished-good.entity';
@@ -30,6 +32,7 @@ export class FinishedGoodService {
     private dataSource: DataSource,
     private batchTrackingService: BatchTrackingService,
     private backorders: BackorderService,
+    private journal: JournalPostingService,
   ) {}
 
   findAll() {
@@ -52,6 +55,7 @@ export class FinishedGoodService {
   // or a manually assigned one). We also generate a QR image of it,
   // in case you want a scannable label/sticker as a backup.
   async create(dto: CreateFinishedGoodDto) {
+    await assertNoUnpostedStock(this.journal, dto.quantityInStock, dto.name);
     if (dto.quantityInStock !== undefined) {
       assertQuantityForUnit(dto.quantityInStock, dto.unit, dto.name, { allowZero: true });
     }
@@ -73,6 +77,18 @@ export class FinishedGoodService {
     if (safeDto.unit && !isDecimalUnit(safeDto.unit) && !Number.isInteger(Number(item.quantityInStock))) {
       throw new BadRequestException(
         `${item.name} has ${Number(item.quantityInStock)} in stock - ${unitLabel(safeDto.unit)} needs a whole number. Adjust the stock first.`,
+      );
+    }
+    // stock value = quantity x cost; changing the cost of stock on hand by
+    // hand would change its value with no entry in the books
+    if (
+      safeDto.costPerUnit !== undefined &&
+      Math.abs(Number(safeDto.costPerUnit) - Number(item.costPerUnit)) > 0.0005 &&
+      Number(item.quantityInStock) !== 0 &&
+      (await booksStarted(this.journal))
+    ) {
+      throw new BadRequestException(
+        `${item.name} has stock on hand, so its cost comes from purchases and production. To revalue the stock, post a journal entry.`,
       );
     }
     Object.assign(item, safeDto);
@@ -103,6 +119,11 @@ export class FinishedGoodService {
       });
       // goods already invoiced while stock was short leave the new batch at once
       await this.batchTrackingService.absorbBackorder(manager, item.id, before, Number(dto.quantity));
+      await postStockAdjustment(this.journal, manager, {
+        inventoryCode: FINISHED_GOODS_INVENTORY_CODE,
+        amount: Number(dto.quantity) * Number(item.costPerUnit),
+        memo: `Stock in (scan) - ${item.name}`,
+      });
       return saved;
     });
     // invoices waiting for this product may now be ready (sends the reminder)
@@ -147,6 +168,11 @@ export class FinishedGoodService {
       });
       item.quantityInStock = newQty;
       const saved = await manager.save(item);
+      await postStockAdjustment(this.journal, manager, {
+        inventoryCode: FINISHED_GOODS_INVENTORY_CODE,
+        amount: -Number(quantity) * Number(item.costPerUnit),
+        memo: `Stock out (scan) - ${item.name}`,
+      });
       return { item: saved, isLowStock: newQty <= Number(item.lowStockThreshold) };
     });
   }

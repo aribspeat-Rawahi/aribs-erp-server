@@ -21,7 +21,7 @@ export enum BankTransactionCategory {
 export const BANK_TRANSACTION_CATEGORY_ACCOUNT_CODE: Record<BankTransactionCategory, string> = {
   [BankTransactionCategory.OWNERS_CONTRIBUTION]: '300', // Owner's Contribution (Equity)
   [BankTransactionCategory.OTHER_INCOME]: '470', // Other Revenue
-  [BankTransactionCategory.OPENING_BALANCE]: '300', // Owner's Contribution (Equity) — same as a capital injection
+  [BankTransactionCategory.OPENING_BALANCE]: '3900', // Opening Balance Equity - same account as Accounting > Opening Balances
   [BankTransactionCategory.OWNERS_DRAW]: '310', // Owner's Draw (Equity)
   [BankTransactionCategory.BANK_CHARGES]: '606', // Bank Transaction Charge (Expense)
   [BankTransactionCategory.OTHER_EXPENSE]: '628', // General Expenses

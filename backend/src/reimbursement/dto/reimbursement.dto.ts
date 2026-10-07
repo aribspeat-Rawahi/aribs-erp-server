@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsEnum, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsEnum, Min, IsNotEmpty } from 'class-validator';
 import { ReimbursementCategory } from '../reimbursement.entity';
 
 export class CreateReimbursementDto {
@@ -70,7 +70,9 @@ export class MarkReimbursementPaidDto {
   // If set, also records an automatic withdrawal on this bank/cash
   // account (see ReimbursementService.markPaid()). Omit for a
   // record-only payment, matching how Expense never touches bank-account.
-  @IsOptional()
+  // Required: every payment moves money in or out of a bank/cash account,
+  // and that movement must reach the books (Cash in Hand is an account too).
   @IsString()
-  bankAccountId?: string;
+  @IsNotEmpty({ message: 'Choose the bank or cash account.' })
+  bankAccountId: string;
 }

@@ -25,9 +25,24 @@ export class CreateFixedAssetDto {
   @Min(1)
   usefulLifeMonths: number;
 
+  // Paid now from this bank/cash account. Leave empty to buy on credit -
+  // then supplierId is required and a supplier bill is created.
   @IsOptional()
   @IsString()
-  bankAccountId?: string; // omit to record the purchase against Accounts Payable instead
+  bankAccountId?: string;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0)
+  vatAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  supplierId?: string;
+
+  @IsOptional()
+  @IsString()
+  supplierInvoiceNumber?: string;
 
   @IsOptional()
   @IsString()

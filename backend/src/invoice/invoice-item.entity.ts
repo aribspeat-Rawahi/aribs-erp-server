@@ -31,6 +31,13 @@ export class InvoiceItem {
   @Column('decimal', { precision: 12, scale: 3 })
   unitPrice: number;
 
+  // Cost of one unit when it left stock for this invoice (weighted
+  // average at the time). A sales return / invoice edit gives the goods
+  // back at THIS cost, so inventory and COGS reverse exactly what was
+  // posted. Null on lines saved before this existed (current cost used).
+  @Column('decimal', { precision: 16, scale: 6, nullable: true })
+  unitCost: number | null;
+
   @Column('decimal', { precision: 5, scale: 2, default: 5.0 })
   vatRate: number;
 

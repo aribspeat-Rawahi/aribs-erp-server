@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsArray, IsIn, IsEnum, ValidateNested, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsArray, IsIn, IsEnum, ValidateNested, Min, IsNotEmpty } from 'class-validator';
 import { Type } from 'class-transformer';
 import { InteractionType } from '../../common/interaction-type.enum';
 import { SupplierVatStatus } from '../supplier.entity';
@@ -196,7 +196,9 @@ export class CreateSupplierPaymentDto {
   // Leaving it blank keeps this a record-only payment (no bank movement,
   // no auto-posted journal entry) — same optional-bank-sync convention
   // used by Expense/Reimbursement/InvoicePayment.
-  @IsOptional()
+  // Required: every payment moves money in or out of a bank/cash account,
+  // and that movement must reach the books (Cash in Hand is an account too).
   @IsString()
-  bankAccountId?: string;
+  @IsNotEmpty({ message: 'Choose the bank or cash account.' })
+  bankAccountId: string;
 }

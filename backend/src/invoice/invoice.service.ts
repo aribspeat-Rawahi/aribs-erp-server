@@ -111,6 +111,11 @@ export class InvoiceService {
     return { ...invoice, items };
   }
 
+  // unit costs keep 6 decimals (amounts 3)
+  private round6(n: number) {
+    return Math.round(n * 1e6) / 1e6;
+  }
+
   private round3(n: number) {
     return Math.round(n * 1000) / 1000;
   }
@@ -338,13 +343,23 @@ export class InvoiceService {
   // journal entry per invoice (source 'invoice_cogs').
   private async syncStock(
     invoice: Invoice,
-    oldLines: { finishedGoodId?: string | null; quantity: number | string }[],
+    oldLines: { finishedGoodId?: string | null; quantity: number | string; unitCost?: number | string | null }[],
     newLines: { finishedGoodId?: string | null; quantity: number | string }[],
     actor?: { userId?: string; email?: string },
   ) {
     const delta = new Map<string, number>(); // + = goods out, - = goods back
     for (const l of newLines) if (l.finishedGoodId) delta.set(l.finishedGoodId, (delta.get(l.finishedGoodId) || 0) + Number(l.quantity));
     for (const l of oldLines) if (l.finishedGoodId) delta.set(l.finishedGoodId, (delta.get(l.finishedGoodId) || 0) - Number(l.quantity));
+
+    // what each product cost when it went out on this invoice
+    const oldQty = new Map<string, number>();
+    const oldUnit = new Map<string, number>();
+    for (const l of oldLines) {
+      if (!l.finishedGoodId) continue;
+      oldQty.set(l.finishedGoodId, (oldQty.get(l.finishedGoodId) || 0) + Number(l.quantity));
+      if (l.unitCost !== null && l.unitCost !== undefined && !oldUnit.has(l.finishedGoodId)) oldUnit.set(l.finishedGoodId, Number(l.unitCost));
+    }
+    const newUnit = new Map<string, number>(oldUnit);
 
     let cogs = Number(invoice.cogsAmount || 0);
     await this.dataSource.transaction(async (manager) => {
@@ -355,7 +370,11 @@ export class InvoiceService {
         if (!good) continue;
         const before = Number(good.quantityInStock);
         const cost = Number(good.costPerUnit || 0);
+        // goods coming back are valued at what they cost when they went out
+        const outCost = oldUnit.has(productId) ? oldUnit.get(productId)! : cost;
         if (change > 0) {
+          const q0 = Math.max(0, oldQty.get(productId) || 0);
+          newUnit.set(productId, q0 + change > 0 ? this.round6((q0 * outCost + change * cost) / (q0 + change)) : cost);
           // only what is physically there comes out of batches
           const fromStock = Math.min(change, Math.max(before, 0));
           if (fromStock > 0.0005) {
@@ -375,13 +394,19 @@ export class InvoiceService {
           if (batchQty > 0.0005) {
             await this.batchTracking.createFinishedGoodBatch(manager, { finishedGoodId: productId, quantity: batchQty, source: BatchSource.MANUAL });
           }
+          // blend the returned units into the weighted-average cost
+          const onHand = Math.max(0, before);
+          if (onHand + back > 0) good.costPerUnit = this.round6((onHand * cost + back * outCost) / (onHand + back));
           good.quantityInStock = after;
         }
-        cogs = this.round3(cogs + change * cost);
+        cogs = this.round3(cogs + change * (change > 0 ? cost : outCost));
         await manager.save(good);
       }
       if (cogs < 0) cogs = 0;
       await manager.update(Invoice, { id: invoice.id }, { cogsAmount: cogs });
+      for (const [productId, unit] of newUnit) {
+        await manager.update(InvoiceItem, { invoiceId: invoice.id, finishedGoodId: productId }, { unitCost: unit });
+      }
     });
     invoice.cogsAmount = cogs;
 

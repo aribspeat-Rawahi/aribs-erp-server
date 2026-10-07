@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ChevronDown, Check, Download, Eye, PackageCheck, Pencil, Plus, RotateCcw, Trash2, Upload, Wallet, X } from 'lucide-react';
 import { viewPdf, downloadPdf } from '../api/docActions';
 import ImportModal from '../components/ImportModal';
+import BankAccountSelect from '../components/BankAccountSelect';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Pill, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
@@ -1520,16 +1521,7 @@ function PayBillModal({
                   ))}
                 </select>
               </Field>
-              <Field label="Pay from account">
-                <select className={inputClass} value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
-                  <option value="">— Record only (no bank movement) —</option>
-                  {bankAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({Number(a.currentBalance).toFixed(3)} OMR)
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              <BankAccountSelect label="Paid from account" value={bankAccountId} onChange={setBankAccountId} accounts={bankAccounts as any} />
             </div>
             <Field label="Note (optional)">
               <input className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. cheque number" />

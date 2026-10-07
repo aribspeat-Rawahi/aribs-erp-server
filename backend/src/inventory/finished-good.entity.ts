@@ -49,7 +49,8 @@ export class FinishedGood {
   // already assumes. Starts at 0 for a product that's never been produced
   // through a BOM yet (e.g. one only ever stocked in manually) — set it
   // by hand in that case for COGS to reflect reality.
-  @Column('decimal', { precision: 12, scale: 3, default: 0 })
+  // 6 decimals: stock value = quantity x cost must not drift from the ledger
+  @Column('decimal', { precision: 16, scale: 6, default: 0 })
   costPerUnit: number;
 
   @Column('decimal', { precision: 5, scale: 2, default: 5.0 })

@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Plus, Percent, Receipt, Pencil, Trash2, Eye, Upload } from 'lucide-react';
+import BankAccountSelect from '../components/BankAccountSelect';
 import api from '../api/client';
 import VatReturnsPanel from './VatReturnsPanel';
 import { viewFile } from '../api/docActions';
@@ -397,16 +398,7 @@ function TaxPaymentModal({
             <input className={inputClass} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Tax authority receipt #" />
           </Field>
         </div>
-        <Field label="Pay from account (optional — auto-deducts balance)">
-          <select className={inputClass} value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
-            <option value="">— Record only, no auto-deduction —</option>
-            {bankAccounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({Number(a.currentBalance).toFixed(3)} OMR)
-              </option>
-            ))}
-          </select>
-        </Field>
+        <BankAccountSelect label="Paid from account" value={bankAccountId} onChange={setBankAccountId} accounts={bankAccounts as any} />
         <Field label="Note (optional)">
           <input className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Wallet, TrendingUp, TrendingDown, Receipt, Upload, Eye, Pencil, Trash2, Check, X, BadgeDollarSign } from 'lucide-react';
+import BankAccountSelect from '../components/BankAccountSelect';
 import api from '../api/client';
 import { viewFile } from '../api/docActions';
 import { useAuth } from '../context/AuthContext';
@@ -22,6 +23,8 @@ const EXPENSE_CATEGORY_OPTIONS = [
   { value: 'transport', label: 'Transport' },
   { value: 'other', label: 'Other' },
 ];
+// 'raw_material' stays only to label old records: raw material is bought
+// with a purchase order (it is stock, not an expense).
 
 const REIMBURSEMENT_CATEGORY_OPTIONS = [
   { value: 'travel', label: 'Travel' },
@@ -538,7 +541,7 @@ function AddExpenseModal({
         <div className="grid grid-cols-2 gap-3">
           <Field label="Category">
             <select className={inputClass} value={category} onChange={(e) => setCategory(e.target.value)}>
-              {EXPENSE_CATEGORY_OPTIONS.map((c) => (
+              {EXPENSE_CATEGORY_OPTIONS.filter((c) => c.value !== 'raw_material').map((c) => (
                 <option key={c.value} value={c.value}>
                   {c.label}
                 </option>
@@ -563,16 +566,7 @@ function AddExpenseModal({
         <Field label="Description (optional)">
           <input className={inputClass} value={description} onChange={(e) => setDescription(e.target.value)} />
         </Field>
-        <Field label="Paid from account (optional)">
-          <select className={inputClass} value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
-            <option value="">Record only — no bank/cash movement</option>
-            {bankAccounts.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name} ({Number(b.currentBalance).toFixed(3)} OMR)
-              </option>
-            ))}
-          </select>
-        </Field>
+        <BankAccountSelect label="Paid from account" value={bankAccountId} onChange={setBankAccountId} accounts={bankAccounts as any} />
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
@@ -644,7 +638,7 @@ function EditExpenseModal({
         <div className="grid grid-cols-2 gap-3">
           <Field label="Category">
             <select className={inputClass} value={category} onChange={(e) => setCategory(e.target.value)}>
-              {EXPENSE_CATEGORY_OPTIONS.map((c) => (
+              {EXPENSE_CATEGORY_OPTIONS.filter((c) => c.value !== 'raw_material' || expense.category === 'raw_material').map((c) => (
                 <option key={c.value} value={c.value}>
                   {c.label}
                 </option>
@@ -669,16 +663,7 @@ function EditExpenseModal({
         <Field label="Description (optional)">
           <input className={inputClass} value={description} onChange={(e) => setDescription(e.target.value)} />
         </Field>
-        <Field label="Paid from account (optional)">
-          <select className={inputClass} value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
-            <option value="">Record only — no bank/cash movement</option>
-            {bankAccounts.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name} ({Number(b.currentBalance).toFixed(3)} OMR)
-              </option>
-            ))}
-          </select>
-        </Field>
+        <BankAccountSelect label="Paid from account" value={bankAccountId} onChange={setBankAccountId} accounts={bankAccounts as any} />
         <Field label={expense.invoiceFilePath ? 'Replace invoice file (optional)' : 'Invoice file (optional)'}>
           <input
             type="file"
@@ -899,16 +884,7 @@ function MarkPaidModal({
         <Field label="Payment method">
           <input className={inputClass} value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} placeholder="Cash, Bank Transfer, Cheque…" required />
         </Field>
-        <Field label="Pay from account (optional — auto-deducts balance)">
-          <select className={inputClass} value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
-            <option value="">— Record only, no auto-deduction —</option>
-            {bankAccounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({Number(a.currentBalance).toFixed(3)} OMR)
-              </option>
-            ))}
-          </select>
-        </Field>
+        <BankAccountSelect label="Paid from account" value={bankAccountId} onChange={setBankAccountId} accounts={bankAccounts as any} />
         <Field label="Note (optional)">
           <input className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>

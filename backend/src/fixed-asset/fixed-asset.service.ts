@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
 import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { FixedAsset, FixedAssetCategory, FixedAssetStatus } from './fixed-asset.entity';
@@ -11,6 +12,9 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService, PostingLine } from '../journal/journal-posting.service';
 import { applyBankMovement, rowForInsert } from '../common/bank-movement.util';
+import { Supplier } from '../supplier/supplier.entity';
+import { PurchaseOrder, PurchaseOrderStatus } from '../supplier/purchase-order.entity';
+import { PaymentStatus } from '../common/payment-type.enum';
 
 interface ActorRef {
   userId?: string;
@@ -86,29 +90,43 @@ export class FixedAssetService {
     const date = dto.purchaseDate || new Date().toISOString().slice(0, 10);
     await this.journalPosting.assertDateOpen(date, 'This asset purchase');
     const cost = Number(dto.cost);
+    const vat = Math.round(Number(dto.vatAmount || 0) * 1000) / 1000;
     const salvageValue = Number(dto.salvageValue || 0);
     if (salvageValue >= cost) {
       throw new BadRequestException('Salvage value must be less than the asset cost.');
     }
+    // paid now (bank/cash) or on credit (a supplier bill) - never neither,
+    // or the purchase has no other side in the books
+    if (!dto.bankAccountId && !dto.supplierId) {
+      throw new BadRequestException('Choose the bank/cash account it was paid from, or the supplier if it was bought on credit.');
+    }
+    // input VAT can only be claimed with the supplier's tax invoice
+    if (vat > 0 && (!dto.supplierId || !dto.supplierInvoiceNumber?.trim())) {
+      throw new BadRequestException("To claim the VAT, enter the supplier and its tax invoice number. Otherwise include the VAT in the cost.");
+    }
+    const gross = Math.round((cost + vat) * 1000) / 1000;
 
     const saved = await this.dataSource.transaction(async (manager) => {
       let bankTransactionId: string | undefined;
+      if (dto.supplierId && !(await manager.findOne(Supplier, { where: { id: dto.supplierId } }))) {
+        throw new NotFoundException('Supplier not found');
+      }
       if (dto.bankAccountId) {
         const account = await manager.findOne(BankAccount, {
           where: { id: dto.bankAccountId },
           lock: { mode: 'pessimistic_write' },
         });
         if (!account) throw new NotFoundException('Bank/cash account not found');
-        if (Number(account.currentBalance) < cost) {
+        if (Number(account.currentBalance) < gross) {
           throw new BadRequestException(`Insufficient balance in ${account.name} to purchase this asset.`);
         }
-        account.currentBalance = Number(account.currentBalance) - cost;
+        account.currentBalance = Number(account.currentBalance) - gross;
         await manager.save(account);
         const txn = await manager.save(
           manager.create(BankTransaction, {
             bankAccountId: account.id,
             type: BankTransactionType.WITHDRAWAL,
-            amount: cost,
+            amount: gross,
             date,
             note: `Fixed asset purchase — ${dto.name}`,
           }),
@@ -127,11 +145,18 @@ export class FixedAssetService {
         accumulatedDepreciation: 0,
         status: FixedAssetStatus.ACTIVE,
         bankAccountId: dto.bankAccountId,
+        vatAmount: vat,
+        supplierId: dto.supplierId || null,
+        supplierInvoiceNumber: dto.supplierInvoiceNumber?.trim() || null,
         notes: dto.notes,
         createdByUserId: actor.userId,
         createdByEmail: actor.email,
       });
       const savedItem = await manager.save(item);
+      if (!dto.bankAccountId) {
+        savedItem.purchaseOrderId = await this.createBill(manager, savedItem);
+        await manager.save(savedItem);
+      }
       return { savedItem, bankTransactionId };
     });
 
@@ -179,20 +204,28 @@ export class FixedAssetService {
       );
     }
 
+    const gross = Math.round((Number(item.cost) + Number(item.vatAmount || 0)) * 1000) / 1000;
     await this.dataSource.transaction(async (manager) => {
+      if (item.purchaseOrderId) {
+        const bill = await manager.findOne(PurchaseOrder, { where: { id: item.purchaseOrderId }, lock: { mode: 'pessimistic_write' } });
+        if (bill && Number(bill.paidAmount || 0) > 0.0005) {
+          throw new BadRequestException(`Its supplier bill ${bill.poNumber} is already (partly) paid - delete those payments first.`);
+        }
+        if (bill) await manager.remove(bill);
+      }
       if (item.bankAccountId) {
         const account = await manager.findOne(BankAccount, {
           where: { id: item.bankAccountId },
           lock: { mode: 'pessimistic_write' },
         });
         if (account) {
-          account.currentBalance = Number(account.currentBalance) + Number(item.cost);
+          account.currentBalance = Number(account.currentBalance) + gross;
           await manager.save(account);
           await manager.save(
             manager.create(BankTransaction, {
               bankAccountId: account.id,
               type: BankTransactionType.DEPOSIT,
-              amount: Number(item.cost),
+              amount: gross,
               date: new Date().toISOString().slice(0, 10),
               note: `Fixed asset purchase reversed — ${item.assetNumber}`,
             }),
@@ -408,19 +441,53 @@ export class FixedAssetService {
     return saved;
   }
 
+  // Supplier bill for an asset bought on credit: a received purchase order
+  // with no items, so it shows under the supplier and is paid with Pay Bill.
+  // Its journal is the asset's own purchase entry (Cr 2000), not a GRN.
+  private async createBill(manager: EntityManager, item: FixedAsset): Promise<string> {
+    const vat = Number(item.vatAmount || 0);
+    const gross = Math.round((Number(item.cost) + vat) * 1000) / 1000;
+    const order = await manager.save(
+      manager.create(PurchaseOrder, {
+        supplierId: item.supplierId!,
+        status: PurchaseOrderStatus.RECEIVED,
+        poNumber: `TMP-${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+        notes: `Fixed asset ${item.assetNumber} - ${item.name}${item.supplierInvoiceNumber ? ` (supplier invoice ${item.supplierInvoiceNumber})` : ''}`,
+        receivedAt: new Date(`${String(item.purchaseDate).slice(0, 10)}T00:00:00Z`),
+        subtotal: Number(item.cost),
+        vatAmount: vat,
+        total: gross,
+        receivedSubtotal: Number(item.cost),
+        receivedVat: vat,
+        receivedTotal: gross,
+        paidAmount: 0,
+        paymentStatus: PaymentStatus.DUE,
+        fixedAssetId: item.id,
+      }),
+    );
+    order.poNumber = `PO-${String(item.purchaseDate).slice(0, 4)}-${String(order.sequenceNumber).padStart(4, '0')}`;
+    await manager.save(order);
+    return order.id;
+  }
+
   // Dr the asset's category account / Cr the bank account it was paid
   // from, or Cr Accounts Payable when bought on credit.
   private async postPurchaseJournal(item: FixedAsset, actor: ActorRef) {
     try {
       const cost = Number(item.cost);
+      const vat = Number(item.vatAmount || 0);
+      const gross = Math.round((cost + vat) * 1000) / 1000;
       const assetAccountId = await this.journalPosting.findAccountIdByCode(CATEGORY_ACCOUNT_CODE[item.category]);
       const lines: PostingLine[] = [{ accountId: assetAccountId, debit: cost, description: 'Fixed asset purchase' }];
+      if (vat > 0) {
+        lines.push({ accountId: await this.journalPosting.findAccountIdByCode('1400'), debit: vat, description: 'Input VAT on fixed asset' });
+      }
       if (item.bankAccountId) {
         const bankJournalAccountId = await this.bankAccountService.ensureJournalAccountId(item.bankAccountId);
-        lines.push({ accountId: bankJournalAccountId, credit: cost, description: 'Asset paid from account' });
+        lines.push({ accountId: bankJournalAccountId, credit: gross, description: 'Asset paid from account' });
       } else {
         const apAccountId = await this.journalPosting.findAccountIdByCode(ACCOUNTS_PAYABLE_CODE);
-        lines.push({ accountId: apAccountId, credit: cost, description: 'Asset purchased on credit' });
+        lines.push({ accountId: apAccountId, credit: gross, description: 'Asset purchased on credit' });
       }
       await this.journalPosting.postForSource(
         'fixed_asset_purchase',
@@ -446,13 +513,19 @@ export class FixedAssetService {
         await applyBankMovement(manager, {
           accountId: String(data.bankAccountId),
           type: BankTransactionType.WITHDRAWAL,
-          amount: Number(data.cost),
+          amount: Math.round((Number(data.cost) + Number(data.vatAmount || 0)) * 1000) / 1000,
           date: String(data.purchaseDate),
           note: `Fixed asset purchase — ${data.name} (restored)`,
         });
       }
       await manager.insert(FixedAsset, { ...rowForInsert(data), accumulatedDepreciation: 0, status: FixedAssetStatus.ACTIVE } as any);
-      return manager.findOneOrFail(FixedAsset, { where: { id: String(data.id) } });
+      const restored = await manager.findOneOrFail(FixedAsset, { where: { id: String(data.id) } });
+      // bought on credit: the delete removed its unpaid bill, so make a new one
+      if (!restored.bankAccountId && restored.supplierId) {
+        restored.purchaseOrderId = await this.createBill(manager, restored);
+        await manager.save(restored);
+      }
+      return restored;
     });
     await this.postPurchaseJournal(saved, actor);
     return saved;

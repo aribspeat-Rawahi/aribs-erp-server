@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsEnum, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsEnum, Min, IsNotEmpty } from 'class-validator';
 import { ExpenseCategory } from '../expense.entity';
 
 export class CreateExpenseDto {
@@ -28,9 +28,11 @@ export class CreateExpenseDto {
   // Which cash/bank account this expense was actually paid from. If
   // set, a real withdrawal is recorded on that account and a Journal
   // Entry is auto-posted. Leave blank for a record-only expense.
-  @IsOptional()
+  // Required: every payment moves money in or out of a bank/cash account,
+  // and that movement must reach the books (Cash in Hand is an account too).
   @IsString()
-  bankAccountId?: string;
+  @IsNotEmpty({ message: 'Choose the bank or cash account.' })
+  bankAccountId: string;
 }
 
 export class UpdateExpenseDto {

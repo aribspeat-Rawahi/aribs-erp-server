@@ -29,7 +29,8 @@ export class RawMaterial {
   @Column('decimal', { precision: 12, scale: 3, default: 0 })
   lowStockThreshold: number;
 
-  @Column('decimal', { precision: 12, scale: 3, default: 0 })
+  // 6 decimals: stock value = quantity x cost must not drift from the ledger
+  @Column('decimal', { precision: 16, scale: 6, default: 0 })
   costPerUnit: number;
 
   @Column({ nullable: true })

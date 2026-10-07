@@ -1,4 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { JournalPostingService } from '../journal/journal-posting.service';
+import { booksStarted } from '../inventory/stock-journal.util';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import * as ExcelJS from 'exceljs';
@@ -43,6 +45,7 @@ export class ImportService {
     @InjectDataSource() private dataSource: DataSource,
     private batchTracking: BatchTrackingService,
     private activityLog: ActivityLogService,
+    private journal: JournalPostingService,
   ) {}
 
   // ---- template -------------------------------------------------------------
@@ -198,6 +201,7 @@ export class ImportService {
       else ignored.push(h);
     });
     const missing = def.columns.filter((c) => c.required && !colIndex.has(c.key)).map((c) => c.header);
+    const booksOpen = await booksStarted(this.journal);
     if (missing.length) {
       throw new BadRequestException(`Required column(s) missing: ${missing.join(', ')}. Download the template to see the expected columns.`);
     }
@@ -226,6 +230,10 @@ export class ImportService {
 
       // opening stock must fit the unit
       const qty = values.quantityInStock as number | undefined;
+      // once the books have started, stock only comes in through flows that post to the ledger
+      if (qty && qty > 0 && booksOpen) {
+        messages.push('Opening Stock can only be imported before the opening balances are finalized - leave it empty and use Add stock / a purchase order.');
+      }
       if (qty && values.unit) {
         const problem = quantityProblem(qty, values.unit as string, 'Opening Stock');
         if (problem) messages.push(problem.replace('Quantity for Opening Stock', 'Opening Stock'));

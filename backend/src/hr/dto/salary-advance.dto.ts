@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Min, MinLength, IsNotEmpty } from 'class-validator';
 
 export class CreateSalaryAdvanceDto {
   @IsString()
@@ -18,7 +18,9 @@ export class CreateSalaryAdvanceDto {
 // leaving it blank keeps this a record-only disbursement (no bank
 // movement, no auto-posted journal entry).
 export class DisburseSalaryAdvanceDto {
-  @IsOptional()
+  // Required: every payment moves money in or out of a bank/cash account,
+  // and that movement must reach the books (Cash in Hand is an account too).
   @IsString()
-  bankAccountId?: string;
+  @IsNotEmpty({ message: 'Choose the bank or cash account.' })
+  bankAccountId: string;
 }

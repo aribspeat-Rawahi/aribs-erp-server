@@ -62,6 +62,11 @@ export class SalesReturnService {
     return `SR-${date}-${rand}`;
   }
 
+  // unit costs keep 6 decimals (amounts 3)
+  private round6(n: number) {
+    return Math.round(n * 1e6) / 1e6;
+  }
+
   private round3(n: number) {
     return Math.round(n * 1000) / 1000;
   }
@@ -252,16 +257,25 @@ export class SalesReturnService {
         );
       }
 
+      // what each product cost when it was sold on this invoice
+      const soldItems = await manager.find(InvoiceItem, { where: { invoiceId: invoice.id } });
       for (const line of item.items) {
         const good = await manager.findOne(FinishedGood, {
           where: { id: line.finishedGoodId },
           lock: { mode: 'pessimistic_write' },
         });
         if (!good) throw new NotFoundException('Product not found');
-        // Cost of Goods Sold reversal at the product's current (weighted
-        // average) cost - the same basis the sale's COGS used.
-        totalCost += Number(line.quantity) * Number(good.costPerUnit);
+        // Cost of Goods Sold reversal at the cost the SALE used (saved on
+        // the invoice line), so inventory and COGS reverse exactly what was
+        // posted. Older lines without it fall back to the current cost.
+        const sold = soldItems.find((i) => i.finishedGoodId === line.finishedGoodId && i.unitCost !== null && i.unitCost !== undefined);
+        const unitCost = sold ? Number(sold.unitCost) : Number(good.costPerUnit);
+        const qty = Number(line.quantity);
+        totalCost += qty * unitCost;
         const before = Number(good.quantityInStock);
+        // blend the returned units into the weighted-average cost
+        const onHand = Math.max(0, before);
+        if (onHand + qty > 0) good.costPerUnit = this.round6((onHand * Number(good.costPerUnit) + qty * unitCost) / (onHand + qty));
         good.quantityInStock = this.round3(before + Number(line.quantity));
         await manager.save(good);
         await this.batchTrackingService.createFinishedGoodBatch(manager, {

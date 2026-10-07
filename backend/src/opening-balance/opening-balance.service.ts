@@ -242,6 +242,7 @@ export class OpeningBalanceService {
       reimbursement: 'Reimbursements',
       salary_advance: 'Salary advances',
       bank_opening: 'Bank account opening balances',
+      vat_settlement: 'VAT settlements',
     };
     if (!t) return 'Manual journal entries';
     return labels[t] || `Journal entries (${t.replace(/_/g, ' ')})`;

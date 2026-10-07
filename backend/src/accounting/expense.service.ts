@@ -66,6 +66,15 @@ export class ExpenseService {
   // all, same as a manual-only Reimbursement). Best-effort and separate
   // from the balance-moving transaction, same reasoning as
   // FundTransferService.postJournalEntry().
+  // Raw material is stock, not an expense: as an expense it never reached
+  // inventory (1200), yet production took it out of 1200 again - costed
+  // twice. It must come in through a Purchase Order (Receive goods).
+  private assertNotRawMaterial(category: ExpenseCategory) {
+    if (category === ExpenseCategory.RAW_MATERIAL) {
+      throw new BadRequestException('Buy raw material with a Purchase Order (Suppliers > Purchase Orders > Receive), so it goes into stock at its cost.');
+    }
+  }
+
   private async postJournalEntry(item: Expense, actor: ActorRef) {
     try {
       if (!item.bankAccountId) {
@@ -98,6 +107,7 @@ export class ExpenseService {
   // the same DB transaction as the expense row, then auto-posts the
   // Journal Entry.
   async create(dto: CreateExpenseDto, actor: ActorRef = {}) {
+    this.assertNotRawMaterial(dto.category);
     const date = dto.date || new Date().toISOString().slice(0, 10);
     await this.journalPosting.assertDateOpen(date, 'This expense');
 
@@ -144,6 +154,7 @@ export class ExpenseService {
     const saved = await this.dataSource.transaction(async (manager) => {
       const item = await manager.findOne(Expense, { where: { id } });
       if (!item) throw new NotFoundException('Expense not found');
+      if (dto.category && dto.category !== item.category) this.assertNotRawMaterial(dto.category);
       await this.journalPosting.assertDateOpen(item.date, 'This expense', manager);
       if (dto.date) await this.journalPosting.assertDateOpen(dto.date, 'The new date', manager);
 
@@ -163,6 +174,8 @@ export class ExpenseService {
       const amount = dto.amount != null ? Number(dto.amount) : Number(item.amount);
       const date = dto.date ?? item.date;
       const bankAccountId = dto.bankAccountId !== undefined ? dto.bankAccountId || undefined : item.bankAccountId;
+      // every expense is paid from a bank/cash account, so its cost reaches the books
+      if (!bankAccountId) throw new BadRequestException('Choose the bank or cash account this expense was paid from.');
 
       let bankTransactionId: string | undefined;
       if (bankAccountId) {

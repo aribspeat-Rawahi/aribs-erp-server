@@ -21,6 +21,7 @@ import {
   Users,
   Sun,
 } from 'lucide-react';
+import BankAccountSelect from '../components/BankAccountSelect';
 import api from '../api/client';
 import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Card, StatCard, EmptyState, Modal, Field, inputClass } from '../components/ui';
 import { fetchFileBlobUrl, viewFile } from '../api/docActions';
@@ -2987,16 +2988,7 @@ function PayrollMarkPaidModal({
             settled — this isn't deducted automatically, adjust manually if needed.
           </div>
         )}
-        <Field label="Pay from account (optional — auto-deducts balance)">
-          <select className={inputClass} value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
-            <option value="">— Record only, no auto-deduction —</option>
-            {bankAccounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({Number(a.currentBalance).toFixed(3)} OMR)
-              </option>
-            ))}
-          </select>
-        </Field>
+        <BankAccountSelect label="Paid from account" value={bankAccountId} onChange={setBankAccountId} accounts={bankAccounts as any} />
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>

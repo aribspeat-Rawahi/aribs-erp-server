@@ -1,3 +1,4 @@
+import { JournalModule } from '../journal/journal.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RawMaterial } from './raw-material.entity';
@@ -40,6 +41,7 @@ import { SalesOrderItem } from '../sales/sales-order-item.entity';
       SalesOrder,
       SalesOrderItem,
     ]),
+    JournalModule,
   ],
   controllers: [RawMaterialController, FinishedGoodController, BatchTrackingController],
   providers: [RawMaterialService, FinishedGoodService, BatchTrackingService],
