@@ -15,7 +15,7 @@ export interface CombinedApprovalRow {
   id: string;
   kind: 'approval_request' | 'quotation_edit';
   type: string; // ApprovalRequestType value, or 'quotation_price_edit'
-  entityType: 'invoice' | 'quotation' | 'salary_advance';
+  entityType: 'invoice' | 'quotation' | 'salary_advance' | 'stock_in';
   targetId?: string;
   customerName?: string;
   reference?: string; // quotation/invoice number when known
@@ -43,7 +43,7 @@ export class ApprovalService {
 
   async create(input: {
     type: ApprovalRequestType;
-    entityType: 'invoice' | 'quotation' | 'salary_advance';
+    entityType: 'invoice' | 'quotation' | 'salary_advance' | 'stock_in';
     targetId?: string;
     customerId?: string;
     payload: unknown;
@@ -78,7 +78,7 @@ export class ApprovalService {
   // the affected row count, so two concurrent approve/reject calls (or a
   // double-click) can't both read PENDING and both proceed to replay the
   // payload — only the first UPDATE finds a matching row.
-  async claimPending(id: string, entityType: 'invoice' | 'quotation' | 'salary_advance') {
+  async claimPending(id: string, entityType: 'invoice' | 'quotation' | 'salary_advance' | 'stock_in') {
     const item = await this.findOne(id);
     if (item.entityType !== entityType) {
       throw new BadRequestException(`This approval request is not for a ${entityType}`);
@@ -93,6 +93,13 @@ export class ApprovalService {
     return { ...item, status: ApprovalRequestStatus.PROCESSING };
   }
 
+  // An approval whose replay failed (e.g. the item was deleted, books
+  // closed) goes back to PENDING so it can be retried or rejected, instead
+  // of staying stuck in PROCESSING.
+  async releaseClaim(id: string) {
+    await this.repo.update({ id, status: ApprovalRequestStatus.PROCESSING }, { status: ApprovalRequestStatus.PENDING });
+  }
+
   async markDecided(id: string, status: ApprovalRequestStatus, decidedBy?: { userId?: string; email?: string }) {
     const item = await this.findOne(id);
     item.status = status;
@@ -102,7 +109,7 @@ export class ApprovalService {
     return this.repo.save(item);
   }
 
-  async reject(id: string, entityType: 'invoice' | 'quotation' | 'salary_advance', decidedBy?: { userId?: string; email?: string }) {
+  async reject(id: string, entityType: 'invoice' | 'quotation' | 'salary_advance' | 'stock_in', decidedBy?: { userId?: string; email?: string }) {
     await this.claimPending(id, entityType);
     return this.markDecided(id, ApprovalRequestStatus.REJECTED, decidedBy);
   }
@@ -133,7 +140,7 @@ export class ApprovalService {
       id: r.id,
       kind: 'approval_request',
       type: r.type,
-      entityType: r.entityType as 'invoice' | 'quotation' | 'salary_advance',
+      entityType: r.entityType as 'invoice' | 'quotation' | 'salary_advance' | 'stock_in',
       targetId: r.targetId || undefined,
       customerName: r.customerId ? customerNameById.get(r.customerId) : undefined,
       reason: r.reason,

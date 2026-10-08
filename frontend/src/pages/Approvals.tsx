@@ -7,7 +7,7 @@ interface ApprovalRow {
   id: string;
   kind: 'approval_request' | 'quotation_edit';
   type: string;
-  entityType: 'invoice' | 'quotation' | 'salary_advance';
+  entityType: 'invoice' | 'quotation' | 'salary_advance' | 'stock_in';
   targetId?: string;
   customerName?: string;
   reference?: string;
@@ -22,6 +22,7 @@ const TYPE_LABELS: Record<string, string> = {
   vat_exclude: 'VAT Excluded',
   quotation_price_edit: 'Price Edit',
   salary_advance: 'Salary Advance',
+  stock_in: 'Stock In',
 };
 
 const TYPE_TONE: Record<string, string> = {
@@ -30,6 +31,7 @@ const TYPE_TONE: Record<string, string> = {
   vat_exclude: 'bg-blue-50 text-blue-700',
   quotation_price_edit: 'bg-purple-50 text-purple-700',
   salary_advance: 'bg-brand-50 text-brand-700',
+  stock_in: 'bg-amber-50 text-amber-700',
 };
 
 // CRM Step 7 — combines the new generic ApprovalRequest rows (credit
@@ -56,6 +58,9 @@ export default function Approvals() {
     if (row.entityType === 'salary_advance') {
       return `/salary-advances/approval-requests/${row.id}/${action}`;
     }
+    if (row.entityType === 'stock_in') {
+      return `/stock-in-requests/${row.id}/${action}`;
+    }
     const base = row.entityType === 'invoice' ? '/invoices' : '/quotations';
     return `${base}/approval-requests/${row.id}/${action}`;
   }
@@ -77,7 +82,7 @@ export default function Approvals() {
     <div>
       <PageHeader
         title="Approvals"
-        subtitle="Credit limit, large discount, VAT-exclude, salary advance and quotation price-edit requests waiting on you"
+        subtitle="Credit limit, large discount, VAT-exclude, salary advance, stock-in and quotation price-edit requests waiting on you"
       />
       {loading ? (
         <div className="text-sm text-muted">Loading…</div>
@@ -94,9 +99,9 @@ export default function Approvals() {
                       {TYPE_LABELS[row.type] || row.type}
                     </span>
                     <span className="text-xs px-2 py-0.5 rounded-full bg-black/5 text-ink/70 capitalize">
-                      {row.entityType === 'salary_advance' ? 'HR' : row.entityType}
+                      {row.entityType === 'salary_advance' ? 'HR' : row.entityType === 'stock_in' ? 'Inventory' : row.entityType}
                     </span>
-                    {row.entityType !== 'salary_advance' && (
+                    {row.entityType !== 'salary_advance' && row.entityType !== 'stock_in' && (
                       <span className="text-sm font-medium text-ink">{row.customerName || 'Unknown customer'}</span>
                     )}
                     {row.reference && <span className="text-xs text-muted">{row.reference}</span>}

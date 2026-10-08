@@ -6,6 +6,7 @@ import { InvoicePaymentService } from '../invoice/invoice-payment.service';
 import { SupplierPaymentService } from '../supplier/supplier-payment.service';
 import { ExpenseService } from '../accounting/expense.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { JournalPostingService } from '../journal/journal-posting.service';
 
 export interface MissingJournal {
   sourceType: string;
@@ -17,6 +18,10 @@ export interface MissingJournal {
   // false = can't be rebuilt from the saved record (the cost used at the
   // time isn't stored) - needs a manual journal entry or the developer.
   canRepost: boolean;
+  // dated inside the closed books (filed VAT return / opening date): it can
+  // never be posted on its own date - record it with a manual journal
+  // entry in the open period.
+  locked: boolean;
 }
 
 interface ActorRef {
@@ -32,7 +37,7 @@ const GAP_QUERIES: { sourceType: string; label: string; canRepost: boolean; sql:
     sourceType: 'invoice',
     label: 'Invoice',
     canRepost: true,
-    sql: `SELECT t.id, t.invoiceNumber AS number, t.issueDate AS date, t.total AS amount
+    sql: `SELECT t.id, t.invoiceNumber AS number, DATE_FORMAT(t.issueDate, '%Y-%m-%d') AS date, t.total AS amount
           FROM invoices t
           LEFT JOIN journal_entries e ON e.sourceType = 'invoice' AND e.sourceId = t.id
           WHERE e.id IS NULL AND t.isOpening = 0 AND t.total > 0`,
@@ -41,7 +46,7 @@ const GAP_QUERIES: { sourceType: string; label: string; canRepost: boolean; sql:
     sourceType: 'invoice_cogs',
     label: 'Invoice - cost of goods sold',
     canRepost: true,
-    sql: `SELECT t.id, t.invoiceNumber AS number, t.issueDate AS date, t.cogsAmount AS amount
+    sql: `SELECT t.id, t.invoiceNumber AS number, DATE_FORMAT(t.issueDate, '%Y-%m-%d') AS date, t.cogsAmount AS amount
           FROM invoices t
           LEFT JOIN journal_entries e ON e.sourceType = 'invoice_cogs' AND e.sourceId = t.id
           WHERE e.id IS NULL AND t.isOpening = 0 AND t.cogsAmount > 0`,
@@ -50,7 +55,7 @@ const GAP_QUERIES: { sourceType: string; label: string; canRepost: boolean; sql:
     sourceType: 'invoice_payment',
     label: 'Customer payment',
     canRepost: true,
-    sql: `SELECT t.id, i.invoiceNumber AS number, t.paymentDate AS date, t.amount AS amount
+    sql: `SELECT t.id, i.invoiceNumber AS number, DATE_FORMAT(t.paymentDate, '%Y-%m-%d') AS date, t.amount AS amount
           FROM invoice_payments t
           LEFT JOIN invoices i ON i.id = t.invoiceId
           LEFT JOIN journal_entries e ON e.sourceType = 'invoice_payment' AND e.sourceId = t.id
@@ -60,7 +65,7 @@ const GAP_QUERIES: { sourceType: string; label: string; canRepost: boolean; sql:
     sourceType: 'supplier_payment',
     label: 'Supplier payment',
     canRepost: true,
-    sql: `SELECT t.id, o.poNumber AS number, t.paymentDate AS date, t.amount AS amount
+    sql: `SELECT t.id, o.poNumber AS number, DATE_FORMAT(t.paymentDate, '%Y-%m-%d') AS date, t.amount AS amount
           FROM supplier_payments t
           LEFT JOIN purchase_orders o ON o.id = t.purchaseOrderId
           LEFT JOIN journal_entries e ON e.sourceType = 'supplier_payment' AND e.sourceId = t.id
@@ -70,7 +75,7 @@ const GAP_QUERIES: { sourceType: string; label: string; canRepost: boolean; sql:
     sourceType: 'expense',
     label: 'Expense',
     canRepost: true,
-    sql: `SELECT t.id, COALESCE(t.invoiceNumber, t.category) AS number, t.date AS date, t.amount AS amount
+    sql: `SELECT t.id, COALESCE(t.invoiceNumber, t.category) AS number, DATE_FORMAT(t.date, '%Y-%m-%d') AS date, t.amount AS amount
           FROM expenses t
           LEFT JOIN journal_entries e ON e.sourceType = 'expense' AND e.sourceId = t.id
           WHERE e.id IS NULL AND t.bankAccountId IS NOT NULL`,
@@ -81,7 +86,7 @@ const GAP_QUERIES: { sourceType: string; label: string; canRepost: boolean; sql:
     sourceType: 'goods_receipt',
     label: 'Goods receipt',
     canRepost: false,
-    sql: `SELECT t.id, t.grnNumber AS number, t.receivedDate AS date, t.total AS amount
+    sql: `SELECT t.id, t.grnNumber AS number, DATE_FORMAT(t.receivedDate, '%Y-%m-%d') AS date, t.total AS amount
           FROM goods_receipts t
           LEFT JOIN journal_entries e ON e.sourceType = 'goods_receipt' AND e.sourceId = t.id
           WHERE e.id IS NULL AND t.total > 0`,
@@ -90,7 +95,7 @@ const GAP_QUERIES: { sourceType: string; label: string; canRepost: boolean; sql:
     sourceType: 'sales_return',
     label: 'Sales return',
     canRepost: false,
-    sql: `SELECT t.id, t.returnNumber AS number, t.date AS date, t.total AS amount
+    sql: `SELECT t.id, t.returnNumber AS number, DATE_FORMAT(t.date, '%Y-%m-%d') AS date, t.total AS amount
           FROM sales_returns t
           LEFT JOIN journal_entries e ON e.sourceType = 'sales_return' AND e.sourceId = t.id
           WHERE e.id IS NULL AND t.status = 'approved'`,
@@ -99,7 +104,7 @@ const GAP_QUERIES: { sourceType: string; label: string; canRepost: boolean; sql:
     sourceType: 'purchase_return',
     label: 'Purchase return',
     canRepost: false,
-    sql: `SELECT t.id, t.returnNumber AS number, t.date AS date, t.total AS amount
+    sql: `SELECT t.id, t.returnNumber AS number, DATE_FORMAT(t.date, '%Y-%m-%d') AS date, t.total AS amount
           FROM purchase_returns t
           LEFT JOIN journal_entries e ON e.sourceType = 'purchase_return' AND e.sourceId = t.id
           WHERE e.id IS NULL AND t.status = 'approved'`,
@@ -117,21 +122,25 @@ export class JournalGapsService {
     private supplierPayments: SupplierPaymentService,
     private expenses: ExpenseService,
     private activityLog: ActivityLogService,
+    private journalPosting: JournalPostingService,
   ) {}
 
   async findMissing(): Promise<MissingJournal[]> {
     const out: MissingJournal[] = [];
+    const lock = await this.journalPosting.lockInfo();
     for (const q of GAP_QUERIES) {
-      const rows: { id: string; number: string | null; date: string | Date; amount: string | number }[] = await this.dataSource.query(q.sql);
+      const rows: { id: string; number: string | null; date: string | null; amount: string | number }[] = await this.dataSource.query(q.sql);
       for (const r of rows) {
         out.push({
           sourceType: q.sourceType,
           label: q.label,
           id: r.id,
           number: r.number || '',
-          date: (r.date instanceof Date ? r.date.toISOString() : String(r.date || '')).slice(0, 10),
+          // formatted in SQL - a raw DATE comes back as a JS Date (timezone-shifted)
+          date: String(r.date || '').slice(0, 10),
           amount: Math.round(Number(r.amount || 0) * 1000) / 1000,
           canRepost: q.canRepost,
+          locked: !!lock && String(r.date || '').slice(0, 10) <= lock.date,
         });
       }
     }

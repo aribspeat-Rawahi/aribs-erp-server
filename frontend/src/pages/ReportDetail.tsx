@@ -1551,6 +1551,7 @@ interface MissingJournalRow {
   date: string;
   amount: number;
   canRepost: boolean;
+  locked?: boolean;
 }
 
 // Each control account in the ledger must equal the records behind it
@@ -1656,7 +1657,9 @@ function BooksCheckReport() {
                       {m.date} · {money(m.amount)} OMR
                     </div>
                   </div>
-                  {m.canRepost ? (
+                  {m.locked ? (
+                    <span className="shrink-0 text-xs text-muted">Closed period - record it with a manual journal entry in the open period</span>
+                  ) : m.canRepost ? (
                     canRepost && (
                       <button
                         type="button"

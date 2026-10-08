@@ -23,6 +23,8 @@ export enum ApprovalRequestType {
   LARGE_DISCOUNT = 'large_discount',
   VAT_EXCLUDE = 'vat_exclude',
   SALARY_ADVANCE = 'salary_advance',
+  // manual stock-in by a user outside Admin/CEO/MD/Accountant
+  STOCK_IN = 'stock_in',
 }
 
 export enum ApprovalRequestStatus {

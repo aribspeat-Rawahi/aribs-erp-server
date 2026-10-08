@@ -1059,6 +1059,7 @@ function ScanStockModal({
   const unit = scanned?.unit;
   const [direction, setDirection] = useState<'in' | 'out'>('in');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function onSubmit(e: FormEvent) {
@@ -1067,7 +1068,12 @@ function ScanStockModal({
     setError('');
     try {
       const endpoint = direction === 'in' ? '/finished-goods/stock-in' : '/finished-goods/stock-out';
-      await api.post(endpoint, { barcode, quantity: Number(quantity) });
+      const res = await api.post(endpoint, { barcode, quantity: Number(quantity) });
+      // stock-in by a user outside Admin/CEO/MD/Accountant waits for approval
+      if (res.data?.pendingApproval) {
+        setNotice(res.data.message);
+        return;
+      }
       onSaved();
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Could not find that barcode.');
@@ -1120,9 +1126,16 @@ function ScanStockModal({
           />
         </Field>
         {error && <p className="text-sm text-red-600">{error}</p>}
+        {notice && <p className="text-sm text-brand-700 bg-brand-50 rounded-lg p-3">{notice}</p>}
         <div className="flex justify-end gap-2 pt-2">
-          <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Confirm'}</PrimaryButton>
+          {notice ? (
+            <PrimaryButton onClick={onSaved}>Done</PrimaryButton>
+          ) : (
+            <>
+            <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
+            <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Confirm'}</PrimaryButton>
+            </>
+          )}
         </div>
       </form>
     </Modal>
@@ -1152,6 +1165,7 @@ function AddStockModal({
   const [costPerUnit, setCostPerUnit] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
 
   const selected = items.find((i) => i.id === itemId);
@@ -1161,15 +1175,21 @@ function AddStockModal({
     setBusy(true);
     setError('');
     try {
+      let res;
       if (kind === 'finished') {
         const item = items.find((i) => i.id === itemId);
-        await api.post('/finished-goods/stock-in', { barcode: item?.barcode, quantity: Number(quantity) });
+        res = await api.post('/finished-goods/stock-in', { barcode: item?.barcode, quantity: Number(quantity) });
       } else {
-        await api.post(`/raw-materials/${itemId}/add-stock`, {
+        res = await api.post(`/raw-materials/${itemId}/add-stock`, {
           quantity: Number(quantity),
           costPerUnit: costPerUnit ? Number(costPerUnit) : undefined,
           notes: notes || undefined,
         });
+      }
+      // users outside Admin/CEO/MD/Accountant: waits for approval
+      if (res.data?.pendingApproval) {
+        setNotice(res.data.message);
+        return;
       }
       onSaved();
     } catch (err: any) {
@@ -1239,9 +1259,16 @@ function AddStockModal({
           </>
         )}
         {error && <p className="text-sm text-red-600">{error}</p>}
+        {notice && <p className="text-sm text-brand-700 bg-brand-50 rounded-lg p-3">{notice}</p>}
         <div className="flex justify-end gap-2 pt-2">
-          <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Add stock'}</PrimaryButton>
+          {notice ? (
+            <PrimaryButton onClick={onSaved}>Done</PrimaryButton>
+          ) : (
+            <>
+            <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
+            <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : 'Add stock'}</PrimaryButton>
+            </>
+          )}
         </div>
       </form>
     </Modal>

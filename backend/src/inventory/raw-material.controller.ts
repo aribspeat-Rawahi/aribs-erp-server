@@ -1,14 +1,23 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import type { Request } from 'express';
+import { StockInRequestService } from './stock-in-request.service';
 import { RawMaterialService } from './raw-material.service';
 import { CreateRawMaterialDto, AddStockDto } from './dto/raw-material.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
 import { ModuleAccess } from '../auth/module-access.decorator';
 
+interface AuthedRequest extends Request {
+  user?: { userId?: string; email?: string; role?: string };
+}
+
 @ModuleAccess('inventory')
 @Controller('raw-materials')
 export class RawMaterialController {
-  constructor(private service: RawMaterialService) {}
+  constructor(
+    private service: RawMaterialService,
+    private stockIn: StockInRequestService,
+  ) {}
 
   @ModuleAccess('inventory', { readAlso: ['suppliers', 'accounting'] })
 
@@ -55,9 +64,11 @@ export class RawMaterialController {
   // Inventory "Add stock" modal — direct, batch-tracked stock-in (opening
   // stock, stock-count correction, a sample delivery, etc.) with no
   // Purchase Order needed. Creates a traceable RawMaterialBatch.
+  // Admin/CEO/MD/Accountant add directly; other roles send it for approval
+  // (it posts to 5110 Inventory Adjustments, so it moves profit).
   @Post(':id/add-stock')
-  addStock(@Param('id') id: string, @Body() dto: AddStockDto) {
-    return this.service.addStock(id, dto);
+  addStock(@Param('id') id: string, @Body() dto: AddStockDto, @Req() req: AuthedRequest) {
+    return this.stockIn.rawMaterialAddStock(id, dto, { userId: req.user?.userId, email: req.user?.email, role: req.user?.role });
   }
 
   // Admin only — see RawMaterialService.remove() for the safety guards.

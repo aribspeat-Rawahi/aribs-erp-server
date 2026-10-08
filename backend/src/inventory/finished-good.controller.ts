@@ -1,14 +1,23 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import type { Request } from 'express';
+import { StockInRequestService } from './stock-in-request.service';
 import { FinishedGoodService } from './finished-good.service';
 import { CreateFinishedGoodDto, ScanStockDto } from './dto/finished-good.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
 import { ModuleAccess } from '../auth/module-access.decorator';
 
+interface AuthedRequest extends Request {
+  user?: { userId?: string; email?: string; role?: string };
+}
+
 @ModuleAccess('inventory')
 @Controller('finished-goods')
 export class FinishedGoodController {
-  constructor(private service: FinishedGoodService) {}
+  constructor(
+    private service: FinishedGoodService,
+    private stockInRequests: StockInRequestService,
+  ) {}
 
   @ModuleAccess('inventory', { readAlso: ['sales_orders', 'quotations', 'delivery_notes', 'invoices', 'recurring_invoices', 'accounting'] })
 
@@ -45,9 +54,11 @@ export class FinishedGoodController {
 
   // Called after a production run finishes. `barcode` can come from a
   // handheld scanner, a phone camera scan, or manual typing — same endpoint.
+  // Admin/CEO/MD/Accountant stock in directly; other roles send it for
+  // approval (it posts to 5110 Inventory Adjustments, so it moves profit).
   @Post('stock-in')
-  stockIn(@Body() dto: ScanStockDto) {
-    return this.service.stockIn(dto);
+  stockIn(@Body() dto: ScanStockDto, @Req() req: AuthedRequest) {
+    return this.stockInRequests.finishedGoodStockIn(dto, { userId: req.user?.userId, email: req.user?.email, role: req.user?.role });
   }
 
   // Called at point of sale, same scan-or-manual flexibility.

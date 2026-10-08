@@ -1,4 +1,7 @@
 import { JournalModule } from '../journal/journal.module';
+import { ApprovalModule } from '../approval/approval.module';
+import { StockInRequestService } from './stock-in-request.service';
+import { StockInRequestController } from './stock-in-request.controller';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RawMaterial } from './raw-material.entity';
@@ -42,9 +45,10 @@ import { SalesOrderItem } from '../sales/sales-order-item.entity';
       SalesOrderItem,
     ]),
     JournalModule,
+    ApprovalModule,
   ],
-  controllers: [RawMaterialController, FinishedGoodController, BatchTrackingController],
-  providers: [RawMaterialService, FinishedGoodService, BatchTrackingService],
+  controllers: [RawMaterialController, FinishedGoodController, BatchTrackingController, StockInRequestController],
+  providers: [RawMaterialService, FinishedGoodService, BatchTrackingService, StockInRequestService],
   exports: [RawMaterialService, FinishedGoodService, BatchTrackingService],
 })
 export class InventoryModule {}
