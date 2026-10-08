@@ -89,6 +89,7 @@ export class PurchaseReturnService {
   }
 
   async create(dto: CreatePurchaseReturnDto, requestedBy: ActorRef) {
+    await this.journalPosting.assertDateOpen(dto.date || new Date().toISOString().slice(0, 10), 'This purchase return');
     const order = await this.dataSource.manager.findOne(PurchaseOrder, { where: { id: dto.purchaseOrderId } });
     if (!order) throw new NotFoundException('Purchase order not found');
     if (order.status !== PurchaseOrderStatus.RECEIVED && order.status !== PurchaseOrderStatus.PARTIALLY_RECEIVED) {
@@ -209,12 +210,18 @@ export class PurchaseReturnService {
   // All stock/money writes in one transaction.
   async approve(id: string, decidedBy: ActorRef, opts: { bankAccountId?: string } = {}) {
     let poNumber = '';
+    // Resolved BEFORE the transaction: linking a bank account to its ledger
+    // account writes the bank_accounts row, which the transaction below
+    // locks - doing it inside would wait on our own lock.
+    const refundJournalAccountId = opts.bankAccountId ? await this.bankAccountService.ensureJournalAccountId(opts.bankAccountId) : undefined;
     const saved = await this.dataSource.transaction(async (manager) => {
       const item = await manager.findOne(PurchaseReturn, { where: { id }, relations: ['items'], lock: { mode: 'pessimistic_write' } });
       if (!item) throw new NotFoundException('Purchase return not found');
       if (item.status !== PurchaseReturnStatus.PENDING) {
         throw new BadRequestException(`Only pending returns can be approved (this one is ${item.status})`);
       }
+      // closed books (filed VAT return / opening balance date)
+      await this.journalPosting.assertDateOpen(item.date, 'This purchase return', manager);
       const order = await manager.findOne(PurchaseOrder, { where: { id: item.purchaseOrderId }, lock: { mode: 'pessimistic_write' } });
       if (!order) throw new NotFoundException('Purchase order not found');
       poNumber = order.poNumber;
@@ -275,7 +282,26 @@ export class PurchaseReturnService {
       item.decidedByUserId = decidedBy.userId;
       item.decidedByEmail = decidedBy.email;
       item.decidedAt = new Date();
-      return manager.save(item);
+      const saved = await manager.save(item);
+
+      // Journal entry in the SAME transaction: if it can't be posted
+      // (closed books, missing account, unbalanced), the whole approval is
+      // rolled back - stock, debit note and refund never change without
+      // the books.
+      const lines: PostingLine[] = [
+        { accountId: await this.journalPosting.findAccountIdByCode(INVENTORY_RAW_MATERIALS_CODE), credit: Number(saved.subtotal), description: 'Raw materials returned to supplier' },
+      ];
+      if (Number(saved.vatAmount) > 0) {
+        lines.push({ accountId: await this.journalPosting.findAccountIdByCode(VAT_RECEIVABLE_CODE), credit: Number(saved.vatAmount), description: 'Input VAT reversed (debit note)' });
+      }
+      if (Number(saved.appliedToOrder) > 0) {
+        lines.push({ accountId: await this.journalPosting.findAccountIdByCode(ACCOUNTS_PAYABLE_CODE), debit: Number(saved.appliedToOrder), description: `Debit note — ${poNumber}` });
+      }
+      if (Number(saved.refundAmount) > 0 && saved.bankAccountId && refundJournalAccountId) {
+        lines.push({ accountId: refundJournalAccountId, debit: Number(saved.refundAmount), description: 'Refund from supplier' });
+      }
+      await this.journalPosting.postForSource('purchase_return', saved.id, saved.date, `Purchase return ${saved.returnNumber} — ${poNumber}`, lines, decidedBy, saved.returnNumber, manager);
+      return saved;
     });
 
     await this.activityLog.log({
@@ -293,23 +319,6 @@ export class PurchaseReturnService {
       },
     });
 
-    try {
-      const lines: PostingLine[] = [
-        { accountId: await this.journalPosting.findAccountIdByCode(INVENTORY_RAW_MATERIALS_CODE), credit: Number(saved.subtotal), description: 'Raw materials returned to supplier' },
-      ];
-      if (Number(saved.vatAmount) > 0) {
-        lines.push({ accountId: await this.journalPosting.findAccountIdByCode(VAT_RECEIVABLE_CODE), credit: Number(saved.vatAmount), description: 'Input VAT reversed (debit note)' });
-      }
-      if (Number(saved.appliedToOrder) > 0) {
-        lines.push({ accountId: await this.journalPosting.findAccountIdByCode(ACCOUNTS_PAYABLE_CODE), debit: Number(saved.appliedToOrder), description: `Debit note — ${poNumber}` });
-      }
-      if (Number(saved.refundAmount) > 0 && saved.bankAccountId) {
-        lines.push({ accountId: await this.bankAccountService.ensureJournalAccountId(saved.bankAccountId), debit: Number(saved.refundAmount), description: 'Refund from supplier' });
-      }
-      await this.journalPosting.postForSource('purchase_return', saved.id, saved.date, `Purchase return ${saved.returnNumber} — ${poNumber}`, lines, decidedBy, saved.returnNumber);
-    } catch (err) {
-      console.error(`Auto-posting failed for purchase_return ${saved.id}:`, err);
-    }
     return saved;
   }
 

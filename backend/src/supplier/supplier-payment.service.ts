@@ -46,7 +46,7 @@ export class SupplierPaymentService {
   // Auto-posts (or removes) Dr 2000 Accounts Payable / Cr {this
   // payment's linked bank/cash account} — only when the payment has a
   // bankAccountId (a record-only payment isn't auto-posted).
-  private async postJournalEntry(payment: SupplierPayment, actor: ActorRef) {
+  private async postJournalEntry(payment: SupplierPayment, actor: ActorRef, rethrow = false) {
     try {
       if (!payment.bankAccountId) {
         await this.journalPosting.removeForSource('supplier_payment', payment.id);
@@ -68,8 +68,18 @@ export class SupplierPaymentService {
         actor,
       );
     } catch (err) {
+      if (rethrow) throw err;
       console.error(`Auto-posting failed for supplier_payment ${payment.id}:`, err);
     }
+  }
+
+  // Books Health Check "Re-post": rebuilds this payment's journal entry.
+  async repostJournal(id: string, actor: ActorRef = {}) {
+    const payment = await this.repo.findOne({ where: { id } });
+    if (!payment) throw new NotFoundException('Supplier payment not found');
+    if (payment.creditSource) throw new BadRequestException('This is a credit applied to the order - it is posted with its own document.');
+    await this.postJournalEntry(payment, actor, true);
+    return { reposted: true };
   }
 
   findByOrder(purchaseOrderId: string) {

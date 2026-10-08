@@ -78,6 +78,8 @@ export class ProductionOrderService {
       (await this.findOne(id)).finishedGoodId,
     );
 
+    // closed books: a production run is dated today
+    await this.journalPosting.assertDateOpen(new Date().toISOString().slice(0, 10), 'This production run');
     const result = await this.dataSource.transaction(async (manager) => {
       const order = await manager.findOne(ProductionOrder, {
         where: { id },
@@ -177,6 +179,29 @@ export class ProductionOrderService {
       order.completedAt = new Date();
       await manager.save(order);
 
+      // Dr 1210 Finished Goods Inventory / Cr 1200 Raw Materials Inventory
+      // for the material cost moved into the produced batch - otherwise the
+      // Inventory accounts never reflect material consumed on the shop
+      // floor. Posted in the SAME transaction: if the journal can't be
+      // posted, the production run (stock in/out, cost) is rolled back too.
+      if (newValue > 0) {
+        const fgAccountId = await this.journalPosting.findAccountIdByCode(FG_INVENTORY_CODE);
+        const rmAccountId = await this.journalPosting.findAccountIdByCode(RM_INVENTORY_CODE);
+        await this.journalPosting.postForSource(
+          'production_order',
+          id,
+          new Date().toISOString().slice(0, 10),
+          `Production Order ${finishedGoodBatch.batchNumber} — material transfer`,
+          [
+            { accountId: fgAccountId, debit: newValue, description: 'Finished goods produced' },
+            { accountId: rmAccountId, credit: newValue, description: 'Raw materials consumed' },
+          ],
+          actor,
+          undefined,
+          manager,
+        );
+      }
+
       return {
         order,
         lowStockWarnings,
@@ -184,35 +209,6 @@ export class ProductionOrderService {
         materialCost: newValue,
       };
     });
-
-    // Auto-posts (best-effort) Dr 1210 Finished Goods Inventory /
-    // Cr 1200 Raw Materials Inventory for the material cost transferred
-    // into the produced batch — otherwise the Inventory accounts only
-    // ever go up (on Purchase Order receive) and never down, and the
-    // Trial Balance never reflects material actually consumed on the
-    // shop floor. Runs after the transaction commits, same pattern as
-    // every other auto-posting call in this codebase (invoice, payroll,
-    // supplier payment, etc.) — a posting failure here never rolls back
-    // the production run itself.
-    if (result.materialCost > 0) {
-      try {
-        const fgAccountId = await this.journalPosting.findAccountIdByCode(FG_INVENTORY_CODE);
-        const rmAccountId = await this.journalPosting.findAccountIdByCode(RM_INVENTORY_CODE);
-        await this.journalPosting.postForSource(
-          'production_order',
-          id,
-          new Date().toISOString().slice(0, 10),
-          `Production Order ${result.finishedGoodBatchNumber} — material transfer`,
-          [
-            { accountId: fgAccountId, debit: result.materialCost, description: 'Finished goods produced' },
-            { accountId: rmAccountId, credit: result.materialCost, description: 'Raw materials consumed' },
-          ],
-          actor,
-        );
-      } catch (err) {
-        console.error(`Auto-posting failed for production_order ${id}:`, err);
-      }
-    }
 
     await this.backorders.refresh([result.order.finishedGoodId]);
     return result;

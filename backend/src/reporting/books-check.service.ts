@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { ReportingService } from './reporting.service';
+import { JournalGapsService } from './journal-gaps.service';
 
 export interface BooksCheck {
   key: string;
@@ -25,6 +26,7 @@ export class BooksCheckService {
   constructor(
     @InjectDataSource() private dataSource: DataSource,
     private reporting: ReportingService,
+    private journalGaps: JournalGapsService,
   ) {}
 
   private r3(n: number) {
@@ -157,7 +159,22 @@ export class BooksCheckService {
       ),
     );
 
-    return { checkedAt: new Date().toISOString(), ok: checks.every((c) => c.ok), checks };
+    // Every document that should be in the books has its journal entry
+    // (a posting that failed after the document was saved shows up here).
+    const missingJournals = await this.journalGaps.findMissing();
+    checks.push(
+      this.make(
+        'missing_journals',
+        'Every document is in the books',
+        'Documents without a journal entry',
+        missingJournals.length,
+        'Expected',
+        0,
+        'Invoices, payments, expenses, goods receipts and returns must each have their journal entry. Listed below with a Re-post button.',
+      ),
+    );
+
+    return { checkedAt: new Date().toISOString(), ok: checks.every((c) => c.ok), checks, missingJournals };
   }
 
   private nextDay(d: string) {

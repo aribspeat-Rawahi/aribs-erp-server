@@ -266,6 +266,14 @@ export class AccountService implements OnModuleInit {
 
   async update(id: string, dto: UpdateAccountDto) {
     const item = await this.findOne(id);
+    // Built-in accounts are found by their code when documents post to the
+    // books (invoices, payments, stock...). Changing that code would make
+    // every such posting fail, so it is locked; the name can still change.
+    if (dto.code && dto.code !== item.code && DEFAULT_ACCOUNTS.some((a) => a.code === item.code)) {
+      throw new BadRequestException(
+        `Account ${item.code} is a built-in account that documents post to automatically - its code can't be changed (you can still rename it).`,
+      );
+    }
     if (dto.code && dto.code !== item.code) {
       const existing = await this.repo.findOne({ where: { code: dto.code } });
       if (existing) throw new BadRequestException(`Account code "${dto.code}" is already in use`);

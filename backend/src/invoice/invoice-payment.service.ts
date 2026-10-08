@@ -38,7 +38,7 @@ export class InvoicePaymentService {
   // / Cr 1100 Accounts Receivable — only when the payment has a
   // bankAccountId (a record-only payment isn't auto-posted). Best-effort,
   // separate from the balance-moving transaction.
-  private async postJournalEntry(payment: InvoicePayment, invoiceNumber: string, actor: ActorRef) {
+  private async postJournalEntry(payment: InvoicePayment, invoiceNumber: string, actor: ActorRef, rethrow = false) {
     try {
       if (!payment.bankAccountId) {
         await this.journalPosting.removeForSource('invoice_payment', payment.id);
@@ -59,8 +59,20 @@ export class InvoicePaymentService {
         invoiceNumber,
       );
     } catch (err) {
+      if (rethrow) throw err;
       console.error(`Auto-posting failed for invoice_payment ${payment.id}:`, err);
     }
+  }
+
+  // Books Health Check "Re-post": rebuilds this payment's journal entry.
+  async repostJournal(id: string, actor: ActorRef = {}) {
+    const payment = await this.repo.findOne({ where: { id } });
+    if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.salesReturnId) throw new BadRequestException('This is a credit note - it is posted with its sales return.');
+    const invoice = await this.invoiceRepo.findOne({ where: { id: payment.invoiceId } });
+    const invoiceNumber = invoice?.invoiceNumber || payment.invoiceId;
+    await this.postJournalEntry(payment, invoiceNumber, actor, true);
+    return { reposted: true, number: invoiceNumber };
   }
 
   private round3(n: number) {

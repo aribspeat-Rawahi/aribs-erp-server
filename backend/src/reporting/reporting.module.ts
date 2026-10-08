@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ReportingService } from './reporting.service';
 import { BooksCheckService } from './books-check.service';
+import { JournalGapsService } from './journal-gaps.service';
+import { ActivityLogModule } from '../activity-log/activity-log.module';
 import { ReportingController } from './reporting.controller';
 import { InventoryModule } from '../inventory/inventory.module';
 import { SalesModule } from '../sales/sales.module';
@@ -39,10 +41,12 @@ import { RecurringInvoice } from '../recurring-invoice/recurring-invoice.entity'
     // imports ReportingModule, so no cycle.
     SupplierModule,
     JournalModule,
+    // Books Health Check "Re-post" is logged on the Activity page
+    ActivityLogModule,
     TypeOrmModule.forFeature([RecurringInvoice]),
   ],
   controllers: [ReportingController],
-  providers: [ReportingService, BooksCheckService],
+  providers: [ReportingService, BooksCheckService, JournalGapsService],
   // VatPeriodModule takes its VAT return snapshot from getVatSummary()
   exports: [ReportingService],
 })

@@ -1,7 +1,16 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { ReportingService } from './reporting.service';
 import { BooksCheckService } from './books-check.service';
+import { JournalGapsService } from './journal-gaps.service';
+import { RepostJournalDto } from './dto/repost-journal.dto';
 import { ModuleAccess } from '../auth/module-access.decorator';
+import { Roles } from '../auth/roles.guard';
+import { UserRole } from '../auth/user.entity';
+
+interface AuthedRequest extends Request {
+  user?: { userId?: string; email?: string };
+}
 
 @ModuleAccess('dashboard', { readAlso: ['accounting'] })
 @Controller('reports')
@@ -9,6 +18,7 @@ export class ReportingController {
   constructor(
     private service: ReportingService,
     private booksCheck: BooksCheckService,
+    private journalGaps: JournalGapsService,
   ) {}
 
   @Get('low-stock')
@@ -106,6 +116,16 @@ export class ReportingController {
   @Get('books-check')
   getBooksCheck() {
     return this.booksCheck.run();
+  }
+
+  // Books Health Check "Re-post": rebuilds the missing journal entry of
+  // one document from the saved document. Admin/Accountant only;
+  // strictRoles so a module grant can't open it to other roles.
+  @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ModuleAccess('accounting', { strictRoles: true })
+  @Post('books-check/repost')
+  repostJournal(@Body() dto: RepostJournalDto, @Req() req: AuthedRequest) {
+    return this.journalGaps.repost(dto.sourceType, dto.sourceId, { userId: req.user?.userId, email: req.user?.email });
   }
 
   // Reports Hub — e.g. GET /reports/income-statement?startDate=2026-09-01&endDate=2026-09-30

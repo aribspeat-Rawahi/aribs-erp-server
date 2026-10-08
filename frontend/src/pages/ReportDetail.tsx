@@ -4,6 +4,7 @@ import { ArrowLeft, Printer, Landmark, Receipt, Users, Tags } from 'lucide-react
 import api from '../api/client';
 import { PageHeader, Card, EmptyState, inputClass } from '../components/ui';
 import { formatQuantityWithUnit } from '../utils/formatQuantity';
+import { useAuth } from '../context/AuthContext';
 
 function monthRange() {
   const now = new Date();
@@ -1541,12 +1542,41 @@ interface BooksCheckRow {
   explain: string;
 }
 
+// A document saved without its journal entry (a posting failed).
+interface MissingJournalRow {
+  sourceType: string;
+  label: string;
+  id: string;
+  number: string;
+  date: string;
+  amount: number;
+  canRepost: boolean;
+}
+
 // Each control account in the ledger must equal the records behind it
 // (customers, suppliers, stock, bank, VAT). A difference means an entry
 // reached one side but not the other.
 function BooksCheckReport() {
-  const [data, setData] = useState<{ checkedAt: string; ok: boolean; checks: BooksCheckRow[] } | null>(null);
+  const { hasAnyRole } = useAuth();
+  // backend allows Re-post for Admin/Accountant only
+  const canRepost = hasAnyRole(['admin', 'accountant']);
+  const [data, setData] = useState<{ checkedAt: string; ok: boolean; checks: BooksCheckRow[]; missingJournals?: MissingJournalRow[] } | null>(null);
   const [error, setError] = useState('');
+  const [reposting, setReposting] = useState('');
+  const [repostError, setRepostError] = useState('');
+
+  async function repost(row: MissingJournalRow) {
+    setReposting(`${row.sourceType}:${row.id}`);
+    setRepostError('');
+    try {
+      await api.post('/reports/books-check/repost', { sourceType: row.sourceType, sourceId: row.id });
+      load();
+    } catch (err: any) {
+      setRepostError(`${row.label} ${row.number}: ${err?.response?.data?.message || 'Could not re-post.'}`);
+    } finally {
+      setReposting('');
+    }
+  }
 
   function load() {
     setData(null);
@@ -1561,6 +1591,7 @@ function BooksCheckReport() {
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!data) return <div className="text-sm text-muted">Checking the books…</div>;
   const failed = data.checks.filter((c) => !c.ok).length;
+  const missing = data.missingJournals || [];
 
   return (
     <Card className="p-4">
@@ -1586,21 +1617,65 @@ function BooksCheckReport() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-sm font-medium text-ink">{c.title}</div>
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.ok ? 'bg-brand-50 text-brand-700' : 'bg-red-100 text-red-700'}`}>
-                {c.ok ? 'OK' : `Difference ${money(c.difference)}`}
+                {c.ok ? 'OK' : c.key === 'missing_journals' ? `${c.ledger} missing` : `Difference ${money(c.difference)}`}
               </span>
             </div>
-            <div className="mt-1 grid grid-cols-1 gap-1 text-xs text-muted sm:grid-cols-2">
-              <div>
-                {c.ledgerLabel}: <span className="text-ink">{money(c.ledger)}</span>
+            {c.key === 'missing_journals' ? (
+              <div className="mt-1 text-xs text-muted">
+                {c.ledgerLabel}: <span className="text-ink">{c.ledger}</span>
               </div>
-              <div>
-                {c.recordsLabel}: <span className="text-ink">{money(c.records)}</span>
+            ) : (
+              <div className="mt-1 grid grid-cols-1 gap-1 text-xs text-muted sm:grid-cols-2">
+                <div>
+                  {c.ledgerLabel}: <span className="text-ink">{money(c.ledger)}</span>
+                </div>
+                <div>
+                  {c.recordsLabel}: <span className="text-ink">{money(c.records)}</span>
+                </div>
               </div>
-            </div>
+            )}
             <div className="mt-1 text-xs text-muted">{c.explain}</div>
           </div>
         ))}
       </div>
+
+      {missing.length > 0 && (
+        <div className="mt-4">
+          <div className="text-sm font-semibold text-ink mb-2">Documents without a journal entry</div>
+          {repostError && <p className="text-sm text-red-600 mb-2">{repostError}</p>}
+          <div className="divide-y divide-black/5 border border-black/10 rounded-lg overflow-hidden">
+            {missing.map((m) => {
+              const key = `${m.sourceType}:${m.id}`;
+              return (
+                <div key={key} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="text-sm text-ink truncate">
+                      {m.label} {m.number}
+                    </div>
+                    <div className="text-xs text-muted">
+                      {m.date} · {money(m.amount)} OMR
+                    </div>
+                  </div>
+                  {m.canRepost ? (
+                    canRepost && (
+                      <button
+                        type="button"
+                        disabled={reposting === key}
+                        onClick={() => repost(m)}
+                        className="print:hidden shrink-0 text-sm font-medium text-ink border border-black/10 rounded-lg px-3 py-1.5 hover:bg-black/5 disabled:opacity-50"
+                      >
+                        {reposting === key ? 'Re-posting…' : 'Re-post'}
+                      </button>
+                    )
+                  ) : (
+                    <span className="shrink-0 text-xs text-muted">Needs a manual journal entry</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

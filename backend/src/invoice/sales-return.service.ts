@@ -110,6 +110,7 @@ export class SalesReturnService {
   }
 
   async create(dto: CreateSalesReturnDto, requestedBy: ActorRef) {
+    await this.journalPosting.assertDateOpen(dto.date || new Date().toISOString().slice(0, 10), 'This sales return');
     const invoice = await this.dataSource.manager.findOne(Invoice, { where: { id: dto.invoiceId } });
     if (!invoice) throw new NotFoundException('Invoice not found');
 
@@ -237,12 +238,18 @@ export class SalesReturnService {
     let totalCost = 0;
     const productIds: string[] = [];
     let invoiceNumber = '';
+    // Resolved BEFORE the transaction: linking a bank account to its ledger
+    // account writes the bank_accounts row, which the transaction below
+    // locks - doing it inside would wait on our own lock.
+    const refundJournalAccountId = opts.bankAccountId ? await this.bankAccountService.ensureJournalAccountId(opts.bankAccountId) : undefined;
     const saved = await this.dataSource.transaction(async (manager) => {
       const item = await manager.findOne(SalesReturn, { where: { id }, relations: ['items'], lock: { mode: 'pessimistic_write' } });
       if (!item) throw new NotFoundException('Sales return not found');
       if (item.status !== SalesReturnStatus.PENDING) {
         throw new BadRequestException(`Only pending returns can be approved (this one is ${item.status})`);
       }
+      // closed books (filed VAT return / opening balance date)
+      await this.journalPosting.assertDateOpen(item.date, 'This sales return', manager);
       const invoice = await manager.findOne(Invoice, { where: { id: item.invoiceId }, lock: { mode: 'pessimistic_write' } });
       if (!invoice) throw new NotFoundException('Invoice not found');
       invoiceNumber = invoice.invoiceNumber;
@@ -337,25 +344,12 @@ export class SalesReturnService {
       item.decidedByUserId = decidedBy.userId;
       item.decidedByEmail = decidedBy.email;
       item.decidedAt = new Date();
-      return manager.save(item);
-    });
+      const saved = await manager.save(item);
 
-    await this.activityLog.log({
-      action: 'sales_return.approved',
-      entityType: 'sales_return',
-      entityId: saved.id,
-      userId: decidedBy.userId,
-      userEmail: decidedBy.email,
-      details: {
-        returnNumber: saved.returnNumber,
-        invoiceNumber,
-        total: Number(saved.total),
-        appliedToInvoice: Number(saved.appliedToInvoice),
-        refundAmount: Number(saved.refundAmount),
-      },
-    });
-
-    try {
+      // Journal entry in the SAME transaction: if it can't be posted
+      // (closed books, missing account, unbalanced), the whole approval is
+      // rolled back - stock, credit note and refund never change without
+      // the books.
       const returnAccountId = await this.journalPosting.findAccountIdByCode(SALES_RETURN_CODE);
       const lines: PostingLine[] = [{ accountId: returnAccountId, debit: Number(saved.subtotal), description: 'Sales return' }];
       if (Number(saved.vatAmount) > 0) {
@@ -366,9 +360,8 @@ export class SalesReturnService {
         const arAccountId = await this.journalPosting.findAccountIdByCode(ACCOUNTS_RECEIVABLE_CODE);
         lines.push({ accountId: arAccountId, credit: Number(saved.appliedToInvoice), description: `Credit note — invoice ${invoiceNumber}` });
       }
-      if (Number(saved.refundAmount) > 0 && saved.bankAccountId) {
-        const bankJournalAccountId = await this.bankAccountService.ensureJournalAccountId(saved.bankAccountId);
-        lines.push({ accountId: bankJournalAccountId, credit: Number(saved.refundAmount), description: 'Refund paid' });
+      if (Number(saved.refundAmount) > 0 && saved.bankAccountId && refundJournalAccountId) {
+        lines.push({ accountId: refundJournalAccountId, credit: Number(saved.refundAmount), description: 'Refund paid' });
       }
       // returned goods back on the Finished Goods asset, COGS relieved
       if (totalCost > 0) {
@@ -385,10 +378,25 @@ export class SalesReturnService {
         lines,
         decidedBy,
         saved.returnNumber,
+        manager,
       );
-    } catch (err) {
-      console.error(`Auto-posting failed for sales_return ${saved.id}:`, err);
-    }
+      return saved;
+    });
+
+    await this.activityLog.log({
+      action: 'sales_return.approved',
+      entityType: 'sales_return',
+      entityId: saved.id,
+      userId: decidedBy.userId,
+      userEmail: decidedBy.email,
+      details: {
+        returnNumber: saved.returnNumber,
+        invoiceNumber,
+        total: Number(saved.total),
+        appliedToInvoice: Number(saved.appliedToInvoice),
+        refundAmount: Number(saved.refundAmount),
+      },
+    });
 
     await this.backorders.refresh(productIds);
     return saved;

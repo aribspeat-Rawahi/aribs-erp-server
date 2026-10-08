@@ -295,13 +295,11 @@ export class PurchaseOrderService {
       if (allIn) order.receivedAt = new Date();
       order.paymentStatus = computePaymentStatus(Number(order.paidAmount || 0), Number(order.receivedTotal));
       await manager.save(order);
-      return { order, grn, supplierName: supplier?.name || '' };
-    });
 
-    // Dr Raw Materials Inventory + Dr Input VAT / Cr Accounts Payable,
-    // one entry per goods receipt, dated the day the goods arrived.
-    const { order, grn } = result;
-    try {
+      // Dr Raw Materials Inventory + Dr Input VAT / Cr Accounts Payable,
+      // one entry per goods receipt, dated the day the goods arrived.
+      // Posted in the SAME transaction: if the journal can't be posted,
+      // the receipt (stock, cost, payable) is rolled back too.
       const lines: PostingLine[] = [
         { accountId: await this.journalPosting.findAccountIdByCode(INVENTORY_RAW_MATERIALS_CODE), debit: Number(grn.subtotal), description: 'Raw materials received' },
       ];
@@ -313,10 +311,12 @@ export class PurchaseOrderService {
         });
       }
       lines.push({ accountId: await this.journalPosting.findAccountIdByCode(ACCOUNTS_PAYABLE_CODE), credit: Number(grn.total), description: `${order.poNumber} / ${grn.grnNumber}` });
-      await this.journalPosting.postForSource('goods_receipt', grn.id, grn.receivedDate, `Goods received ${grn.grnNumber} - ${order.poNumber}`, lines, actor, grn.grnNumber);
-    } catch (err) {
-      console.error(`Auto-posting failed for goods_receipt ${grn.id}:`, err);
-    }
+      await this.journalPosting.postForSource('goods_receipt', grn.id, grn.receivedDate, `Goods received ${grn.grnNumber} - ${order.poNumber}`, lines, actor, grn.grnNumber, manager);
+
+      return { order, grn, supplierName: supplier?.name || '' };
+    });
+
+    const { order } = result;
     return this.findOne(order.id);
   }
 

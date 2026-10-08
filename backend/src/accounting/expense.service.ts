@@ -75,7 +75,7 @@ export class ExpenseService {
     }
   }
 
-  private async postJournalEntry(item: Expense, actor: ActorRef) {
+  private async postJournalEntry(item: Expense, actor: ActorRef, rethrow = false) {
     try {
       if (!item.bankAccountId) {
         await this.journalPosting.removeForSource('expense', item.id);
@@ -98,8 +98,16 @@ export class ExpenseService {
         item.invoiceNumber,
       );
     } catch (err) {
+      if (rethrow) throw err;
       console.error(`Auto-posting failed for expense ${item.id}:`, err);
     }
+  }
+
+  // Books Health Check "Re-post": rebuilds this expense's journal entry.
+  async repostJournal(id: string, actor: ActorRef = {}) {
+    const item = await this.findOne(id);
+    await this.postJournalEntry(item, actor, true);
+    return { reposted: true };
   }
 
   // If bankAccountId is set, records a real withdrawal (row-locked, same
