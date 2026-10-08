@@ -221,6 +221,31 @@ export class JournalEntryService {
     };
   }
 
+  // Day-by-day Revenue vs Expense from the ledger (same basis as the
+  // Income Statement: revenue accounts net of VAT and discounts, every
+  // expense account incl. cost of goods sold, salaries, depreciation).
+  // Feeds the Dashboard trend chart.
+  async getDailyIncomeExpense(startDate: string, endDate: string): Promise<Map<string, { revenue: number; expense: number }>> {
+    const entries = await this.repo.find({ where: { date: Between(startDate, endDate) }, relations: ['lines'] });
+    const accounts = await this.accountRepo.find();
+    const typeById = new Map(accounts.map((a) => [a.id, a.type]));
+    const byDate = new Map<string, { revenue: number; expense: number }>();
+    for (const entry of entries) {
+      const day = String(entry.date).slice(0, 10);
+      const bucket = byDate.get(day) || { revenue: 0, expense: 0 };
+      for (const line of entry.lines) {
+        const type = typeById.get(line.accountId);
+        const debit = Number(line.debit);
+        const credit = Number(line.credit);
+        if (type === AccountType.REVENUE) bucket.revenue += credit - debit;
+        else if (type === AccountType.EXPENSE) bucket.expense += debit - credit;
+      }
+      byDate.set(day, bucket);
+    }
+    for (const [day, b] of byDate) byDate.set(day, { revenue: this.round3(b.revenue), expense: this.round3(b.expense) });
+    return byDate;
+  }
+
   // Balance Sheet as of a given date — Asset/Liability/Equity accounts,
   // cumulative from every entry up to and including asOfDate. This system
   // has no periodic closing entries (Revenue/Expense accounts just keep

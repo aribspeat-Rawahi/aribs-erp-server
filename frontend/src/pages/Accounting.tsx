@@ -212,10 +212,10 @@ export default function Accounting() {
     }
   }
 
-  const revenue = summary?.revenue?.total ?? 0;
-  const directExpenses = summary?.expenses?.total ?? 0;
-  const reimbursementsPaid = summary?.reimbursements?.total ?? 0;
-  const totalExpenses = directExpenses + reimbursementsPaid;
+  // Cards come from the ledger (same as the Income Statement), so
+  // Revenue - Total costs = Net Profit on screen.
+  const revenue = summary?.ledger?.revenue ?? 0;
+  const totalExpenses = summary?.ledger?.expenses ?? 0;
   const netProfit = summary?.netProfit ?? 0;
 
   return (
@@ -250,12 +250,12 @@ export default function Accounting() {
           </div>
 
           <div className="grid grid-cols-3 gap-4 mb-4">
-            <StatCard icon={TrendingUp} label="Revenue (this month)" value={`${Number(revenue).toFixed(3)} OMR`} />
+            <StatCard icon={TrendingUp} label="Revenue (this month)" value={`${Number(revenue).toFixed(3)} OMR`} sub="excl. VAT" />
             <StatCard
               icon={TrendingDown}
-              label="Expenses (this month)"
+              label="Total costs (this month)"
               value={`${Number(totalExpenses).toFixed(3)} OMR`}
-              sub={reimbursementsPaid > 0 ? `Incl. ${Number(reimbursementsPaid).toFixed(3)} OMR reimbursed` : undefined}
+              sub="Incl. cost of goods sold, salaries, depreciation"
             />
             <StatCard icon={Wallet} label="Net Profit" value={`${Number(netProfit).toFixed(3)} OMR`} />
           </div>

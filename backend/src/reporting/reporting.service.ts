@@ -204,15 +204,12 @@ export class ReportingService {
   }
 
   // Day-by-day Sales (revenue) vs Expenses within a date range — feeds
-  // the Dashboard's trend chart (Line/Area/Bar). "Expenses" here is
-  // Expense rows plus PAID reimbursements combined, so this line matches
-  // what getSummary()'s netProfit is actually subtracting.
+  // the Dashboard's trend chart (Line/Area/Bar). Both come from the
+  // ledger, the same basis as getSummary()'s netProfit and the Income
+  // Statement: sales net of VAT/discount, expenses incl. cost of goods
+  // sold, salaries and depreciation.
   async getDailyTrend(startDate: string, endDate: string) {
-    const [revenueByDate, expensesByDate, reimbursementsByDate] = await Promise.all([
-      this.invoiceService.getDailyRevenue(startDate, endDate),
-      this.expenseService.getDailyExpenses(startDate, endDate),
-      this.reimbursementService.getPaidDailyTotals(startDate, endDate),
-    ]);
+    const byDate = await this.journalEntryService.getDailyIncomeExpense(startDate, endDate);
 
     const days: { date: string; sales: number; expenses: number }[] = [];
     const start = new Date(startDate);
@@ -221,8 +218,8 @@ export class ReportingService {
       const iso = d.toISOString().slice(0, 10);
       days.push({
         date: iso,
-        sales: revenueByDate.get(iso) || 0,
-        expenses: (expensesByDate.get(iso) || 0) + (reimbursementsByDate.get(iso) || 0),
+        sales: byDate.get(iso)?.revenue || 0,
+        expenses: byDate.get(iso)?.expense || 0,
       });
     }
     return days;

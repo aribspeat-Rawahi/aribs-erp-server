@@ -292,12 +292,12 @@ export default function Dashboard() {
 
   if (loading) return <div className="text-sm text-muted">Loading…</div>;
 
-  const revenue = summary?.accounting?.revenue?.total ?? 0;
+  // From the ledger (same as the Income Statement): revenue excl. VAT,
+  // expenses incl. cost of goods sold, salaries and depreciation.
+  const revenue = summary?.accounting?.ledger?.revenue ?? 0;
   const invoiceCount = summary?.accounting?.revenue?.count ?? 0;
   const netProfit = summary?.accounting?.netProfit ?? 0;
-  // Combined Expense rows + PAID reimbursements — matches what netProfit
-  // is actually subtracting (see AccountingSummaryService.getSummary()).
-  const expenses = (summary?.accounting?.expenses?.total ?? 0) + (summary?.accounting?.reimbursements?.total ?? 0);
+  const expenses = summary?.accounting?.ledger?.expenses ?? 0;
   const completedOrders = summary?.sales?.completedOrders ?? 0;
   const lowStockItems = [...(lowStock?.rawMaterials || []), ...(lowStock?.finishedGoods || [])];
 
@@ -347,7 +347,7 @@ export default function Dashboard() {
       <PageHeader title="Dashboard" subtitle={periodSubtitle} action={periodSelector} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-4">
-        <StatCard icon={Receipt} label={`Revenue (${periodLabel})`} value={`${Number(revenue).toFixed(3)} OMR`} sub={`${invoiceCount} invoices`} />
+        <StatCard icon={Receipt} label={`Revenue (${periodLabel})`} value={`${Number(revenue).toFixed(3)} OMR`} sub={`excl. VAT · ${invoiceCount} invoices`} />
         <StatCard icon={TrendingUp} label="Net Profit" value={`${Number(netProfit).toFixed(3)} OMR`} sub={`Expenses: ${Number(expenses).toFixed(3)} OMR`} />
         <StatCard icon={PackageCheck} label="Completed Sales Orders" value={String(completedOrders)} sub={periodLabel} />
         <StatCard

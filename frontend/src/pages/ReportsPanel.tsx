@@ -142,7 +142,8 @@ export default function ReportsPanel() {
     api.get('/reports/aging').then((res) => setAging(res.data));
   }, []);
 
-  const revenue = summary?.accounting?.revenue?.total ?? 0;
+  // Ledger revenue (excl. VAT) — same basis as Net Profit / Income Statement.
+  const revenue = summary?.accounting?.ledger?.revenue ?? 0;
   const invoiceCount = summary?.accounting?.revenue?.count ?? 0;
   const netProfit = summary?.accounting?.netProfit ?? 0;
   const completedOrders = summary?.sales?.completedOrders ?? 0;
@@ -174,7 +175,7 @@ export default function ReportsPanel() {
         ) : (
           <>
             <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
-              <StatCard icon={Receipt} label="Revenue" value={`${Number(revenue).toFixed(3)} OMR`} sub={`${invoiceCount} invoices`} />
+              <StatCard icon={Receipt} label="Revenue" value={`${Number(revenue).toFixed(3)} OMR`} sub={`excl. VAT · ${invoiceCount} invoices`} />
               <StatCard icon={TrendingUp} label="Net Profit" value={`${Number(netProfit).toFixed(3)} OMR`} />
               <StatCard icon={PackageCheck} label="Completed Sales Orders" value={String(completedOrders)} />
               <StatCard
