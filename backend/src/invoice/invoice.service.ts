@@ -28,6 +28,7 @@ import { BackorderService } from '../stock-alerts/backorder.service';
 import { SalesReturn, SalesReturnStatus } from './sales-return.entity';
 import { buildWhatsappLinks, toWhatsappPhone } from '../common/whatsapp-phone.util';
 import { runInBackground } from '../common/background.util';
+import { omanToday } from '../common/oman-date';
 
 // Auto-posted Chart-of-Accounts codes for invoice issuance (Dr Accounts
 // Receivable / Cr Sales Revenue [+ Cr VAT Payable]) — matches the
@@ -170,7 +171,7 @@ export class InvoiceService {
   }
 
   private todayStr() {
-    return new Date().toISOString().slice(0, 10);
+    return omanToday();
   }
 
   // Auto-posts (or re-posts) Dr 1100 Accounts Receivable / Cr 1402 Sales
@@ -350,7 +351,7 @@ export class InvoiceService {
       quotationNumber: invoice.quotationNumber,
       deliveryDate: invoice.deliveryDate,
       companyName: settings.companyName,
-      companyVatin: settings.companyVatin || this.config.get('COMPANY_VATIN') || 'OM1000000000',
+      companyVatin: settings.companyVatin || this.config.get('COMPANY_VATIN') || '',
       companyAddress: settings.companyAddress,
       companyPhone: settings.companyPhone,
       customerName,
@@ -556,7 +557,7 @@ export class InvoiceService {
     });
     const saved = await this.invoiceRepo.save(invoice);
 
-    const year = new Date().getFullYear();
+    const year = Number(omanToday().slice(0, 4));
     saved.invoiceNumber = `INV-${year}-${String(saved.sequenceNumber).padStart(4, '0')}`;
     await this.invoiceRepo.save(saved);
 
@@ -1319,7 +1320,7 @@ export class InvoiceService {
       customerPhone: customer.phone,
       customerVatin: customer.vatin,
       companyName: settings.companyName,
-      companyVatin: settings.companyVatin || this.config.get('COMPANY_VATIN') || 'OM1000000000',
+      companyVatin: settings.companyVatin || this.config.get('COMPANY_VATIN') || '',
       companyAddress: settings.companyAddress,
       companyPhone: settings.companyPhone,
       startDate,

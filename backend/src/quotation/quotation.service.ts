@@ -18,6 +18,7 @@ import { buildWhatsappLinks, toWhatsappPhone } from '../common/whatsapp-phone.ut
 import { EmailService } from '../common/email.service';
 import { UnitService } from '../units/unit.service';
 import { runInBackground } from '../common/background.util';
+import { omanToday } from '../common/oman-date';
 
 @Injectable()
 export class QuotationService {
@@ -122,7 +123,7 @@ export class QuotationService {
 
     const quotation = this.quotationRepo.create({
       customerId: dto.customerId,
-      issueDate: new Date().toISOString().slice(0, 10),
+      issueDate: omanToday(),
       validUntil: dto.validUntil,
       subtotal,
       discountAmount,
@@ -138,7 +139,7 @@ export class QuotationService {
     });
     const saved = await this.quotationRepo.save(quotation);
 
-    const year = new Date().getFullYear();
+    const year = Number(omanToday().slice(0, 4));
     saved.quotationNumber = `QTN-${year}-${String(saved.sequenceNumber).padStart(4, '0')}`;
     await this.quotationRepo.save(saved);
 
@@ -214,7 +215,7 @@ export class QuotationService {
   }
 
   private todayStr() {
-    return new Date().toISOString().slice(0, 10);
+    return omanToday();
   }
 
   private async applyItemsToQuotation(
@@ -461,7 +462,7 @@ export class QuotationService {
       dueDate: undefined,
       deliveryDate: quotation.deliveryDate,
       companyName: settings.companyName,
-      companyVatin: settings.companyVatin || 'OM1000000000',
+      companyVatin: settings.companyVatin || '',
       companyAddress: settings.companyAddress,
       companyPhone: settings.companyPhone,
       customerName: customer.name,

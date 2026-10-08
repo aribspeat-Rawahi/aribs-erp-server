@@ -6,6 +6,7 @@ import { VatPeriod, VatPeriodStatus } from '../vat-period/vat-period.entity';
 import { JournalEntry } from './journal-entry.entity';
 import { JournalEntryLine } from './journal-entry-line.entity';
 import { Account } from './account.entity';
+import { omanToday } from '../common/oman-date';
 
 export interface PostingLine {
   accountId: string;
@@ -42,7 +43,7 @@ export class JournalPostingService {
   constructor(@InjectDataSource() private dataSource: DataSource) {}
 
   private generateEntryNumber() {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const date = omanToday().replace(/-/g, '');
     const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
     return `JE-${date}-${rand}`;
   }
@@ -76,7 +77,16 @@ export class JournalPostingService {
   async assertDateOpen(date: string | Date | null | undefined, what = 'This entry', manager?: EntityManager): Promise<void> {
     if (!date) return;
     const lock = await this.lockInfo(manager);
-    const d = (date instanceof Date ? date.toISOString() : String(date)).slice(0, 10);
+    // A DATE read from MariaDB arrives as a JS Date at LOCAL midnight -
+    // toISOString() would shift it to the previous day east of UTC.
+    const d =
+      date instanceof Date
+        ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+        : String(date).trim().slice(0, 10);
+    // the lock compares text: anything not YYYY-MM-DD could slip past it
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      throw new BadRequestException(`${what} has an invalid date "${String(date)}" - use YYYY-MM-DD.`);
+    }
     if (lock && d <= lock.date) {
       throw new BadRequestException(
         `${what} is dated ${d}, but the books are closed up to ${lock.date} (${lock.reason}). Use a later date.`,

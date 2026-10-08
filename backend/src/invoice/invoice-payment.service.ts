@@ -10,6 +10,7 @@ import { BankTransaction, BankTransactionType } from '../bank-account/bank-trans
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { applyBankMovement, rowForInsert } from '../common/bank-movement.util';
+import { omanToday } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -80,7 +81,7 @@ export class InvoicePaymentService {
   }
 
   private todayStr() {
-    return new Date().toISOString().slice(0, 10);
+    return omanToday();
   }
 
   findByInvoice(invoiceId: string) {

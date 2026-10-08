@@ -15,6 +15,7 @@ import { applyBankMovement, rowForInsert } from '../common/bank-movement.util';
 import { Supplier } from '../supplier/supplier.entity';
 import { PurchaseOrder, PurchaseOrderStatus } from '../supplier/purchase-order.entity';
 import { PaymentStatus } from '../common/payment-type.enum';
+import { omanToday } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -52,7 +53,7 @@ export class FixedAssetService {
   ) {}
 
   private generateAssetNumber() {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const date = omanToday().replace(/-/g, '');
     const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
     return `FA-${date}-${rand}`;
   }
@@ -87,7 +88,7 @@ export class FixedAssetService {
   // credit against Accounts Payable instead (Dr {category account} / Cr
   // 2000) — useful when the supplier bill hasn't been paid yet.
   async create(dto: CreateFixedAssetDto, actor: ActorRef) {
-    const date = dto.purchaseDate || new Date().toISOString().slice(0, 10);
+    const date = dto.purchaseDate || omanToday();
     await this.journalPosting.assertDateOpen(date, 'This asset purchase');
     const cost = Number(dto.cost);
     const vat = Math.round(Number(dto.vatAmount || 0) * 1000) / 1000;
@@ -198,6 +199,8 @@ export class FixedAssetService {
   // periods and should be disposed instead, which keeps that history intact.
   async remove(id: string, actor: ActorRef) {
     const item = await this.findOne(id);
+    // its purchase is in the books on that date - closed periods stay as filed
+    await this.journalPosting.assertDateOpen(item.purchaseDate, 'This asset purchase');
     if (Number(item.accumulatedDepreciation) > 0 || item.status === FixedAssetStatus.DISPOSED) {
       throw new BadRequestException(
         'This asset already has posted depreciation history — use Dispose instead of deleting it.',
@@ -226,7 +229,7 @@ export class FixedAssetService {
               bankAccountId: account.id,
               type: BankTransactionType.DEPOSIT,
               amount: gross,
-              date: new Date().toISOString().slice(0, 10),
+              date: omanToday(),
               note: `Fixed asset purchase reversed — ${item.assetNumber}`,
             }),
           );
@@ -300,7 +303,7 @@ export class FixedAssetService {
   @Cron('0 7 1 * *')
   async runMonthlyDepreciation() {
     if (String(this.config.get('FIXED_ASSET_DEPRECIATION_ENABLED')).toLowerCase() === 'false') return;
-    const period = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+    const period = omanToday().slice(0, 7); // "YYYY-MM"
     const assets = await this.repo.find({ where: { status: FixedAssetStatus.ACTIVE } });
     let posted = 0;
     for (const asset of assets) {
@@ -324,7 +327,7 @@ export class FixedAssetService {
     if (asset.status !== FixedAssetStatus.ACTIVE) {
       throw new BadRequestException('Only an active asset can be depreciated.');
     }
-    const period = new Date().toISOString().slice(0, 7);
+    const period = omanToday().slice(0, 7);
     if (asset.lastDepreciationPeriod === period) {
       throw new BadRequestException(`Depreciation for ${period} has already been posted for this asset.`);
     }
@@ -363,7 +366,7 @@ export class FixedAssetService {
     if (proceeds > 0 && !dto.bankAccountId) {
       throw new BadRequestException('Select the account disposal proceeds were deposited into.');
     }
-    const date = dto.disposalDate || new Date().toISOString().slice(0, 10);
+    const date = dto.disposalDate || omanToday();
     await this.journalPosting.assertDateOpen(date, 'This disposal');
     const netBookValue = this.round3(Number(asset.cost) - Number(asset.accumulatedDepreciation));
     const gainLoss = this.round3(proceeds - netBookValue);

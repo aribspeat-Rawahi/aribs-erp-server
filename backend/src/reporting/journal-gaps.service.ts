@@ -16,11 +16,11 @@ export interface MissingJournal {
   date: string;
   amount: number;
   // false = can't be rebuilt from the saved record (the cost used at the
-  // time isn't stored) - needs a manual journal entry or the developer.
+  // time isn't stored) - needs the developer.
   canRepost: boolean;
   // dated inside the closed books (filed VAT return / opening date): it can
-  // never be posted on its own date - record it with a manual journal
-  // entry in the open period.
+  // never be posted on its own date - needs the developer (manual journals
+  // can't touch control accounts).
   locked: boolean;
 }
 
@@ -166,7 +166,7 @@ export class JournalGapsService {
         break;
       default:
         throw new BadRequestException(
-          'This document type cannot be re-posted automatically - its original cost is not stored. Record it with a manual journal entry.',
+          'This document type cannot be re-posted automatically - its original cost is not stored. Contact support.',
         );
     }
     await this.activityLog.log({

@@ -9,6 +9,7 @@ import { labelFor, PAYMENT_TYPE_OPTIONS, DELIVERY_METHOD_OPTIONS } from '../cons
 import NewDocumentModal, { ExistingDoc } from '../components/NewDocumentModal';
 import BankAccountSelect from '../components/BankAccountSelect';
 import { formatQuantityWithUnit, quantityInputStep, snapQuantityToUnit } from '../utils/formatQuantity';
+import { localISODate } from '../utils/dates';
 
 interface Customer {
   id: string;
@@ -220,6 +221,8 @@ export default function Invoices() {
   const existing: ExistingDoc | undefined = editing
     ? {
         id: editing.id,
+        // keep the document's own customer (else the form defaults to the first one)
+        customerId: editing.customerId,
         items: editing.items,
         paymentType: editing.paymentType,
         deliveryMethod: editing.deliveryMethod,
@@ -479,7 +482,7 @@ function PaymentLedgerModal({
   const [amount, setAmount] = useState('');
   const [paymentType, setPaymentType] = useState('cash');
   const [bankAccountId, setBankAccountId] = useState('');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentDate, setPaymentDate] = useState(localISODate());
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -673,7 +676,7 @@ function NewSalesReturnModal({
       quantity: '0',
     }));
   });
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localISODate());
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);

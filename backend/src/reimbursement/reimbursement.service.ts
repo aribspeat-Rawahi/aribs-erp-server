@@ -16,6 +16,7 @@ import { BankTransactionType } from '../bank-account/bank-transaction.entity';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { discardFile } from '../common/discard-file.util';
+import { omanToday, omanDate } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -45,7 +46,7 @@ export class ReimbursementService {
 
   // Same generator convention as BatchTrackingService's batch numbers.
   private generateClaimNumber() {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const date = omanToday().replace(/-/g, '');
     const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
     return `RB-${date}-${rand}`;
   }
@@ -64,7 +65,7 @@ export class ReimbursementService {
     const item = this.repo.create({
       ...dto,
       claimNumber: this.generateClaimNumber(),
-      date: dto.date || new Date().toISOString().slice(0, 10),
+      date: dto.date || omanToday(),
       status: ReimbursementStatus.PENDING,
       requestedByUserId: requestedBy.userId,
       requestedByEmail: requestedBy.email,
@@ -171,7 +172,7 @@ export class ReimbursementService {
       const txn = await this.bankAccountService.addTransaction(dto.bankAccountId, {
         type: BankTransactionType.WITHDRAWAL,
         amount: Number(item.amount),
-        date: new Date().toISOString().slice(0, 10),
+        date: omanToday(),
         note: `Reimbursement ${item.claimNumber} — ${item.category}`,
       });
       item.bankAccountId = dto.bankAccountId;
@@ -210,7 +211,7 @@ export class ReimbursementService {
         await this.journalPosting.postForSource(
           'reimbursement',
           saved.id,
-          new Date().toISOString().slice(0, 10),
+          omanToday(),
           `Reimbursement ${saved.claimNumber} — ${saved.category}`,
           [
             { accountId: expenseAccountId, debit: Number(saved.amount), description: 'Employee reimbursement' },
@@ -236,7 +237,7 @@ export class ReimbursementService {
     const all = await this.repo.find({ where: { status: ReimbursementStatus.PAID } });
     const inRange = all.filter((r) => {
       if (!r.paidAt) return false;
-      const paidDate = new Date(r.paidAt).toISOString().slice(0, 10);
+      const paidDate = omanDate(r.paidAt);
       return paidDate >= startDate && paidDate <= endDate;
     });
     const total = inRange.reduce((sum, r) => sum + Number(r.amount), 0);
@@ -250,7 +251,7 @@ export class ReimbursementService {
     const byDate = new Map<string, number>();
     for (const r of all) {
       if (!r.paidAt) continue;
-      const paidDate = new Date(r.paidAt).toISOString().slice(0, 10);
+      const paidDate = omanDate(r.paidAt);
       if (paidDate < startDate || paidDate > endDate) continue;
       byDate.set(paidDate, (byDate.get(paidDate) || 0) + Number(r.amount));
     }

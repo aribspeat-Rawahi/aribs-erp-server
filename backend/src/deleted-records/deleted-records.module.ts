@@ -1,3 +1,4 @@
+import { JournalModule } from '../journal/journal.module';
 import { Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -10,7 +11,7 @@ import { EmailService } from '../common/email.service';
 import { InvoiceModule } from '../invoice/invoice.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([DeletedRecord]), InvoiceModule],
+  imports: [TypeOrmModule.forFeature([DeletedRecord]), InvoiceModule, JournalModule],
   controllers: [DeletedRecordsController],
   providers: [
     DeletedRecordsService,

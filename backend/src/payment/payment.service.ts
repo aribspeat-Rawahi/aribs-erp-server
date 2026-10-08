@@ -15,6 +15,7 @@ import { Employee } from '../hr/employee.entity';
 import { BankAccount } from '../bank-account/bank-account.entity';
 import { PaymentStatus } from '../common/payment-type.enum';
 import { SalaryAdvanceRequest, SalaryAdvanceStatus } from '../hr/salary-advance.entity';
+import { omanDate } from '../common/oman-date';
 
 export type PaymentRowType =
   | 'invoice_payment'
@@ -174,7 +175,7 @@ export class PaymentService {
         id: r.id,
         type: 'reimbursement',
         direction: 'out',
-        date: r.paidAt ? new Date(r.paidAt).toISOString().slice(0, 10) : '',
+        date: r.paidAt ? omanDate(r.paidAt) : '',
         partyName: employeeNameById.get(r.employeeId) || 'Unknown employee',
         reference: r.claimNumber,
         amount: Number(r.amount),
@@ -267,7 +268,7 @@ export class PaymentService {
         type: 'supplier_bill_due',
         direction: 'out',
         awaitingApproval: false,
-        date: (po.receivedAt ? new Date(po.receivedAt).toISOString().slice(0, 10) : '') || '',
+        date: (po.receivedAt ? omanDate(po.receivedAt) : '') || '',
         partyName: supplierNameById.get(po.supplierId) || 'Unknown supplier',
         reference: po.poNumber,
         amount: due,
@@ -309,7 +310,7 @@ export class PaymentService {
         type: 'salary_advance_pending',
         direction: 'out',
         awaitingApproval: a.status === SalaryAdvanceStatus.PENDING,
-        date: a.createdAt ? new Date(a.createdAt).toISOString().slice(0, 10) : '',
+        date: a.createdAt ? omanDate(a.createdAt) : '',
         partyName: a.employeeName,
         reference: a.reason,
         amount: Number(a.amount),

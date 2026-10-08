@@ -11,6 +11,7 @@ import { BankAccountService } from '../bank-account/bank-account.service';
 import { SupplierPaymentService } from './supplier-payment.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { applyBankMovement, rowForInsert } from '../common/bank-movement.util';
+import { omanToday } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -34,7 +35,7 @@ export class VendorPrepaymentService {
   ) {}
 
   private generateNumber() {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const date = omanToday().replace(/-/g, '');
     const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
     return `VP-${date}-${rand}`;
   }
@@ -56,7 +57,7 @@ export class VendorPrepaymentService {
   // Pays the advance from a bank/cash account (pessimistic-locked, same
   // as FundTransfer/FixedAsset) and immediately posts Dr 1310 / Cr {bank}.
   async create(dto: CreateVendorPrepaymentDto, actor: ActorRef) {
-    const date = dto.date || new Date().toISOString().slice(0, 10);
+    const date = dto.date || omanToday();
     await this.journalPosting.assertDateOpen(date, 'This entry');
     const amount = Number(dto.amount);
 
@@ -124,7 +125,7 @@ export class VendorPrepaymentService {
     if (amount > remaining + 0.001) {
       throw new BadRequestException(`Cannot apply ${amount} — only ${remaining} of this prepayment remains unapplied.`);
     }
-    const date = dto.date || new Date().toISOString().slice(0, 10);
+    const date = dto.date || omanToday();
     await this.journalPosting.assertDateOpen(date, 'This entry');
 
     const application = await this.dataSource.transaction(async (manager) => {
@@ -192,6 +193,7 @@ export class VendorPrepaymentService {
   // Entry (and the AP relief it represents) must stay intact.
   async remove(id: string, actor: ActorRef) {
     const item = await this.findOne(id);
+    await this.journalPosting.assertDateOpen(item.date, 'This prepayment');
     if (Number(item.appliedAmount) > 0) {
       throw new BadRequestException('This prepayment has already been applied — it can no longer be deleted.');
     }
@@ -209,7 +211,7 @@ export class VendorPrepaymentService {
             bankAccountId: account.id,
             type: BankTransactionType.DEPOSIT,
             amount: Number(item.amount),
-            date: new Date().toISOString().slice(0, 10),
+            date: omanToday(),
             note: `Vendor prepayment reversed — ${item.prepaymentNumber}`,
           }),
         );

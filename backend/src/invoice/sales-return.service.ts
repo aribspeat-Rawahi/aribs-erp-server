@@ -21,6 +21,7 @@ import { BackorderService } from '../stock-alerts/backorder.service';
 import { CustomerService } from '../customer/customer.service';
 import { SettingsService } from '../settings/settings.service';
 import { generateInvoicePdf } from '../common/invoice-pdf.util';
+import { omanToday } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -56,10 +57,19 @@ export class SalesReturnService {
     private settingsService: SettingsService,
   ) {}
 
-  private generateReturnNumber() {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
-    return `SR-${date}-${rand}`;
+  // Sequential per year - SR-2026-0001, SR-2026-0002 ... - because the
+  // approved return is the customer's credit note, and credit notes need
+  // an unbroken serial number like tax invoices. (Older returns keep their
+  // SR-YYYYMMDD-XXXXXX numbers.)
+  private async nextReturnNumber() {
+    const year = omanToday().slice(0, 4);
+    const prefix = `SR-${year}-`;
+    const rows: { n: string | null }[] = await this.repo.query(
+      'SELECT MAX(CAST(SUBSTRING(returnNumber, ?) AS UNSIGNED)) AS n FROM sales_returns WHERE returnNumber LIKE ? AND LENGTH(returnNumber) <= ?',
+      [prefix.length + 1, `${prefix}%`, prefix.length + 6],
+    );
+    const next = Number(rows?.[0]?.n || 0) + 1;
+    return `${prefix}${String(next).padStart(4, '0')}`;
   }
 
   // unit costs keep 6 decimals (amounts 3)
@@ -110,7 +120,7 @@ export class SalesReturnService {
   }
 
   async create(dto: CreateSalesReturnDto, requestedBy: ActorRef) {
-    await this.journalPosting.assertDateOpen(dto.date || new Date().toISOString().slice(0, 10), 'This sales return');
+    await this.journalPosting.assertDateOpen(dto.date || omanToday(), 'This sales return');
     const invoice = await this.dataSource.manager.findOne(Invoice, { where: { id: dto.invoiceId } });
     if (!invoice) throw new NotFoundException('Invoice not found');
 
@@ -167,11 +177,11 @@ export class SalesReturnService {
     if (itemRows.length === 0) throw new BadRequestException('Add at least one item to return');
 
     const item = this.repo.create({
-      returnNumber: this.generateReturnNumber(),
+      returnNumber: await this.nextReturnNumber(),
       invoiceId: invoice.id,
       customerId: invoice.customerId,
       status: SalesReturnStatus.PENDING,
-      date: dto.date || new Date().toISOString().slice(0, 10),
+      date: dto.date || omanToday(),
       reason: dto.reason,
       subtotal,
       vatAmount,
@@ -180,7 +190,19 @@ export class SalesReturnService {
       requestedByEmail: requestedBy.email,
       items: itemRows.map((i) => this.repo.manager.create(SalesReturnItem, i)),
     });
-    const saved = await this.repo.save(item);
+    // two returns at the same moment can pick the same number: retry
+    let saved: SalesReturn | undefined;
+    for (let attempt = 0; !saved; attempt++) {
+      try {
+        saved = await this.repo.save(item);
+      } catch (err) {
+        if (attempt < 4 && /Duplicate entry/i.test(String((err as Error)?.message))) {
+          item.returnNumber = await this.nextReturnNumber();
+          continue;
+        }
+        throw err;
+      }
+    }
     await this.activityLog.log({
       action: 'sales_return.created',
       entityType: 'sales_return',
@@ -435,7 +457,7 @@ export class SalesReturnService {
       quotationNumber: invoice.invoiceNumber,
       referenceLabel: 'Invoice No',
       companyName: settings.companyName,
-      companyVatin: settings.companyVatin || 'OM1000000000',
+      companyVatin: settings.companyVatin || '',
       companyAddress: settings.companyAddress,
       companyPhone: settings.companyPhone,
       customerName: customer.name,

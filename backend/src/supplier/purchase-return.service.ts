@@ -19,6 +19,7 @@ import { SettingsService } from '../settings/settings.service';
 import { Supplier } from './supplier.entity';
 import { applyBankMovement } from '../common/bank-movement.util';
 import { generateInvoicePdf } from '../common/invoice-pdf.util';
+import { omanToday } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -53,7 +54,7 @@ export class PurchaseReturnService {
   ) {}
 
   private generateReturnNumber() {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const date = omanToday().replace(/-/g, '');
     const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
     return `PR-${date}-${rand}`;
   }
@@ -89,7 +90,7 @@ export class PurchaseReturnService {
   }
 
   async create(dto: CreatePurchaseReturnDto, requestedBy: ActorRef) {
-    await this.journalPosting.assertDateOpen(dto.date || new Date().toISOString().slice(0, 10), 'This purchase return');
+    await this.journalPosting.assertDateOpen(dto.date || omanToday(), 'This purchase return');
     const order = await this.dataSource.manager.findOne(PurchaseOrder, { where: { id: dto.purchaseOrderId } });
     if (!order) throw new NotFoundException('Purchase order not found');
     if (order.status !== PurchaseOrderStatus.RECEIVED && order.status !== PurchaseOrderStatus.PARTIALLY_RECEIVED) {
@@ -145,7 +146,7 @@ export class PurchaseReturnService {
       purchaseOrderId: order.id,
       supplierId: order.supplierId,
       status: PurchaseReturnStatus.PENDING,
-      date: dto.date || new Date().toISOString().slice(0, 10),
+      date: dto.date || omanToday(),
       reason: dto.reason,
       subtotal,
       vatAmount,
@@ -346,7 +347,7 @@ export class PurchaseReturnService {
       quotationNumber: order.poNumber,
       referenceLabel: 'PO No',
       companyName: settings.companyName,
-      companyVatin: settings.companyVatin || 'OM1000000000',
+      companyVatin: settings.companyVatin || '',
       companyAddress: settings.companyAddress,
       companyPhone: settings.companyPhone,
       customerName: supplier.name,

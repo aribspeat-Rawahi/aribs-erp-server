@@ -1,6 +1,7 @@
 import { Logger as NestLogger } from '@nestjs/common';
 import type { Logger as TypeOrmLogger } from 'typeorm';
 import { reportError } from './error-alert';
+import { omanToday } from '../common/oman-date';
 
 // Queries slower than this (ms) are logged and emailed as an error alert.
 // Override with SLOW_QUERY_MS (e.g. 2000) if it gets noisy.
@@ -27,7 +28,7 @@ export class SlowQueryLogger implements TypeOrmLogger {
     this.logger.warn(`${time} ms: ${sql}`);
     // Schema changes during a deploy (migrations) are expected to be slow.
     if (/^(CREATE|ALTER|DROP)\b/i.test(sql)) return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = omanToday();
     if (today !== this.emailDay) {
       this.emailDay = today;
       this.emailsToday = 0;

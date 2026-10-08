@@ -23,6 +23,7 @@ import {
 import api from '../api/client';
 import { Card, StatCard, EmptyState, inputClass } from '../components/ui';
 import { formatQuantityWithUnit } from '../utils/formatQuantity';
+import { localISODate } from '../utils/dates';
 
 // Reports Hub — one card per report, matching the reference design. Each
 // card opens its own full page at /accounting/reports/:key (ReportDetail.tsx
@@ -48,7 +49,7 @@ function monthRange() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const iso = (d: Date) => localISODate(d);
   return { startDate: iso(start), endDate: iso(end) };
 }
 

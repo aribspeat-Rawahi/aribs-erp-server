@@ -101,6 +101,8 @@ export default function Quotations() {
   const existing: ExistingDoc | undefined = editing
     ? {
         id: editing.id,
+        // keep the document's own customer (else the form defaults to the first one)
+        customerId: editing.customerId,
         items: editing.items,
         deliveryMethod: editing.deliveryMethod,
         discountAmount: editing.discountAmount,

@@ -7,11 +7,23 @@ import { Account, AccountType } from './account.entity';
 import { CreateJournalEntryDto } from './dto/journal-entry.dto';
 import { JournalPostingService } from './journal-posting.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { omanToday } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
   email?: string;
 }
+
+// code -> the document to use instead
+const MANUAL_JOURNAL_BLOCKED_CODES: Record<string, string> = {
+  '1100': 'an invoice, customer payment or sales return',
+  '2000': 'a supplier bill, payment, debit note or vendor credit',
+  '1200': 'a purchase order, purchase return or Inventory > Add stock',
+  '1210': 'production, an invoice, a sales return or Inventory > Stock in',
+  '1310': 'Suppliers > Vendor Prepayments',
+  '1400': 'a supplier bill or debit note (input VAT)',
+  '2100': 'an invoice or credit note (output VAT) or a VAT return',
+};
 
 @Injectable()
 export class JournalEntryService {
@@ -28,7 +40,7 @@ export class JournalEntryService {
 
   // Same generator convention as Reimbursement.claimNumber / batch numbers.
   private generateEntryNumber() {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const date = omanToday().replace(/-/g, '');
     const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
     return `JE-${date}-${rand}`;
   }
@@ -44,13 +56,34 @@ export class JournalEntryService {
   }
 
   async create(dto: CreateJournalEntryDto, createdBy: ActorRef) {
-    await this.journalPosting.assertDateOpen(dto.date || new Date().toISOString().slice(0, 10), 'This journal entry');
+    await this.journalPosting.assertDateOpen(dto.date || omanToday(), 'This journal entry');
     // Every line must be a pure Debit or a pure Credit (not both, not
     // neither), and must reference a real account.
     const accountIds = new Set(dto.lines.map((l) => l.accountId));
     const accounts = await this.accountRepo.findBy({ id: In([...accountIds]) });
     if (accounts.length !== accountIds.size) {
       throw new BadRequestException('One or more lines reference an account that does not exist');
+    }
+    const inactive = accounts.filter((a) => a.active === false);
+    if (inactive.length) {
+      throw new BadRequestException(`Account ${inactive.map((a) => `${a.code} ${a.name}`).join(', ')} is inactive.`);
+    }
+    // Control accounts are kept equal to their own records (customers,
+    // suppliers, stock, supplier advances, VAT returns, bank balances - see
+    // Books Health Check). 3900 Opening Balance Equity stays open: moving it
+    // into capital / retained earnings is a normal manual journal. A manual journal on them
+    // would put the ledger out of step with those records, so changes go
+    // through the documents instead (credit/debit notes, stock moves,
+    // payments, bank transactions, Opening Balances).
+    const bankLinked: { journalAccountId: string }[] = await this.accountRepo.manager.query(
+      'SELECT journalAccountId FROM bank_accounts WHERE journalAccountId IS NOT NULL',
+    );
+    const bankIds = new Set(bankLinked.map((b) => b.journalAccountId));
+    const blocked = accounts.filter((a) => MANUAL_JOURNAL_BLOCKED_CODES[a.code] || bankIds.has(a.id));
+    if (blocked.length) {
+      const a = blocked[0];
+      const use = MANUAL_JOURNAL_BLOCKED_CODES[a.code] || 'a bank/cash transaction or transfer';
+      throw new BadRequestException(`${a.code} ${a.name} can't be used in a manual journal - it must match its own records. Use ${use} instead.`);
     }
 
     let totalDebit = 0;
@@ -79,7 +112,7 @@ export class JournalEntryService {
 
     const entry = this.repo.create({
       entryNumber: this.generateEntryNumber(),
-      date: dto.date || new Date().toISOString().slice(0, 10),
+      date: dto.date || omanToday(),
       reference: dto.reference,
       memo: dto.memo,
       createdByUserId: createdBy.userId,

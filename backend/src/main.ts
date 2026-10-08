@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { DateFieldsPipe } from './common/date-fields.pipe';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
 import compression from 'compression';
@@ -47,7 +48,8 @@ async function bootstrap() {
   // responses under 1 KB are not worth compressing.
   app.use(compression({ threshold: 1024 }));
   app.setGlobalPrefix(API_PREFIX);
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  // DateFieldsPipe first: dates must be YYYY-MM-DD before anything compares them
+  app.useGlobalPipes(new DateFieldsPipe(), new ValidationPipe({ whitelist: true, transform: true }));
 
   const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS;
   app.enableCors({

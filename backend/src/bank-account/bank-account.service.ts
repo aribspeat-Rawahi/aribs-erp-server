@@ -7,6 +7,7 @@ import { CreateBankAccountDto, CreateBankTransactionDto, UpdateBankAccountDto } 
 import { AccountService } from '../journal/account.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { BANK_TRANSACTION_CATEGORY_ACCOUNT_CODE } from './bank-transaction-category.enum';
+import { omanToday } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -95,7 +96,7 @@ export class BankAccountService {
       await this.journalPosting.postForSource(
         'bank_opening',
         saved.id,
-        new Date().toISOString().slice(0, 10),
+        omanToday(),
         `Opening balance - ${saved.name}`,
         [
           { accountId: bankGl, debit: opening, description: `Opening balance - ${saved.name}` },
@@ -143,7 +144,7 @@ export class BankAccountService {
   // for why this is optional rather than always-on.
   async addTransaction(bankAccountId: string, dto: CreateBankTransactionDto, actor: ActorRef = {}) {
     const account = await this.findOne(bankAccountId);
-    await this.journalPosting.assertDateOpen(dto.date || new Date().toISOString().slice(0, 10), 'This transaction');
+    await this.journalPosting.assertDateOpen(dto.date || omanToday(), 'This transaction');
     const amount = Number(dto.amount);
 
     if (dto.type === BankTransactionType.WITHDRAWAL && Number(account.currentBalance) < amount) {
@@ -154,7 +155,7 @@ export class BankAccountService {
       bankAccountId,
       type: dto.type,
       amount,
-      date: dto.date || new Date().toISOString().slice(0, 10),
+      date: dto.date || omanToday(),
       note: dto.note,
       category: dto.category,
     });

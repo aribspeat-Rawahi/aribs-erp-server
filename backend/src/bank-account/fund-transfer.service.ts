@@ -15,6 +15,7 @@ import { JournalPostingService } from '../journal/journal-posting.service';
 import { AccountService } from '../journal/account.service';
 import { applyBankMovement, rowForInsert } from '../common/bank-movement.util';
 import { discardFile } from '../common/discard-file.util';
+import { omanToday } from '../common/oman-date';
 
 // Chart-of-Accounts code for the optional "Money in Transit" clearing
 // account (see account.service.ts's DEFAULT_ACCOUNTS) — used only for a
@@ -47,7 +48,7 @@ export class FundTransferService {
 
   // Same generator convention as claimNumber/entryNumber/batchNumber.
   private generateTransferNumber() {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const date = omanToday().replace(/-/g, '');
     const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
     return `TR-${date}-${rand}`;
   }
@@ -123,7 +124,7 @@ export class FundTransferService {
     if (dto.fromAccountId === dto.toAccountId) {
       throw new BadRequestException('Source and destination accounts must be different');
     }
-    const date = dto.date || new Date().toISOString().slice(0, 10);
+    const date = dto.date || omanToday();
     await this.journalPosting.assertDateOpen(date, 'This transfer');
     const amount = Number(dto.amount);
     const inTransit = !!dto.inTransit;
@@ -242,14 +243,14 @@ export class FundTransferService {
           bankAccountId: toAccount.id,
           type: BankTransactionType.DEPOSIT,
           amount: item.amount,
-          date: new Date().toISOString().slice(0, 10),
+          date: omanToday(),
           note: `Fund transfer ${item.transferNumber} received (was in transit)`,
         }),
       );
 
       item.status = FundTransferStatus.COMPLETED;
       item.toTransactionId = toTxn.id;
-      item.clearedDate = new Date().toISOString().slice(0, 10);
+      item.clearedDate = omanToday();
       return manager.save(item);
     });
 
@@ -282,6 +283,8 @@ export class FundTransferService {
       const item = await manager.findOne(FundTransfer, { where: { id } });
       if (!item) throw new NotFoundException('Fund transfer not found');
       await this.journalPosting.assertDateOpen(item.date, 'This transfer', manager);
+      // the new date must be open too, or the books move into a closed period
+      if (dto.date) await this.journalPosting.assertDateOpen(dto.date, 'The new transfer date', manager);
       const wasInTransit = item.status === FundTransferStatus.IN_TRANSIT;
 
       const oldFrom = await manager.findOne(BankAccount, {

@@ -12,6 +12,7 @@ import { BankAccountService } from '../bank-account/bank-account.service';
 import { SupplierPaymentService } from './supplier-payment.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { rowForInsert } from '../common/bank-movement.util';
+import { omanToday } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -42,7 +43,7 @@ export class VendorCreditService {
   ) {}
 
   private generateNumber() {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const date = omanToday().replace(/-/g, '');
     const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
     return `VC-${date}-${rand}`;
   }
@@ -64,7 +65,7 @@ export class VendorCreditService {
   // Issuing the credit reduces Accounts Payable right away — Dr 2000 / Cr
   // 1200 (Inventory — Raw Materials) — no bank/cash movement at this step.
   async create(dto: CreateVendorCreditDto, actor: ActorRef) {
-    const date = dto.date || new Date().toISOString().slice(0, 10);
+    const date = dto.date || omanToday();
     await this.journalPosting.assertDateOpen(date, 'This vendor credit');
     const amount = Number(dto.amount);
 
@@ -109,7 +110,7 @@ export class VendorCreditService {
     if (amount > remaining + 0.001) {
       throw new BadRequestException(`Cannot apply ${amount} — only ${remaining} of this credit remains unused.`);
     }
-    const date = dto.date || new Date().toISOString().slice(0, 10);
+    const date = dto.date || omanToday();
     await this.journalPosting.assertDateOpen(date, 'This entry');
 
     await this.dataSource.transaction(async (manager) => {
@@ -163,7 +164,7 @@ export class VendorCreditService {
     if (amount > remaining + 0.001) {
       throw new BadRequestException(`Cannot refund ${amount} — only ${remaining} of this credit remains unused.`);
     }
-    const date = dto.date || new Date().toISOString().slice(0, 10);
+    const date = dto.date || omanToday();
     await this.journalPosting.assertDateOpen(date, 'This entry');
 
     const refund = await this.dataSource.transaction(async (manager) => {
@@ -234,6 +235,7 @@ export class VendorCreditService {
   // Only reversible before anything has been applied or refunded.
   async remove(id: string, actor: ActorRef) {
     const item = await this.findOne(id);
+    await this.journalPosting.assertDateOpen(item.date, 'This vendor credit');
     if (Number(item.appliedAmount) > 0 || Number(item.refundedAmount) > 0) {
       throw new BadRequestException('This credit has already been applied or refunded — it can no longer be deleted.');
     }

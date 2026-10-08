@@ -4,6 +4,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import BankAccountSelect from '../components/BankAccountSelect';
 import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Card, EmptyState, Modal, Field, inputClass, StatCard } from '../components/ui';
+import { localISODate } from '../utils/dates';
 
 const CATEGORY_OPTIONS = [
   { value: 'machinery_equipment', label: 'Machinery & Equipment' },
@@ -225,7 +226,7 @@ function AssetModal({
   const isEdit = !!asset;
   const [name, setName] = useState(asset?.name || '');
   const [category, setCategory] = useState(asset?.category || CATEGORY_OPTIONS[0].value);
-  const [purchaseDate, setPurchaseDate] = useState(asset?.purchaseDate || new Date().toISOString().slice(0, 10));
+  const [purchaseDate, setPurchaseDate] = useState(asset?.purchaseDate || localISODate());
   const [cost, setCost] = useState(asset ? String(asset.cost) : '0');
   const [salvageValue, setSalvageValue] = useState(asset ? String(asset.salvageValue) : '0');
   const [usefulLifeMonths, setUsefulLifeMonths] = useState(asset ? String(asset.usefulLifeMonths) : '36');
@@ -378,7 +379,7 @@ function DisposeModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [disposalDate, setDisposalDate] = useState(new Date().toISOString().slice(0, 10));
+  const [disposalDate, setDisposalDate] = useState(localISODate());
   const [disposalProceeds, setDisposalProceeds] = useState('0');
   const [bankAccountId, setBankAccountId] = useState('');
   const [error, setError] = useState('');

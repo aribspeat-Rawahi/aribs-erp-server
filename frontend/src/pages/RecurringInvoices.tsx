@@ -5,6 +5,7 @@ import { viewPdf } from '../api/docActions';
 import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
 import { PAYMENT_TYPE_OPTIONS, DELIVERY_METHOD_OPTIONS, TEMPLATE_OPTIONS, labelFor } from '../constants';
 import { UNIT_OPTIONS, normalizeUnit, quantityInputStep, quantityInputValue, snapQuantityToUnit, unitLabel } from '../utils/formatQuantity';
+import { localISODate } from '../utils/dates';
 
 interface Customer {
   id: string;
@@ -51,7 +52,7 @@ const FREQUENCY_OPTIONS = [
 ];
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localISODate();
 }
 
 export default function RecurringInvoices() {

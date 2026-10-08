@@ -3,6 +3,7 @@ import { Plus, Trash2, ArrowRightLeft } from 'lucide-react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { PrimaryButton, SecondaryButton, IconButton, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
+import { localISODate } from '../utils/dates';
 
 interface Supplier {
   id: string;
@@ -166,7 +167,7 @@ function NewPrepaymentModal({
 }) {
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id || '');
   const [amount, setAmount] = useState('0');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localISODate());
   const [bankAccountId, setBankAccountId] = useState(bankAccounts[0]?.id || '');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -241,7 +242,7 @@ function ApplyPrepaymentModal({
 }) {
   const remaining = Number(item.amount) - Number(item.appliedAmount);
   const [amount, setAmount] = useState(String(remaining));
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localISODate());
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);

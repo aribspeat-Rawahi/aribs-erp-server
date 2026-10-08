@@ -15,6 +15,7 @@ import { Invoice } from '../invoice/invoice.entity';
 import { InvoiceItem } from '../invoice/invoice-item.entity';
 import { Customer } from '../customer/customer.entity';
 import { BackorderService, ProductShortage } from '../stock-alerts/backorder.service';
+import { omanToday } from '../common/oman-date';
 
 // One row of Delivery Notes > Not Delivered Yet.
 export interface PendingDeliveryRow {
@@ -115,7 +116,7 @@ export class DeliveryNoteService {
 
     const note = this.repo.create({
       customerId: dto.customerId,
-      issueDate: new Date().toISOString().slice(0, 10),
+      issueDate: omanToday(),
       deliveryDate: dto.deliveryDate,
       invoiceNumber: dto.invoiceNumber,
       quotationNumber: dto.quotationNumber,
@@ -130,7 +131,7 @@ export class DeliveryNoteService {
     });
     const saved = await this.repo.save(note);
 
-    const year = new Date().getFullYear();
+    const year = Number(omanToday().slice(0, 4));
     saved.deliveryNoteNumber = `DN-${year}-${String(saved.sequenceNumber).padStart(4, '0')}`;
     await this.repo.save(saved);
 
@@ -369,7 +370,7 @@ export class DeliveryNoteService {
       deliveryDate: note.deliveryDate,
       quotationNumber: note.quotationNumber,
       companyName: settings.companyName,
-      companyVatin: settings.companyVatin || 'OM1000000000',
+      companyVatin: settings.companyVatin || '',
       companyAddress: settings.companyAddress,
       companyPhone: settings.companyPhone,
       customerName: customer.name,

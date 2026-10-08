@@ -8,6 +8,7 @@ import { SalesBatchConsumption } from '../sales/sales-batch-consumption.entity';
 import { RawMaterial } from './raw-material.entity';
 import { FinishedGood } from './finished-good.entity';
 import { BatchSource } from './batch-source.enum';
+import { omanToday } from '../common/oman-date';
 
 // A quantity this small is treated as "fully consumed" — guards against
 // leftover fractions from repeated decimal subtraction.
@@ -27,13 +28,13 @@ export class BatchTrackingService {
   ) {}
 
   private generateBatchNumber(prefix: string) {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const date = omanToday().replace(/-/g, '');
     const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
     return `${prefix}-${date}-${rand}`;
   }
 
   private todayStr() {
-    return new Date().toISOString().slice(0, 10);
+    return omanToday();
   }
 
   // Raw material IN — one row per Purchase Order line item received, or

@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { CustomerInteraction } from './customer-interaction.entity';
 import { CustomerService } from './customer.service';
 import { CreateCustomerInteractionDto } from './dto/customer.dto';
+import { omanToday } from '../common/oman-date';
 
 @Injectable()
 export class CustomerInteractionService {
@@ -25,7 +26,7 @@ export class CustomerInteractionService {
       type: dto.type,
       subject: dto.subject,
       notes: dto.notes,
-      interactionDate: dto.interactionDate || new Date().toISOString().slice(0, 10),
+      interactionDate: dto.interactionDate || omanToday(),
       createdByEmail,
     });
     return this.repo.save(item);

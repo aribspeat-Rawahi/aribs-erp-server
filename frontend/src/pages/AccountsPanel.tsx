@@ -4,6 +4,7 @@ import api from '../api/client';
 import { viewFile } from '../api/docActions';
 import { useAuth } from '../context/AuthContext';
 import { PrimaryButton, SecondaryButton, IconButton, Card, EmptyState, Modal, Field, inputClass, StatCard } from '../components/ui';
+import { localISODate } from '../utils/dates';
 
 interface BankAccount {
   id: string;
@@ -412,6 +413,7 @@ function TransactionsModal({
   const [showAddTxn, setShowAddTxn] = useState(false);
   const [txnType, setTxnType] = useState<'deposit' | 'withdrawal'>('deposit');
   const [category, setCategory] = useState('');
+  const [txnDate, setTxnDate] = useState(localISODate());
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -436,7 +438,8 @@ function TransactionsModal({
         type: txnType,
         amount: Number(amount),
         note: note || undefined,
-        category: category || undefined,
+        category,
+        date: txnDate,
       });
       setShowAddTxn(false);
       setAmount('');
@@ -493,9 +496,9 @@ function TransactionsModal({
                 />
               </Field>
             </div>
-            <Field label="Category — picking one posts this to the Journal">
-              <select className={inputClass} value={category} onChange={(e) => setCategory(e.target.value)}>
-                <option value="">— Record only, no journal entry —</option>
+            <Field label="What is this? (posted to the books)">
+              <select className={inputClass} value={category} onChange={(e) => setCategory(e.target.value)} required>
+                <option value="">Choose category</option>
                 {(txnType === 'deposit' ? DEPOSIT_CATEGORY_OPTIONS : WITHDRAWAL_CATEGORY_OPTIONS).map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
@@ -503,9 +506,14 @@ function TransactionsModal({
                 ))}
               </select>
             </Field>
-            <Field label="Note (optional)">
-              <input className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} />
-            </Field>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Date">
+                <input className={inputClass} type="date" value={txnDate} onChange={(e) => setTxnDate(e.target.value)} required />
+              </Field>
+              <Field label="Note (optional)">
+                <input className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} />
+              </Field>
+            </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2">
               <SecondaryButton onClick={() => setShowAddTxn(false)}>Cancel</SecondaryButton>
@@ -560,7 +568,7 @@ function TransferModal({
   const [fromAccountId, setFromAccountId] = useState(transfer?.fromAccountId || accounts[0]?.id || '');
   const [toAccountId, setToAccountId] = useState(transfer?.toAccountId || accounts[1]?.id || accounts[0]?.id || '');
   const [amount, setAmount] = useState(transfer ? String(transfer.amount) : '0');
-  const [date, setDate] = useState(transfer?.date || new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(transfer?.date || localISODate());
   const [note, setNote] = useState(transfer?.note || '');
   const [inTransit, setInTransit] = useState(false);
   const [documentFile, setDocumentFile] = useState<File | null>(null);

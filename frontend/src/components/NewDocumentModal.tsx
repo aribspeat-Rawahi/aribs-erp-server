@@ -3,12 +3,15 @@ import api from '../api/client';
 import { PrimaryButton, SecondaryButton, Modal, Field, inputClass } from './ui';
 import { PAYMENT_TYPE_OPTIONS, DELIVERY_METHOD_OPTIONS, TEMPLATE_OPTIONS } from '../constants';
 import { UNIT_OPTIONS, formatQuantityWithUnit, normalizeUnit, quantityInputStep, quantityInputValue, snapQuantityToUnit, unitLabel } from '../utils/formatQuantity';
+import { localISODate } from '../utils/dates';
 
 export type DocType = 'quotation' | 'invoice' | 'delivery_note';
 
 interface Customer {
   id: string;
   name: string;
+  // false = not VAT registered/applicable: new documents default to VAT excluded
+  vatApplicable?: boolean;
 }
 interface FinishedGood {
   id: string;
@@ -116,7 +119,15 @@ export default function NewDocumentModal({
   const [dueDate, setDueDate] = useState(existing?.dueDate || '');
   const [deliveryDate, setDeliveryDate] = useState(existing?.deliveryDate || '');
   const [validUntil, setValidUntil] = useState(existing?.validUntil || '');
-  const [vatExcluded, setVatExcluded] = useState(existing?.vatExcluded || false);
+  // New documents follow the customer's "VAT applicable" setting until the
+  // user ticks/unticks the box themselves; an edit keeps the saved value.
+  const customerVatExcluded = (id: string) => customers.find((c) => c.id === id)?.vatApplicable === false;
+  const [vatExcluded, setVatExcluded] = useState(existing ? !!existing.vatExcluded : customerVatExcluded(customerId));
+  const [vatTouched, setVatTouched] = useState(isEdit);
+  useEffect(() => {
+    if (!vatTouched) setVatExcluded(customerVatExcluded(customerId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId, vatTouched]);
   const [template, setTemplate] = useState(existing?.template || 'classic');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -275,12 +286,16 @@ export default function NewDocumentModal({
       <form onSubmit={onSubmit} className="space-y-3">
         <Field label="Customer">
           <select className={inputClass} value={customerId} onChange={(e) => setCustomerId(e.target.value)} required>
+            {customerId && !customers.some((c) => c.id === customerId) && <option value={customerId}>(current customer)</option>}
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
           </select>
+          {(docType === 'invoice' || docType === 'quotation') && customers.find((c) => c.id === customerId)?.vatApplicable === false && (
+            <span className="mt-1 block text-xs text-muted">This customer is set as not VAT applicable - VAT is excluded.</span>
+          )}
         </Field>
 
         <div className="space-y-2">
@@ -434,7 +449,7 @@ export default function NewDocumentModal({
                 className={`${inputClass} ${!deliveryDateEnabled ? 'bg-black/5 text-muted cursor-not-allowed' : ''} ${stockShort && !deliveryDate ? 'border-red-400' : ''}`}
                 type="date"
                 value={deliveryDate}
-                min={stockShort ? new Date().toISOString().slice(0, 10) : undefined}
+                min={stockShort ? localISODate() : undefined}
                 required={stockShort}
                 disabled={!deliveryDateEnabled}
                 title={!deliveryDateEnabled ? 'Only settable when delivery method is "Delivery on Site"' : undefined}
@@ -456,7 +471,14 @@ export default function NewDocumentModal({
               </select>
             </Field>
             <label className="flex items-center gap-2 text-sm text-ink/80 mt-5">
-              <input type="checkbox" checked={vatExcluded} onChange={(e) => setVatExcluded(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={vatExcluded}
+                onChange={(e) => {
+                  setVatTouched(true);
+                  setVatExcluded(e.target.checked);
+                }}
+              />
               VAT excluded for this {docType === 'quotation' ? 'quotation' : 'invoice'}
             </label>
           </div>

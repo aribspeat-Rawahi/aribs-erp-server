@@ -5,6 +5,7 @@ import { EmployeeService } from '../hr/employee.service';
 import { SettingsService } from '../settings/settings.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { JournalEntryService } from '../journal/journal-entry.service';
+import { omanToday } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -92,7 +93,7 @@ export class AccrualPostingService {
     const amount = this.computeEosbLiability(employee);
     try {
       if (amount <= 0) {
-        await this.journalPosting.postForSource('eosb_accrual', employee.id, new Date().toISOString().slice(0, 10), '', [], actor);
+        await this.journalPosting.postForSource('eosb_accrual', employee.id, omanToday(), '', [], actor);
         return 0;
       }
       const expenseAccountId = await this.journalPosting.findAccountIdByCode(EOSB_EXPENSE_CODE);
@@ -100,7 +101,7 @@ export class AccrualPostingService {
       await this.journalPosting.postForSource(
         'eosb_accrual',
         employee.id,
-        new Date().toISOString().slice(0, 10),
+        omanToday(),
         `End of service benefits accrual — ${employee.name || employee.id}`,
         [
           { accountId: expenseAccountId, debit: amount, description: 'End of service benefits accrual' },
@@ -123,10 +124,9 @@ export class AccrualPostingService {
   async postIncomeTaxProvision(actor: ActorRef) {
     const settings = await this.settingsService.get();
     const rate = Number(settings.incomeTaxRatePercent) / 100;
-    const today = new Date();
-    const year = today.getFullYear();
+    const endDate = omanToday();
+    const year = Number(endDate.slice(0, 4));
     const startDate = `${year}-01-01`;
-    const endDate = today.toISOString().slice(0, 10);
 
     const { netProfit } = await this.journalEntryService.getIncomeStatement(startDate, endDate);
     const provision = this.round3(Math.max(0, netProfit) * rate);

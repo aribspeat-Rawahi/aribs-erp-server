@@ -7,6 +7,7 @@ import { RepostJournalDto } from './dto/repost-journal.dto';
 import { ModuleAccess } from '../auth/module-access.decorator';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
+import { omanToday } from '../common/oman-date';
 
 interface AuthedRequest extends Request {
   user?: { userId?: string; email?: string };
@@ -137,7 +138,7 @@ export class ReportingController {
   // Reports Hub — e.g. GET /reports/balance-sheet?asOfDate=2026-09-30 (defaults to today)
   @Get('balance-sheet')
   getBalanceSheet(@Query('asOfDate') asOfDate?: string) {
-    return this.service.getBalanceSheet(asOfDate || new Date().toISOString().slice(0, 10));
+    return this.service.getBalanceSheet(asOfDate || omanToday());
   }
 
   // Reports Hub — Ledger Report: e.g. GET /reports/ledger/<accountId>?startDate=...&endDate=...

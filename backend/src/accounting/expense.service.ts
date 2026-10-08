@@ -11,6 +11,7 @@ import { BankAccount } from '../bank-account/bank-account.entity';
 import { BankTransaction, BankTransactionType } from '../bank-account/bank-transaction.entity';
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
+import { omanToday } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -116,7 +117,7 @@ export class ExpenseService {
   // Journal Entry.
   async create(dto: CreateExpenseDto, actor: ActorRef = {}) {
     this.assertNotRawMaterial(dto.category);
-    const date = dto.date || new Date().toISOString().slice(0, 10);
+    const date = dto.date || omanToday();
     await this.journalPosting.assertDateOpen(date, 'This expense');
 
     const saved = await this.dataSource.transaction(async (manager) => {

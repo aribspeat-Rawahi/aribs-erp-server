@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { JournalPostingService } from '../journal/journal-posting.service';
+import { omanToday } from '../common/oman-date';
 
 export const RAW_MATERIAL_INVENTORY_CODE = '1200';
 export const FINISHED_GOODS_INVENTORY_CODE = '1210';
@@ -32,7 +33,7 @@ export async function postStockAdjustment(
 ) {
   const amount = Math.round(Number(opts.amount || 0) * 1000) / 1000;
   if (Math.abs(amount) < 0.0005 || !(await booksStarted(journal, manager))) return;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = omanToday();
   await journal.assertDateOpen(today, 'This stock change', manager);
   const inventory = await journal.findAccountIdByCode(opts.inventoryCode);
   const adjustment = await journal.findAccountIdByCode(INVENTORY_ADJUSTMENT_CODE);

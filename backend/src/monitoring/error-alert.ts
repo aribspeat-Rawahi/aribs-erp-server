@@ -1,4 +1,5 @@
 import * as nodemailer from 'nodemailer';
+import { omanToday } from '../common/oman-date';
 
 // Emails the team when something breaks in production, so problems are
 // known before a user complains. Used by the exception filter (API 500s),
@@ -123,7 +124,7 @@ async function send(kind: string, error: unknown, context: AlertContext): Promis
     return;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = omanToday();
   if (today !== dayKey) {
     dayKey = today;
     sentToday = 0;

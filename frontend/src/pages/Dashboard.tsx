@@ -46,12 +46,13 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, Card, StatCard, Pill } from '../components/ui';
 import { formatQuantityWithUnit } from '../utils/formatQuantity';
+import { localISODate } from '../utils/dates';
 
 function monthRange() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const iso = (d: Date) => localISODate(d);
   return { startDate: iso(start), endDate: iso(end) };
 }
 
@@ -73,7 +74,7 @@ function monthYearRange(monthValue: string) {
   const [y, m] = monthValue.split('-').map(Number);
   const start = new Date(y, m - 1, 1);
   const end = new Date(y, m, 0);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const iso = (d: Date) => localISODate(d);
   return { startDate: iso(start), endDate: iso(end) };
 }
 
@@ -83,7 +84,7 @@ function monthYearLabel(monthValue: string) {
 }
 
 function getPeriodRange(mode: PeriodMode, customMonth: string) {
-  if (mode === 'life_time') return { startDate: LIFE_TIME_START, endDate: new Date().toISOString().slice(0, 10) };
+  if (mode === 'life_time') return { startDate: LIFE_TIME_START, endDate: localISODate() };
   if (mode === 'custom') return monthYearRange(customMonth);
   return monthRange();
 }

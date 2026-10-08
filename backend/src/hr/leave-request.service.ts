@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { LeaveRequest } from './leave-request.entity';
 import { CreateLeaveRequestDto, UpdateLeaveRequestDto } from './dto/leave-request.dto';
+import { omanToday } from '../common/oman-date';
 
 @Injectable()
 export class LeaveRequestService {
@@ -18,7 +19,7 @@ export class LeaveRequestService {
   create(dto: CreateLeaveRequestDto) {
     const item = this.repo.create({
       ...dto,
-      date: dto.date || new Date().toISOString().slice(0, 10),
+      date: dto.date || omanToday(),
     });
     return this.repo.save(item);
   }

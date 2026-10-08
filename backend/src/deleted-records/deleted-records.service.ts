@@ -20,6 +20,7 @@ import { VendorCreditService } from '../supplier/vendor-credit.service';
 import { VendorPrepaymentService } from '../supplier/vendor-prepayment.service';
 import { FixedAssetService } from '../fixed-asset/fixed-asset.service';
 import { RestoreService } from './deleted-records.registry';
+import { JournalPostingService } from '../journal/journal-posting.service';
 
 // The services that put money records back (resolved lazily so this
 // module doesn't have to import every module).
@@ -75,7 +76,21 @@ export class DeletedRecordsService {
     private email: EmailService,
     private invoiceService: InvoiceService,
     private moduleRef: ModuleRef,
+    private journalPosting: JournalPostingService,
   ) {}
+
+  // Undo must not bring a document back into closed books (filed VAT
+  // return / before the opening date): its journal entry could not be
+  // re-posted there, and filed figures would change.
+  private async assertRestoreDatesOpen(rows: CapturedRow[], label: string) {
+    const DATE_FIELDS = ['date', 'issueDate', 'paymentDate', 'datePaid', 'purchaseDate', 'receivedDate', 'paidDate', 'disposalDate'];
+    for (const row of rows) {
+      for (const f of DATE_FIELDS) {
+        const v = row.data?.[f];
+        if (v) await this.journalPosting.assertDateOpen(String(v).slice(0, 10), `"${label}"`);
+      }
+    }
+  }
 
   private get repo() {
     return this.dataSource.getRepository(DeletedRecord);
@@ -277,6 +292,9 @@ export class DeletedRecordsService {
     if (rec.restoreExpiresAt && new Date(rec.restoreExpiresAt) < new Date()) {
       throw new BadRequestException(`The ${UNDO_DAYS}-day undo window for this delete has passed.`);
     }
+
+    const snapForLock = JSON.parse(rec.snapshot) as { rows: CapturedRow[] };
+    await this.assertRestoreDatesOpen(snapForLock.rows || [], rec.label || 'This record');
 
     // claim it first so two clicks can't restore twice
     const claim = await this.repo.update({ id, restoredAt: IsNull() }, { restoredAt: new Date(), restoredByEmail: actor.email || null });

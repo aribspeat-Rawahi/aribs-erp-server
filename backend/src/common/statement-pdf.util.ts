@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { omanToday } from './oman-date';
 
 // One line in the Statement of Account's transaction table — an invoice
 // (debit, increases what the customer owes) or a payment (credit,
@@ -100,7 +101,7 @@ export async function generateStatementPdf(data: StatementPdfData): Promise<Buff
           doc.image(Buffer.from(data.logoBase64, 'base64'), 40, 36, { width: 42, height: 42 });
         }
         doc.fontSize(15).fillColor(GREEN_DARK).text(data.companyName, 92, 38);
-        doc.fontSize(9).fillColor('#6b7062').text(`VATIN: ${data.companyVatin}`, 92, 56);
+        if (data.companyVatin) doc.fontSize(9).fillColor('#6b7062').text(`VATIN: ${data.companyVatin}`, 92, 56);
         if (data.companyAddress) doc.text(data.companyAddress, 92, 68);
         if (data.companyPhone) doc.text(data.companyPhone, 92, 80);
 
@@ -108,7 +109,7 @@ export async function generateStatementPdf(data: StatementPdfData): Promise<Buff
         const rightW = pageWidth - 40 - rightX;
         doc.fontSize(18).fillColor('#4C9A3B').text('STATEMENT OF ACCOUNT', rightX, 40, { width: rightW, align: 'right' });
         doc.fontSize(9).fillColor('#333').text(`Period: ${data.startDate} to ${data.endDate}`, rightX, 62, { width: rightW, align: 'right' });
-        doc.text(`Generated: ${new Date().toISOString().slice(0, 10)}`, rightX, 74, { width: rightW, align: 'right' });
+        doc.text(`Generated: ${omanToday()}`, rightX, 74, { width: rightW, align: 'right' });
 
         doc.moveTo(40, 96).lineTo(pageWidth - 40, 96).strokeColor('#4C9A3B').lineWidth(2).stroke();
 

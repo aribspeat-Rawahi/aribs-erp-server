@@ -12,6 +12,7 @@ import {
   Field,
   inputClass,
 } from '../components/ui';
+import { localISODate } from '../utils/dates';
 
 const ACCOUNT_TYPE_OPTIONS = [
   { value: 'asset', label: 'Asset' },
@@ -442,7 +443,7 @@ function JournalEntryModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localISODate());
   const [reference, setReference] = useState('');
   const [memo, setMemo] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([emptyLine(accounts), emptyLine(accounts)]);

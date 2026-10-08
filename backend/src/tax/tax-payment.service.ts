@@ -14,6 +14,7 @@ import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { applyBankMovement, rowForInsert } from '../common/bank-movement.util';
 import { discardFile } from '../common/discard-file.util';
+import { omanToday } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -46,7 +47,7 @@ export class TaxPaymentService {
 
   // Same generator convention as claimNumber/entryNumber/transferNumber.
   private generatePaymentNumber() {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const date = omanToday().replace(/-/g, '');
     const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
     return `TX-${date}-${rand}`;
   }
@@ -97,7 +98,7 @@ export class TaxPaymentService {
   // TaxPayment row, with a row lock on the account so two concurrent
   // payments can't both pass the balance check.
   async create(dto: CreateTaxPaymentDto, actor: ActorRef) {
-    const date = dto.datePaid || new Date().toISOString().slice(0, 10);
+    const date = dto.datePaid || omanToday();
     await this.journalPosting.assertDateOpen(date, 'This tax payment');
     const amount = Number(dto.amount);
 
@@ -163,6 +164,8 @@ export class TaxPaymentService {
       const item = await manager.findOne(TaxPayment, { where: { id } });
       if (!item) throw new NotFoundException('Tax payment not found');
       await this.journalPosting.assertDateOpen(item.datePaid, 'This tax payment', manager);
+      // the new date must be open too, or the books move into a closed period
+      if (dto.datePaid) await this.journalPosting.assertDateOpen(dto.datePaid, 'The new payment date', manager);
 
       if (item.bankAccountId && item.bankTransactionId) {
         const oldAccount = await manager.findOne(BankAccount, {

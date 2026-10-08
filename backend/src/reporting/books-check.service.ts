@@ -3,6 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { ReportingService } from './reporting.service';
 import { JournalGapsService } from './journal-gaps.service';
+import { omanToday } from '../common/oman-date';
 
 export interface BooksCheck {
   key: string;
@@ -141,7 +142,7 @@ export class BooksCheckService {
     // formatted in SQL - a raw DATE comes back as a JS Date (timezone-shifted)
     const s = (await this.dataSource.query("SELECT DATE_FORMAT(openingBalanceDate, '%Y-%m-%d') AS d FROM settings WHERE id = 1"))?.[0];
     const from = s?.d ? this.nextDay(String(s.d)) : '2000-01-01';
-    const to = new Date().toISOString().slice(0, 10);
+    const to = omanToday();
     const v = await this.reporting.getVatSummary(from, to);
     const vatPaid = await this.scalar(
       "SELECT COALESCE(SUM(l.debit),0) FROM journal_entry_lines l JOIN accounts a ON a.id = l.accountId JOIN journal_entries e ON e.id = l.journalEntryId WHERE a.code = '2100' AND e.sourceType = 'tax_payment'",

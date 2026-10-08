@@ -10,6 +10,7 @@ import { InvoiceService } from '../invoice/invoice.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { CreateInvoiceDto } from '../invoice/dto/invoice.dto';
 import { UnitService } from '../units/unit.service';
+import { omanToday } from '../common/oman-date';
 
 @Injectable()
 export class RecurringInvoiceService {
@@ -29,7 +30,7 @@ export class RecurringInvoiceService {
   ) {}
 
   private todayStr() {
-    return new Date().toISOString().slice(0, 10);
+    return omanToday();
   }
 
   private addDays(dateStr: string, days: number) {

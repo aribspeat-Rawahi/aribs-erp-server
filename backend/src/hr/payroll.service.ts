@@ -10,6 +10,7 @@ import { GeneratePayrollDto, UpdatePayrollDto, MarkPayrollPaidDto } from './dto/
 import { BankTransactionType } from '../bank-account/bank-transaction.entity';
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
+import { omanToday } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -202,16 +203,16 @@ export class PayrollService {
       const txn = await this.bankAccountService.addTransaction(dto.bankAccountId, {
         type: BankTransactionType.WITHDRAWAL,
         amount: Number(row.calculatedSalary),
-        date: new Date().toISOString().slice(0, 10),
+        date: omanToday(),
         note: `Salary — ${row.staffName} (${row.periodFrom} to ${row.periodTo})`,
       });
       row.bankAccountId = dto.bankAccountId;
       row.bankTransactionId = txn.id;
     }
 
-    await this.journalPosting.assertDateOpen(new Date().toISOString().slice(0, 10), 'Paying salary today');
+    await this.journalPosting.assertDateOpen(omanToday(), 'Paying salary today');
     row.isPaid = true;
-    row.paidDate = new Date().toISOString().slice(0, 10);
+    row.paidDate = omanToday();
     const saved = await this.repo.save(row);
 
     if (saved.bankAccountId) {

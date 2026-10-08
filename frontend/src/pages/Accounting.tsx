@@ -13,6 +13,7 @@ import TaxPanel from './TaxPanel';
 import FixedAssetsPanel from './FixedAssetsPanel';
 import AnalyticsPanel from './AnalyticsPanel';
 import OpeningBalancesPanel from './OpeningBalancesPanel';
+import { localISODate } from '../utils/dates';
 
 const EXPENSE_CATEGORY_OPTIONS = [
   { value: 'rent', label: 'Rent' },
@@ -90,7 +91,7 @@ function monthRange() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const iso = (d: Date) => localISODate(d);
   return { startDate: iso(start), endDate: iso(end) };
 }
 
@@ -505,7 +506,7 @@ function AddExpenseModal({
 }) {
   const [category, setCategory] = useState(EXPENSE_CATEGORY_OPTIONS[0].value);
   const [amount, setAmount] = useState('0');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localISODate());
   const [description, setDescription] = useState('');
   const [vendorName, setVendorName] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -696,7 +697,7 @@ function ReimbursementModal({
   const [employeeId, setEmployeeId] = useState(claim?.employeeId || employees[0]?.id || '');
   const [category, setCategory] = useState(claim?.category || REIMBURSEMENT_CATEGORY_OPTIONS[0].value);
   const [amount, setAmount] = useState(claim ? String(claim.amount) : '0');
-  const [date, setDate] = useState(claim?.date || new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(claim?.date || localISODate());
   const [description, setDescription] = useState(claim?.description || '');
   const [invoiceNumber, setInvoiceNumber] = useState(claim?.invoiceNumber || '');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);

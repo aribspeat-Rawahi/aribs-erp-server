@@ -7,6 +7,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Field, IconButton, SecondaryButton, PrimaryButton, inputClass } from './ui';
 import api from '../api/client';
+import { localISODate } from '../utils/dates';
 
 export const INTERACTION_TYPES: { value: string; label: string }[] = [
   { value: 'call', label: 'Call' },
@@ -27,7 +28,7 @@ export interface InteractionEntry {
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localISODate();
 }
 
 function typeLabel(type: string) {

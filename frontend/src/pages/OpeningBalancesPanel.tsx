@@ -108,6 +108,19 @@ export default function OpeningBalancesPanel() {
   const [docModal, setDocModal] = useState<{ kind: 'customer' | 'supplier'; row?: DocRow } | null>(null);
   const [accountModal, setAccountModal] = useState<{ row?: AccountRow } | null>(null);
   const [showFinalize, setShowFinalize] = useState(false);
+  // rows with figures typed but not saved yet (key -> name): Finalize and
+  // switching sections wait for them, so nothing typed is silently dropped
+  const [unsaved, setUnsaved] = useState<Record<string, string>>({});
+  const markUnsaved = useCallback((key: string, name: string, isDirty: boolean) => {
+    setUnsaved((prev) => {
+      if (isDirty === !!prev[key]) return prev;
+      const next = { ...prev };
+      if (isDirty) next[key] = name;
+      else delete next[key];
+      return next;
+    });
+  }, []);
+  const unsavedNames = Object.values(unsaved);
 
   const load = useCallback(async () => {
     const res = await api.get('/opening-balances');
@@ -233,16 +246,27 @@ export default function OpeningBalancesPanel() {
               ))}
             {!finalized && canManage && (
               <div className="mt-3 flex justify-end">
-                <PrimaryButton icon={CheckCircle2} disabled={data.blockers.length > 0} onClick={() => setShowFinalize(true)}>
+                <PrimaryButton icon={CheckCircle2} disabled={data.blockers.length > 0 || unsavedNames.length > 0} onClick={() => setShowFinalize(true)}>
                   Finalize opening balances
                 </PrimaryButton>
+              </div>
+            )}
+            {!finalized && unsavedNames.length > 0 && (
+              <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-700">
+                <AlertTriangle size={14} className="shrink-0 mt-px" /> Not saved yet: {unsavedNames.join(', ')}. Press Save on each row (or clear it) before finalizing.
               </div>
             )}
           </Card>
 
           <Pill
             value={section}
-            onChange={(v) => setSection(v as Section)}
+            onChange={(v) => {
+              if (unsavedNames.length) {
+                setError(`Save these rows first (or clear what you typed): ${unsavedNames.join(', ')}.`);
+                return;
+              }
+              setSection(v as Section);
+            }}
             options={[
               { value: 'bank', label: 'Bank & Cash' },
               { value: 'customers', label: `Customers (${data.customers.length})` },
@@ -260,7 +284,12 @@ export default function OpeningBalancesPanel() {
               </SectionHelp>
               {data.banks.length === 0 && <div className="p-4 text-sm text-muted">No bank or cash accounts yet - add them on Accounting &gt; Accounts first.</div>}
               {data.banks.map((b) => (
-                <BankLine key={b.bankAccountId} row={b} editable={editable} onSave={(amount) => run(() => saveLine({ kind: 'bank', refId: b.bankAccountId, amount }, b.lineId), `${b.name} saved.`)} />
+                <BankLine
+                  key={b.bankAccountId}
+                  row={b}
+                  editable={editable}
+                  onDirtyChange={(d) => markUnsaved(`bank:${b.bankAccountId}`, b.name, d)}
+                  onSave={(amount) => run(() => saveLine({ kind: 'bank', refId: b.bankAccountId, amount }, b.lineId), `${b.name} saved.`)} />
               ))}
             </Card>
           )}
@@ -295,6 +324,7 @@ export default function OpeningBalancesPanel() {
                       key={r.itemId}
                       row={r}
                       editable={editable}
+                      onDirtyChange={(d) => markUnsaved(`${grp.kind}:${r.itemId}`, r.name, d)}
                       onSave={(quantity, unitCost) => run(() => saveLine({ kind: grp.kind, refId: r.itemId, quantity, unitCost }, r.lineId), `${r.name} saved.`)}
                       onClear={() => run(() => api.delete(`/opening-balances/lines/${r.lineId}`), `${r.name} cleared.`)}
                     />
@@ -417,10 +447,26 @@ function SectionHelp({ children, card }: { children: ReactNode; card?: boolean }
   return card ? <Card>{p}</Card> : p;
 }
 
-function BankLine({ row, editable, onSave }: { row: BankRow; editable: boolean; onSave: (amount: number) => void }) {
+function BankLine({
+  row,
+  editable,
+  onSave,
+  onDirtyChange,
+}: {
+  row: BankRow;
+  editable: boolean;
+  onSave: (amount: number) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
   const [value, setValue] = useState(String(row.amount));
   useEffect(() => setValue(String(row.amount)), [row.amount]);
   const changed = Number(value) !== Number(row.amount) || (!row.lineId && Number(value) !== 0);
+  const dirty = editable && !row.openedLater && value !== '' && changed;
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty]);
   return (
     <div className="flex flex-wrap items-center gap-3 px-4 py-3">
       <div className="min-w-0 flex-1">
@@ -452,11 +498,13 @@ function StockLine({
   editable,
   onSave,
   onClear,
+  onDirtyChange,
 }: {
   row: StockRow;
   editable: boolean;
   onSave: (quantity: number, unitCost: number) => void;
   onClear: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [qty, setQty] = useState(row.quantity != null ? String(row.quantity) : '');
   const [cost, setCost] = useState(row.unitCost != null ? String(row.unitCost) : row.currentCost ? String(row.currentCost) : '');
@@ -466,6 +514,13 @@ function StockLine({
   }, [row.quantity, row.unitCost, row.currentCost]);
   const value = Math.round(Number(qty || 0) * Number(cost || 0) * 1000) / 1000;
   const changed = !row.lineId || Number(qty) !== Number(row.quantity) || Number(cost) !== Number(row.unitCost);
+  // typed a quantity that isn't saved yet
+  const dirty = editable && qty !== '' && Number(qty) > 0 && changed;
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty]);
   return (
     <div className="flex flex-wrap items-center gap-3 px-4 py-3">
       <div className="min-w-0 flex-1 basis-40">
@@ -782,8 +837,8 @@ function FinalizeModal({ data, onClose, onConfirm, error }: { data: Overview; on
           </li>
         </ul>
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          After this, opening balances cannot be changed and nothing can be recorded on or before {data.openingBalanceDate}. Mistakes are corrected with a journal
-          entry dated after it.
+          After this, opening balances cannot be changed and nothing can be recorded on or before {data.openingBalanceDate}. Mistakes are corrected with
+          normal documents dated after it (credit note, stock adjustment, bank transaction).
         </div>
         <label className="flex items-start gap-2 text-ink/80">
           <input type="checkbox" className="mt-0.5" checked={checked} onChange={(e) => setChecked(e.target.checked)} />

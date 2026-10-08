@@ -74,7 +74,24 @@ function deliveryMethodLabel(method?: string) {
   return '-';
 }
 
+// "TAX INVOICE" only when the company has a VAT registration number (a
+// business that isn't VAT registered can't issue a tax invoice under Oman
+// VAT law); "(VAT EXCLUDED)" when this invoice charges no VAT.
+function invoiceTitle(data: InvoicePdfData) {
+  const base = data.companyVatin ? 'TAX INVOICE' : 'INVOICE';
+  return data.vatExcluded ? `${base} (VAT EXCLUDED)` : base;
+}
+
+// "VATIN: ..." only when one is set in Settings - never a placeholder.
+function vatinText(data: InvoicePdfData) {
+  return data.companyVatin ? `VATIN: ${data.companyVatin}` : '';
+}
+
 function docLabel(data: InvoicePdfData, base: string) {
+  // quotations, delivery notes and purchase orders aren't tax documents
+  if (data.documentType === 'quotation' || data.documentType === 'delivery_note' || data.documentType === 'purchase_order') {
+    base = base.replace(/TAX /g, '');
+  }
   if (data.documentType === 'quotation') {
     return base.replace(/INVOICE/g, 'QUOTATION').replace(/Invoice/g, 'Quotation');
   }
@@ -131,7 +148,7 @@ async function renderClassic(doc: PDFKit.PDFDocument, data: InvoicePdfData) {
     doc.image(Buffer.from(data.logoBase64, 'base64'), 40, 40, { width: 46, height: 46 });
   }
   doc.fontSize(17).fillColor(GREEN_DARK).text(data.companyName, 96, 44);
-  doc.fontSize(10).fillColor('#6b7062').text(`VATIN: ${data.companyVatin}`, 96, 64);
+  if (data.companyVatin) doc.fontSize(10).fillColor('#6b7062').text(vatinText(data), 96, 64);
 
   // Right-hand column of header text: give every line of it an explicit
   // width so align:'right' aligns against the page's actual right margin
@@ -140,7 +157,7 @@ async function renderClassic(doc: PDFKit.PDFDocument, data: InvoicePdfData) {
   const rightColX = 300;
   const rightColWidth = pageWidth - 40 - rightColX;
   doc.fontSize(21).fillColor('#4C9A3B')
-    .text(docLabel(data, data.vatExcluded ? 'INVOICE (VAT EXCLUDED)' : 'INVOICE'), rightColX, 44, { width: rightColWidth, align: 'right' });
+    .text(docLabel(data, invoiceTitle(data)), rightColX, 44, { width: rightColWidth, align: 'right' });
   doc.fontSize(10).fillColor('#333')
     .text(`${docLabel(data, 'Invoice No')}: ${data.invoiceNumber} (v${data.version})`, rightColX, 68, { width: rightColWidth, align: 'right' })
     .text(`Date: ${data.issueDate}`, rightColX, 81, { width: rightColWidth, align: 'right' });
@@ -230,7 +247,7 @@ async function renderFormal(doc: PDFKit.PDFDocument, data: InvoicePdfData) {
   // Title bar
   const titleH = 28;
   doc.rect(boxLeft, boxTop, boxRight - boxLeft, titleH).fill(GREEN_LIGHT);
-  doc.fontSize(14).fillColor(GREEN).text(docLabel(data, data.vatExcluded ? 'TAX INVOICE (VAT EXCLUDED)' : 'TAX INVOICE'), boxLeft, boxTop + 9, { width: boxRight - boxLeft, align: 'center' });
+  doc.fontSize(14).fillColor(GREEN).text(docLabel(data, invoiceTitle(data)), boxLeft, boxTop + 9, { width: boxRight - boxLeft, align: 'center' });
   doc.moveTo(boxLeft, boxTop + titleH).lineTo(boxRight, boxTop + titleH).strokeColor(GREEN).lineWidth(1.5).stroke();
 
   // Header: company (left) | doc info (right)
@@ -252,7 +269,9 @@ async function renderFormal(doc: PDFKit.PDFDocument, data: InvoicePdfData) {
   if (data.logoBase64) doc.image(Buffer.from(data.logoBase64, 'base64'), boxLeft + pad, headerTop + pad, { width: 42, height: 42 });
   doc.fontSize(12.5).fillColor(GREEN_DARK).text(data.companyName, boxLeft + pad + 50, headerTop + pad);
   doc.fontSize(9).fillColor('#444').text(
-    `${data.companyAddress || 'Sultanate of Oman'}\nVATIN: ${data.companyVatin}${data.companyPhone ? '  |  Tel: ' + data.companyPhone : ''}`,
+    [data.companyAddress || 'Sultanate of Oman', [vatinText(data), data.companyPhone ? `Tel: ${data.companyPhone}` : ''].filter(Boolean).join('  |  ')]
+      .filter(Boolean)
+      .join('\n'),
     boxLeft + pad + 50, headerTop + pad + 16, { width: midX - boxLeft - pad - 58, lineGap: 2 },
   );
 
@@ -373,8 +392,7 @@ async function renderPoStyle(doc: PDFKit.PDFDocument, data: InvoicePdfData) {
   if (data.logoBase64) doc.image(Buffer.from(data.logoBase64, 'base64'), boxLeft + pad, boxTop + pad, { width: 36, height: 36 });
   doc.fontSize(15).fillColor(GREEN_DARK).text(data.companyName.toUpperCase(), boxLeft + pad + 46, boxTop + pad);
   doc.fontSize(9).fillColor('#444').text(
-    `${data.companyAddress || 'Sultanate of Oman'} | CR No: 1400123
-Tel: ${data.companyPhone || '-'} | VATIN: ${data.companyVatin}`,
+    `${data.companyAddress || 'Sultanate of Oman'}\n${[`Tel: ${data.companyPhone || '-'}`, vatinText(data)].filter(Boolean).join(' | ')}`,
     boxLeft + pad + 46, boxTop + pad + 17, { width: boxRight - boxLeft - pad * 2 - 46, lineGap: 2 },
   );
   doc.moveTo(boxLeft, boxTop + letterheadH).lineTo(boxRight, boxTop + letterheadH).strokeColor(GREEN_DARK).lineWidth(1.5).stroke();
@@ -383,7 +401,7 @@ Tel: ${data.companyPhone || '-'} | VATIN: ${data.companyVatin}`,
   const titleH = 26;
   doc.rect(boxLeft, boxTop + letterheadH, boxRight - boxLeft, titleH).fill('#4C9A3B');
   doc.fontSize(12).fillColor('#fff').text(
-    docLabel(data, data.vatExcluded ? 'TAX INVOICE (VAT EXCLUDED)' : 'TAX INVOICE'),
+    docLabel(data, invoiceTitle(data)),
     boxLeft, boxTop + letterheadH + 7, { width: boxRight - boxLeft, align: 'center' },
   );
 

@@ -9,6 +9,7 @@ import { ApprovalRequestType, ApprovalRequestStatus } from '../approval/approval
 import { BankTransactionType } from '../bank-account/bank-transaction.entity';
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
+import { omanToday } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -117,7 +118,7 @@ export class SalaryAdvanceService {
       const txn = await this.bankAccountService.addTransaction(dto.bankAccountId, {
         type: BankTransactionType.WITHDRAWAL,
         amount: Number(advance.amount),
-        date: new Date().toISOString().slice(0, 10),
+        date: omanToday(),
         note: `Salary advance — ${advance.employeeName}`,
       });
       advance.bankAccountId = dto.bankAccountId;
@@ -125,8 +126,8 @@ export class SalaryAdvanceService {
     }
 
     advance.disbursed = true;
-    await this.journalPosting.assertDateOpen(new Date().toISOString().slice(0, 10), 'Paying an advance today');
-    advance.disbursedDate = new Date().toISOString().slice(0, 10);
+    await this.journalPosting.assertDateOpen(omanToday(), 'Paying an advance today');
+    advance.disbursedDate = omanToday();
     const saved = await this.repo.save(advance);
 
     if (saved.bankAccountId) {

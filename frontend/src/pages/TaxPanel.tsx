@@ -6,6 +6,7 @@ import VatReturnsPanel from './VatReturnsPanel';
 import { viewFile } from '../api/docActions';
 import { useAuth } from '../context/AuthContext';
 import { PrimaryButton, SecondaryButton, IconButton, Pill, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
+import { localISODate } from '../utils/dates';
 
 interface TaxRate {
   id: string;
@@ -322,7 +323,7 @@ function TaxPaymentModal({
       .catch(() => undefined);
   }, []);
   const [amount, setAmount] = useState(payment ? String(payment.amount) : '0');
-  const [datePaid, setDatePaid] = useState(payment?.datePaid || new Date().toISOString().slice(0, 10));
+  const [datePaid, setDatePaid] = useState(payment?.datePaid || localISODate());
   const [reference, setReference] = useState(payment?.reference || '');
   const [note, setNote] = useState(payment?.note || '');
   const [bankAccountId, setBankAccountId] = useState(payment?.bankAccountId || '');

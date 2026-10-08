@@ -7,6 +7,7 @@ import { Invoice } from './invoice.entity';
 import { CustomerService } from '../customer/customer.service';
 import { EmailService } from '../common/email.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { omanToday } from '../common/oman-date';
 
 // CRM Step 5 — Payment Reminder Automation.
 //
@@ -39,7 +40,7 @@ export class PaymentReminderService {
   ) {}
 
   private todayStr() {
-    return new Date().toISOString().slice(0, 10);
+    return omanToday();
   }
 
   private parseDayList(envKey: string, fallback: number[]): number[] {

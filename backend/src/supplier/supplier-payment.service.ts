@@ -10,6 +10,7 @@ import { BankTransaction, BankTransactionType } from '../bank-account/bank-trans
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { applyBankMovement, rowForInsert } from '../common/bank-movement.util';
+import { omanToday } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -40,7 +41,7 @@ export class SupplierPaymentService {
   }
 
   private todayStr() {
-    return new Date().toISOString().slice(0, 10);
+    return omanToday();
   }
 
   // Auto-posts (or removes) Dr 2000 Accounts Payable / Cr {this

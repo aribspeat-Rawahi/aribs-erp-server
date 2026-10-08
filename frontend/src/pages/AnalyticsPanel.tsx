@@ -3,12 +3,13 @@ import { TrendingUp, Users, Boxes, LineChart as LineChartIcon, AlertTriangle } f
 import api from '../api/client';
 import { Card, StatCard, EmptyState, inputClass } from '../components/ui';
 import { formatQuantityWithUnit } from '../utils/formatQuantity';
+import { localISODate } from '../utils/dates';
 
 function monthRange() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const iso = (d: Date) => localISODate(d);
   return { startDate: iso(start), endDate: iso(end) };
 }
 

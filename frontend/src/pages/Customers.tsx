@@ -17,6 +17,7 @@ import {
   savePartyDocuments,
 } from '../components/PartyBankDetails';
 import { InteractionLogSection } from '../components/PartyInteractionLog';
+import { localISODate } from '../utils/dates';
 
 interface Customer {
   id: string;
@@ -425,7 +426,7 @@ function CustomerCreditStatus({ customerId, creditLimit }: { customerId: string;
 function defaultStatementRange() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const toStr = (d: Date) => d.toISOString().slice(0, 10);
+  const toStr = (d: Date) => localISODate(d);
   return { start: toStr(start), end: toStr(now) };
 }
 

@@ -5,16 +5,17 @@ import api from '../api/client';
 import { PageHeader, Card, EmptyState, inputClass } from '../components/ui';
 import { formatQuantityWithUnit } from '../utils/formatQuantity';
 import { useAuth } from '../context/AuthContext';
+import { localISODate } from '../utils/dates';
 
 function monthRange() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const iso = (d: Date) => localISODate(d);
   return { startDate: iso(start), endDate: iso(end) };
 }
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localISODate();
 }
 
 const REPORT_TITLES: Record<string, string> = {
@@ -1658,7 +1659,7 @@ function BooksCheckReport() {
                     </div>
                   </div>
                   {m.locked ? (
-                    <span className="shrink-0 text-xs text-muted">Closed period - record it with a manual journal entry in the open period</span>
+                    <span className="shrink-0 text-xs text-muted">Closed period - cannot be re-posted. Contact support.</span>
                   ) : m.canRepost ? (
                     canRepost && (
                       <button
@@ -1671,7 +1672,7 @@ function BooksCheckReport() {
                       </button>
                     )
                   ) : (
-                    <span className="shrink-0 text-xs text-muted">Needs a manual journal entry</span>
+                    <span className="shrink-0 text-xs text-muted">Can't be re-posted automatically. Contact support.</span>
                   )}
                 </div>
               );

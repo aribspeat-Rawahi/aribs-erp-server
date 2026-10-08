@@ -13,6 +13,7 @@ import { BatchSource } from '../inventory/batch-source.enum';
 import { JournalPostingService } from '../journal/journal-posting.service';
 import { assertQuantityForUnit } from '../units/units';
 import { BackorderService } from '../stock-alerts/backorder.service';
+import { omanToday } from '../common/oman-date';
 
 // Auto-posted Chart-of-Accounts codes for a completed production run —
 // transfers material cost from Raw Materials into Finished Goods
@@ -79,7 +80,7 @@ export class ProductionOrderService {
     );
 
     // closed books: a production run is dated today
-    await this.journalPosting.assertDateOpen(new Date().toISOString().slice(0, 10), 'This production run');
+    await this.journalPosting.assertDateOpen(omanToday(), 'This production run');
     const result = await this.dataSource.transaction(async (manager) => {
       const order = await manager.findOne(ProductionOrder, {
         where: { id },
@@ -190,7 +191,7 @@ export class ProductionOrderService {
         await this.journalPosting.postForSource(
           'production_order',
           id,
-          new Date().toISOString().slice(0, 10),
+          omanToday(),
           `Production Order ${finishedGoodBatch.batchNumber} — material transfer`,
           [
             { accountId: fgAccountId, debit: newValue, description: 'Finished goods produced' },

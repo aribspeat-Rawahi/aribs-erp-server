@@ -7,6 +7,7 @@ import { RawMaterialService } from '../inventory/raw-material.service';
 import { FinishedGoodService } from '../inventory/finished-good.service';
 import { JournalEntryService } from '../journal/journal-entry.service';
 import { ProductionBatchConsumption } from '../manufacturing/production-batch-consumption.entity';
+import { omanToday, omanDate } from '../common/oman-date';
 
 // New "Analytics" tab (Accounting → Analytics) — goes one layer past the
 // existing Reports Hub: instead of raw period totals, these combine
@@ -32,7 +33,7 @@ export class AnalyticsService {
   }
 
   private todayStr() {
-    return new Date().toISOString().slice(0, 10);
+    return omanToday();
   }
 
   // Per-product revenue, COGS (quantity sold × current costPerUnit — same
@@ -194,7 +195,7 @@ export class AnalyticsService {
     const [consumptions, rawMaterials, salesRows, finishedGoods] = await Promise.all([
       this.consumptionRepo.find({ where: { createdAt: Between(startDate, endDate) } }),
       this.rawMaterialService.findAll(),
-      this.invoiceService.getProductSalesBreakdown(startDate.toISOString().slice(0, 10), this.todayStr()),
+      this.invoiceService.getProductSalesBreakdown(omanDate(startDate), this.todayStr()),
       this.finishedGoodService.findAll(),
     ]);
 
@@ -240,7 +241,7 @@ export class AnalyticsService {
     });
 
     return {
-      period: { startDate: startDate.toISOString().slice(0, 10), endDate: this.todayStr(), daysBack },
+      period: { startDate: omanDate(startDate), endDate: this.todayStr(), daysBack },
       rawMaterials: rawMaterialRows.sort((a, b) => a.consumedInPeriod - b.consumedInPeriod),
       finishedGoods: finishedGoodRows.sort((a, b) => a.soldInPeriod - b.soldInPeriod),
       slowMovingCount:

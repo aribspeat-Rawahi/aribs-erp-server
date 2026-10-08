@@ -18,6 +18,7 @@ import { PurchaseOrderService } from '../supplier/purchase-order.service';
 import { SupplierService } from '../supplier/supplier.service';
 import { JournalEntryService } from '../journal/journal-entry.service';
 import { RecurringInvoice } from '../recurring-invoice/recurring-invoice.entity';
+import { omanToday } from '../common/oman-date';
 
 @Injectable()
 export class ReportingService {
@@ -261,7 +262,7 @@ export class ReportingService {
       }),
       { current: 0, days1to30: 0, days31to60: 0, days61to90: 0, days90plus: 0, totalOutstanding: 0 },
     );
-    return { asOfDate: new Date().toISOString().slice(0, 10), rows: withNames, grandTotal };
+    return { asOfDate: omanToday(), rows: withNames, grandTotal };
   }
 
   // Dashboard's bottom "Stock Value" bar — raw materials valued at their
@@ -480,6 +481,6 @@ export class ReportingService {
   }
 
   private todayStr() {
-    return new Date().toISOString().slice(0, 10);
+    return omanToday();
   }
 }

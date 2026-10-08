@@ -31,6 +31,7 @@ import {
 } from '../utils/formatQuantity';
 import VendorPrepaymentsPanel from './VendorPrepaymentsPanel';
 import VendorCreditsPanel from './VendorCreditsPanel';
+import { localISODate } from '../utils/dates';
 
 interface Supplier {
   id: string;
@@ -1175,7 +1176,7 @@ function PurchaseOrderRow({
   onDelete: () => void;
 }) {
   const received = o.status === 'received' || o.status === 'partially_received';
-  const overdue = (o.status === 'ordered' || o.status === 'partially_received') && !!o.expectedDate && o.expectedDate < new Date().toISOString().slice(0, 10);
+  const overdue = (o.status === 'ordered' || o.status === 'partially_received') && !!o.expectedDate && o.expectedDate < localISODate();
   return (
     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
@@ -1265,7 +1266,7 @@ function ReceiveGoodsModal({
     })
     .filter((l) => l.remaining > 0.0005);
   const [qty, setQty] = useState<Record<string, string>>(() => Object.fromEntries(lines.map((l) => [String(l.id), quantityInputValue(l.remaining, l.unit)])));
-  const [receivedDate, setReceivedDate] = useState(new Date().toISOString().slice(0, 10));
+  const [receivedDate, setReceivedDate] = useState(localISODate());
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [invoiceDate, setInvoiceDate] = useState('');
   const [note, setNote] = useState('');
@@ -1395,7 +1396,7 @@ function PayBillModal({
 
   const [amount, setAmount] = useState('');
   const [paymentType, setPaymentType] = useState('bank_transfer');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentDate, setPaymentDate] = useState(localISODate());
   const [bankAccountId, setBankAccountId] = useState(bankAccounts[0]?.id || '');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -1727,7 +1728,7 @@ function NewPurchaseReturnModal({
         quantity: '0',
       })),
   );
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localISODate());
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);

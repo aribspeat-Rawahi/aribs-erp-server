@@ -127,6 +127,8 @@ export default function DeliveryNotes() {
   const existing: ExistingDoc | undefined = editing
     ? {
         id: editing.id,
+        // keep the document's own customer (else the form defaults to the first one)
+        customerId: editing.customerId,
         items: editing.items,
         paymentType: editing.paymentType,
         deliveryMethod: editing.deliveryMethod,

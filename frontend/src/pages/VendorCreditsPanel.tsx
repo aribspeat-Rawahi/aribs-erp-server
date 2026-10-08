@@ -3,6 +3,7 @@ import { Plus, Trash2, ArrowRightLeft, Banknote } from 'lucide-react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { PrimaryButton, SecondaryButton, IconButton, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
+import { localISODate } from '../utils/dates';
 
 interface Supplier {
   id: string;
@@ -185,7 +186,7 @@ function NewCreditModal({
 }) {
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id || '');
   const [amount, setAmount] = useState('0');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localISODate());
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -251,7 +252,7 @@ function ApplyCreditModal({
 }) {
   const remaining = Number(item.amount) - Number(item.appliedAmount) - Number(item.refundedAmount);
   const [amount, setAmount] = useState(String(remaining));
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localISODate());
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -338,7 +339,7 @@ function RefundCreditModal({
 }) {
   const remaining = Number(item.amount) - Number(item.appliedAmount) - Number(item.refundedAmount);
   const [amount, setAmount] = useState(String(remaining));
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localISODate());
   const [bankAccountId, setBankAccountId] = useState(bankAccounts[0]?.id || '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);

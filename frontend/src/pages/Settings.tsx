@@ -6,6 +6,7 @@ import { TEMPLATE_OPTIONS } from '../constants';
 import { viewFile, downloadFile } from '../api/docActions';
 import { useAuth } from '../context/AuthContext';
 import { Can } from '../components/Permission';
+import { localISODate } from '../utils/dates';
 
 interface CompanyDocument {
   id: string;
@@ -94,7 +95,7 @@ export default function Settings() {
     setBackingUp(true);
     setBackupError('');
     try {
-      const stamp = new Date().toISOString().slice(0, 10);
+      const stamp = localISODate();
       await downloadFile('/backup/download', `erp-backup-${stamp}.sql`);
     } catch {
       setBackupError('Backup failed — please try again, or check that the server can reach the database.');

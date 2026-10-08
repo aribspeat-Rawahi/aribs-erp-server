@@ -5,6 +5,7 @@ import { CreateJournalEntryDto } from './dto/journal-entry.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
 import { ModuleAccess } from '../auth/module-access.decorator';
+import { omanToday } from '../common/oman-date';
 
 const ACCOUNTING_ROLES = [UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.CEO, UserRole.MD];
 
@@ -40,7 +41,7 @@ export class JournalEntryController {
   // e.g. GET /journal-entries/balance-sheet?asOfDate=2026-09-30 (defaults to today)
   @Get('balance-sheet')
   getBalanceSheet(@Query('asOfDate') asOfDate?: string) {
-    return this.service.getBalanceSheet(asOfDate || new Date().toISOString().slice(0, 10));
+    return this.service.getBalanceSheet(asOfDate || omanToday());
   }
 
   // Ledger Report — e.g. GET /journal-entries/ledger/<accountId>?startDate=...&endDate=...

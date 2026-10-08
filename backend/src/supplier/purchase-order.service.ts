@@ -20,6 +20,7 @@ import { computePaymentStatus } from '../invoice/payment-status.util';
 import { SettingsService } from '../settings/settings.service';
 import { generateInvoicePdf, InvoicePdfItem } from '../common/invoice-pdf.util';
 import { RawMaterial } from '../inventory/raw-material.entity';
+import { omanToday, omanDate } from '../common/oman-date';
 
 interface ActorRef {
   userId?: string;
@@ -59,7 +60,7 @@ export class PurchaseOrderService {
   }
 
   private todayStr() {
-    return new Date().toISOString().slice(0, 10);
+    return omanToday();
   }
 
   private calcTotals(items: { quantity: number; costPerUnit: number; vatRate?: number }[]) {
@@ -172,7 +173,7 @@ export class PurchaseOrderService {
           ...totals,
         }),
       );
-      order.poNumber = `PO-${new Date().getFullYear()}-${String(order.sequenceNumber).padStart(4, '0')}`;
+      order.poNumber = `PO-${omanToday().slice(0, 4)}-${String(order.sequenceNumber).padStart(4, '0')}`;
       await manager.save(order);
       const items = await manager.save(lines.map((i) => manager.create(PurchaseOrderItem, { ...i, purchaseOrderId: order.id })));
       return { ...order, items };
@@ -254,7 +255,7 @@ export class PurchaseOrderService {
           createdByEmail: actor.email || null,
         }),
       );
-      grn.grnNumber = `GRN-${new Date().getFullYear()}-${String(grn.sequenceNumber).padStart(4, '0')}`;
+      grn.grnNumber = `GRN-${omanToday().slice(0, 4)}-${String(grn.sequenceNumber).padStart(4, '0')}`;
       await manager.save(grn);
 
       for (const l of grnLines) {
@@ -571,10 +572,10 @@ export class PurchaseOrderService {
     return generateInvoicePdf({
       invoiceNumber: order.poNumber,
       version: 1,
-      issueDate: new Date(order.createdAt).toISOString().slice(0, 10),
+      issueDate: omanDate(order.createdAt),
       deliveryDate: order.expectedDate || undefined,
       companyName: settings.companyName,
-      companyVatin: settings.companyVatin || 'OM1000000000',
+      companyVatin: settings.companyVatin || '',
       companyAddress: settings.companyAddress,
       companyPhone: settings.companyPhone,
       customerName: supplier.name,

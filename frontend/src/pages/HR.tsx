@@ -27,6 +27,7 @@ import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Card, StatCard,
 import { fetchFileBlobUrl, viewFile } from '../api/docActions';
 import { Can, useCan } from '../components/Permission';
 import SalaryAdvance from './SalaryAdvance';
+import { localISODate } from '../utils/dates';
 
 // Common document types kept as suggestions (via <datalist>) rather than
 // a fixed list — the office can still type any label ("and many more").
@@ -275,7 +276,7 @@ const statusTone: Record<string, string> = {
 };
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localISODate();
 }
 
 // 0 = Sunday … 6 = Saturday, matching JS Date#getDay() and the backend's
