@@ -118,6 +118,9 @@ export class ReimbursementService {
     if (item.status !== ReimbursementStatus.PENDING) {
       throw new BadRequestException(`Only pending claims can be approved (this one is ${item.status})`);
     }
+    if (item.requestedByUserId && item.requestedByUserId === decidedBy.userId) {
+      throw new BadRequestException('You cannot approve your own claim - another approver must do it.');
+    }
     item.status = ReimbursementStatus.APPROVED;
     item.decidedByUserId = decidedBy.userId;
     item.decidedByEmail = decidedBy.email;

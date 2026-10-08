@@ -49,8 +49,29 @@ export class Employee {
 
   // Base salary for a full pay period, entered here so Payroll > Generate
   // can prefill "Staff Salary" automatically instead of starting at 0.
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  // Monthly BASIC salary (OMR). End-of-service gratuity is calculated on
+  // basic only; allowances below are paid monthly but not part of it.
+  @Column({ type: 'decimal', precision: 12, scale: 3, nullable: true })
   baseSalary: number;
+
+  @Column({ type: 'decimal', precision: 12, scale: 3, default: 0 })
+  housingAllowance: number;
+
+  @Column({ type: 'decimal', precision: 12, scale: 3, default: 0 })
+  transportAllowance: number;
+
+  @Column({ type: 'decimal', precision: 12, scale: 3, default: 0 })
+  otherAllowance: number;
+
+  // Covered by the Social Protection Fund (Omani staff): SPF contributions
+  // are deducted and there is no end-of-service gratuity. Defaults from
+  // nationality (OM) but can be changed.
+  @Column({ default: false })
+  socialProtectionCovered: boolean;
+
+  // Last working day. The final month's pay is prorated up to it.
+  @Column({ type: 'date', nullable: true })
+  leftDate: string | null;
 
   // Optional per-employee overtime rate (currency per hour). When unset,
   // the employee's department's Department.otRatePerHour is used instead

@@ -80,6 +80,15 @@ const GAP_QUERIES: { sourceType: string; label: string; canRepost: boolean; sql:
           LEFT JOIN journal_entries e ON e.sourceType = 'expense' AND e.sourceId = t.id
           WHERE e.id IS NULL AND t.bankAccountId IS NOT NULL`,
   },
+  {
+    sourceType: 'payroll',
+    label: 'Salary payment',
+    canRepost: false,
+    sql: `SELECT t.id, t.staffName AS number, DATE_FORMAT(t.paidDate, '%Y-%m-%d') AS date, t.calculatedSalary AS amount
+          FROM hr_payroll t
+          LEFT JOIN journal_entries e ON e.sourceType = 'payroll' AND e.sourceId = t.id
+          WHERE e.id IS NULL AND t.isPaid = 1 AND t.bankAccountId IS NOT NULL AND t.calculatedSalary > 0`,
+  },
   // Posted in the same transaction as the document since this change, so
   // only older records can show up here.
   {

@@ -62,6 +62,9 @@ export class EmployeeService {
   async create(dto: CreateEmployeeDto) {
     await this.checkBiometricIdFree(dto.biometricId);
     const item = this.repo.create({ ...dto, biometricId: dto.biometricId || null } as any) as unknown as Employee;
+    // Omani staff are covered by the Social Protection Fund unless set otherwise
+    if (dto.socialProtectionCovered === undefined) item.socialProtectionCovered = String(dto.nationality || '').toUpperCase() === 'OM';
+    if (!dto.leftDate) item.leftDate = null;
     this.syncActiveFromStatus(item, dto.status);
     return this.repo.save(item);
   }
@@ -69,8 +72,13 @@ export class EmployeeService {
   async update(id: string, dto: UpdateEmployeeDto) {
     const item = await this.findOne(id);
     if (dto.biometricId !== undefined) await this.checkBiometricIdFree(dto.biometricId, id);
+    const nationalityChanged = dto.nationality !== undefined && dto.nationality !== item.nationality;
     Object.assign(item, dto);
     if (dto.biometricId !== undefined) item.biometricId = (dto.biometricId || null) as unknown as string;
+    if (dto.leftDate !== undefined) item.leftDate = dto.leftDate || null;
+    if (dto.socialProtectionCovered === undefined && nationalityChanged) {
+      item.socialProtectionCovered = String(dto.nationality || '').toUpperCase() === 'OM';
+    }
     // Only auto-derive `active` from `status` when the caller isn't
     // explicitly setting `active` itself (e.g. the existing Deactivate
     // button, which only sends { active: false }).

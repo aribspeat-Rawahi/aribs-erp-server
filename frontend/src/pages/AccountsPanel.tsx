@@ -39,6 +39,7 @@ const WITHDRAWAL_CATEGORY_OPTIONS = [
   { value: 'owners_draw', label: "Owner's Draw" },
   { value: 'bank_charges', label: 'Bank Charges' },
   { value: 'other_expense', label: 'Other Expense' },
+  { value: 'spf_payment', label: 'Social Protection Fund payment' },
 ];
 const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
   [...DEPOSIT_CATEGORY_OPTIONS, ...WITHDRAWAL_CATEGORY_OPTIONS].map((o) => [o.value, o.label]),

@@ -17,6 +17,8 @@ interface SalaryAdvanceRow {
   employeeId: string | null;
   employeeName: string;
   amount: number;
+  installmentAmount?: number | string | null;
+  recoveredAmount?: number | string;
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
   requestedByEmail?: string;
@@ -116,7 +118,15 @@ export default function SalaryAdvance() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-start shrink-0">
-                  <span className="text-sm font-semibold text-brand-700">{Number(r.amount).toFixed(3)} OMR</span>
+                  <span className="text-sm font-semibold text-brand-700 text-right">
+                    {Number(r.amount).toFixed(3)} OMR
+                    {r.disbursed && (
+                      <span className="block text-xs font-normal text-muted">
+                        Recovered {Number(r.recoveredAmount || 0).toFixed(3)}
+                        {r.installmentAmount ? ` · ${Number(r.installmentAmount).toFixed(3)}/month` : ''}
+                      </span>
+                    )}
+                  </span>
                   {canManage && r.status === 'approved' && !r.disbursed && (
                     <SecondaryButton onClick={() => setDisbursingItem(r)} requires="edit" requiresModule="approvals">
                       Disburse
@@ -169,6 +179,7 @@ function NewRequestModal({
 }) {
   const [employeeId, setEmployeeId] = useState(employees[0]?.id || '');
   const [amount, setAmount] = useState('');
+  const [installment, setInstallment] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -181,7 +192,12 @@ function NewRequestModal({
     setBusy(true);
     setError('');
     try {
-      await api.post('/salary-advances', { employeeId, amount: Number(amount), reason: reason.trim() });
+      await api.post('/salary-advances', {
+        employeeId,
+        amount: Number(amount),
+        installmentAmount: installment ? Number(installment) : undefined,
+        reason: reason.trim(),
+      });
       onSaved();
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Could not submit this request.');
@@ -215,6 +231,9 @@ function NewRequestModal({
             onChange={(e) => setAmount(e.target.value)}
             required
           />
+        </Field>
+        <Field label="Recover per month from salary (OMR, blank = all from the next payroll)">
+          <input className={inputClass} type="number" min="0.001" step="0.001" value={installment} onChange={(e) => setInstallment(e.target.value)} />
         </Field>
         <Field label="Reason">
           <textarea

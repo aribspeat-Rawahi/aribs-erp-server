@@ -74,6 +74,23 @@ export class Settings {
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 15 })
   incomeTaxRatePercent: number;
 
+  // Social Protection Fund (Omani staff, Social Protection Law RD 52/2023):
+  // employee share deducted from pay, employer share an expense; both on
+  // the wage up to the ceiling. Confirm the rates with the SPF / accountant.
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 8 })
+  spfEmployeeRatePercent: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 13.5 })
+  spfEmployerRatePercent: number;
+
+  @Column({ type: 'decimal', precision: 12, scale: 3, default: 3000 })
+  spfWageCeiling: number;
+
+  // Expatriate savings scheme start: it replaces end-of-service gratuity,
+  // so EOSB stops accruing for service after this date.
+  @Column({ type: 'date', nullable: true, default: '2027-07-19' })
+  expatSavingsSchemeStart: string | null;
+
   // Opening balances (Accounting > Opening Balances): the last day of the
   // old books. Once finalized, nothing can be posted on or before this
   // date (see JournalPostingService.assertDateOpen).

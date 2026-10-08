@@ -27,6 +27,10 @@ interface SettingsData {
   shiftEndTime?: string;
   attendanceGraceMinutes?: number;
   incomeTaxRatePercent?: number;
+  spfEmployeeRatePercent?: number | string;
+  spfEmployerRatePercent?: number | string;
+  spfWageCeiling?: number | string;
+  expatSavingsSchemeStart?: string | null;
   updatedAt?: string;
 }
 
@@ -272,6 +276,10 @@ export default function Settings() {
           settings.incomeTaxRatePercent !== undefined && settings.incomeTaxRatePercent !== null
             ? Number(settings.incomeTaxRatePercent)
             : undefined,
+        spfEmployeeRatePercent: settings.spfEmployeeRatePercent !== undefined ? Number(settings.spfEmployeeRatePercent) : undefined,
+        spfEmployerRatePercent: settings.spfEmployerRatePercent !== undefined ? Number(settings.spfEmployerRatePercent) : undefined,
+        spfWageCeiling: settings.spfWageCeiling !== undefined ? Number(settings.spfWageCeiling) : undefined,
+        expatSavingsSchemeStart: settings.expatSavingsSchemeStart || undefined,
       });
       setNotice('Saved.');
     } catch (err: any) {
@@ -503,6 +511,29 @@ export default function Settings() {
               Oman's standard corporate rate is 15% — change this if your accountant confirms a different rate or
               threshold applies. Used by the monthly Income Tax Provision that auto-posts against year-to-date net
               profit (Accounting tab → Journals).
+            </p>
+          </div>
+
+          <div>
+            <span className="block text-xs font-medium text-muted mb-2">Payroll - Social Protection Fund &amp; gratuity</span>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+              <Field label="SPF employee share (%)">
+                <input className={inputClass} type="number" step="0.01" min="0" max="100" value={settings.spfEmployeeRatePercent ?? 8} onChange={(e) => setSettings({ ...settings, spfEmployeeRatePercent: e.target.value })} />
+              </Field>
+              <Field label="SPF employer share (%)">
+                <input className={inputClass} type="number" step="0.01" min="0" max="100" value={settings.spfEmployerRatePercent ?? 13.5} onChange={(e) => setSettings({ ...settings, spfEmployerRatePercent: e.target.value })} />
+              </Field>
+              <Field label="SPF wage ceiling (OMR/month)">
+                <input className={inputClass} type="number" step="0.001" min="0" value={settings.spfWageCeiling ?? 3000} onChange={(e) => setSettings({ ...settings, spfWageCeiling: e.target.value })} />
+              </Field>
+              <Field label="Expat savings scheme starts">
+                <input className={inputClass} type="date" value={settings.expatSavingsSchemeStart || ''} onChange={(e) => setSettings({ ...settings, expatSavingsSchemeStart: e.target.value })} />
+              </Field>
+            </div>
+            <p className="text-xs text-muted mt-1.5">
+              Omani staff (Social Protection Fund): the employee share is deducted from pay, the employer share is a cost - confirm both rates with the
+              SPF or your accountant. Expatriate staff accrue end-of-service gratuity on basic salary (old law up to 30 Jul 2023, then one month a year)
+              until the savings scheme starts.
             </p>
           </div>
 

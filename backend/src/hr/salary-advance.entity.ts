@@ -32,6 +32,15 @@ export class SalaryAdvanceRequest {
   @Column({ type: 'decimal', precision: 10, scale: 3 })
   amount: number;
 
+  // Monthly amount recovered from payroll (null = the whole remaining
+  // balance from the next payroll).
+  @Column({ type: 'decimal', precision: 12, scale: 3, nullable: true })
+  installmentAmount: number | null;
+
+  // Recovered so far through approved payroll rows.
+  @Column({ type: 'decimal', precision: 12, scale: 3, default: 0 })
+  recoveredAmount: number;
+
   @Column({ type: 'text' })
   reason: string;
 

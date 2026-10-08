@@ -12,6 +12,12 @@ export class CreateSalaryAdvanceDto {
   @IsString()
   @MinLength(1)
   reason: string;
+
+  // monthly recovery from payroll; blank = all of it from the next payroll
+  @IsOptional()
+  @IsNumber()
+  @Min(0.001)
+  installmentAmount?: number;
 }
 
 // Bank account is optional — same convention as MarkPayrollPaidDto:

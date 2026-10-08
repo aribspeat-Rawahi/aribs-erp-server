@@ -47,6 +47,7 @@ export class SalaryAdvanceService {
         employeeId: dto.employeeId,
         employeeName: employee.name,
         amount: dto.amount,
+        installmentAmount: dto.installmentAmount ?? null,
         reason: dto.reason,
         status: SalaryAdvanceStatus.PENDING,
         requestedByUserId: requestedBy.userId,
@@ -71,6 +72,10 @@ export class SalaryAdvanceService {
   // unlike Invoice/Quotation, there's no create/update payload to
   // replay, just a status flip, since the record already exists.
   async applyApprovedRequest(approvalRequestId: string, approvedBy: ActorRef = {}) {
+    const pending = await this.approvalService.findOne(approvalRequestId);
+    if (pending.requestedByUserId && pending.requestedByUserId === approvedBy.userId) {
+      throw new BadRequestException('You cannot approve your own salary advance request.');
+    }
     const request = await this.approvalService.claimPending(approvalRequestId, 'salary_advance');
     const advance = await this.repo.findOne({ where: { id: request.targetId } });
     if (!advance) throw new NotFoundException('Salary advance request not found');
@@ -114,6 +119,7 @@ export class SalaryAdvanceService {
       throw new BadRequestException('This salary advance has already been disbursed.');
     }
 
+    await this.journalPosting.assertDateOpen(omanToday(), 'Paying an advance today');
     if (dto.bankAccountId) {
       const txn = await this.bankAccountService.addTransaction(dto.bankAccountId, {
         type: BankTransactionType.WITHDRAWAL,

@@ -10,11 +10,33 @@ export class GeneratePayrollDto {
   to: string;
 }
 
+// one calendar month: from = the 1st, to = its last day
+export class ApprovePayrollDto {
+  @IsString()
+  @MinLength(1)
+  from: string;
+
+  @IsString()
+  @MinLength(1)
+  to: string;
+}
+
 export class UpdatePayrollDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
   staffSalary?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  allowances?: number;
+
+  // unpaid absence days (corrections to what attendance gave)
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  unpaidDays?: number;
 
   @IsOptional()
   @IsString()

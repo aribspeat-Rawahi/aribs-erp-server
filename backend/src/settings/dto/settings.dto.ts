@@ -45,6 +45,27 @@ export class UpdateSettingsDto {
   @Min(0)
   @Max(100)
   incomeTaxRatePercent?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  spfEmployeeRatePercent?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  spfEmployerRatePercent?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  spfWageCeiling?: number;
+
+  @IsOptional()
+  @IsString()
+  expatSavingsSchemeStart?: string;
 }
 
 export class UploadCompanyDocumentDto {

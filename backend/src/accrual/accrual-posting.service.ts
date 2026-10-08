@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { EmployeeService } from '../hr/employee.service';
 import { SettingsService } from '../settings/settings.service';
@@ -19,28 +21,27 @@ const EOSB_PAYABLE_CODE = '2150';
 const INCOME_TAX_EXPENSE_CODE = '710';
 const INCOME_TAX_PAYABLE_CODE = '2160';
 
-// Standard Oman gratuity tiers: 15 days' basic salary per year of
-// service for the first 3 years, 30 days' (1 month) basic salary per
-// year after that (Oman Labour Law, Royal Decree 35/2003 Art. 60 and
-// its amendments — the same tiered structure used across the GCC).
-// Kept as constants rather than a Settings field since changing the
-// legal formula itself is rare; the amounts it's applied to
-// (baseSalary, joinedDate) already come from each Employee record.
-const EOSB_DAYS_PER_YEAR_FIRST_3 = 15;
-const EOSB_DAYS_PER_YEAR_AFTER_3 = 30;
+// End-of-service gratuity, Oman (expatriate staff - Omani staff are covered
+// by the Social Protection Fund instead), on the last BASIC wage:
+//  - service up to 30 Jul 2023 (old Labour Law RD 35/2003): 15 days' wage a
+//    year for the first 3 years, then 30 days' wage a year
+//  - service from 31 Jul 2023 (Labour Law RD 53/2023, Art. 61): one basic
+//    monthly wage a year
+// It stops accruing when the expatriate savings scheme starts (Settings).
+const NEW_LABOUR_LAW_FROM = '2023-07-31';
 const DAYS_PER_MONTH = 30;
 const DAYS_PER_YEAR = 365.25;
 
+const ymdUtc = (d: string) => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10));
+const yearsBetween = (a: string, b: string) => Math.max(0, (ymdUtc(b) - ymdUtc(a)) / 86400000 / DAYS_PER_YEAR);
+const minDate = (...ds: (string | null | undefined)[]) => ds.filter((d): d is string => !!d).sort()[0];
+const maxDate = (...ds: (string | null | undefined)[]) => ds.filter((d): d is string => !!d).sort().slice(-1)[0];
+
 // Accrues two statutory provisions this system had a Chart-of-Accounts
 // line for but no automated posting: End of Service Benefits (Gratuity)
-// and corporate Income Tax — both regenerate-on-change every run
-// (existing JournalPostingService.postForSource semantics: delete-then-
-// recreate), so re-running the same month, or the cron firing twice, is
-// safe and just replaces the entry with the same/updated total rather
-// than double-accruing. Same reasoning as FixedAssetService's monthly
-// depreciation, but simpler — no "already posted this period" guard is
-// needed because these post the running TOTAL each time, not an
-// incremental top-up.
+// and corporate Income Tax. EOSB posts the monthly change (one entry per
+// employee per month, replaced if the month is re-run); income tax
+// replaces one year-to-date entry per year.
 @Injectable()
 export class AccrualPostingService {
   private readonly logger = new Logger(AccrualPostingService.name);
@@ -51,68 +52,94 @@ export class AccrualPostingService {
     private journalPosting: JournalPostingService,
     private journalEntryService: JournalEntryService,
     private config: ConfigService,
+    @InjectDataSource() private dataSource: DataSource,
   ) {}
 
   private round3(n: number) {
     return Math.round(n * 1000) / 1000;
   }
 
-  // Full end-of-service gratuity liability accrued to date for one
-  // employee, under the standard Oman tiered formula. Returns 0 if the
-  // record is missing what's needed to compute it (baseSalary/joinedDate).
-  computeEosbLiability(employee: { baseSalary?: number | string | null; joinedDate?: string | null }, asOf = new Date()): number {
-    if (!employee.baseSalary || !employee.joinedDate) return 0;
-    const baseSalary = Number(employee.baseSalary);
-    if (!(baseSalary > 0)) return 0;
+  // Gratuity earned up to `asOf` (YYYY-MM-DD) by one expatriate employee.
+  computeEosbLiability(
+    employee: { baseSalary?: number | string | null; joinedDate?: string | null; leftDate?: string | null; socialProtectionCovered?: boolean },
+    asOf: string,
+    savingsSchemeStart?: string | null,
+  ): number {
+    if (employee.socialProtectionCovered) return 0;
+    const basic = Number(employee.baseSalary || 0);
+    const joined = employee.joinedDate ? String(employee.joinedDate).slice(0, 10) : '';
+    if (!(basic > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(joined)) return 0;
+    const end = minDate(asOf, employee.leftDate ? String(employee.leftDate).slice(0, 10) : null, savingsSchemeStart || null)!;
+    if (joined >= end) return 0;
+    const daily = basic / DAYS_PER_MONTH;
 
-    const joined = new Date(employee.joinedDate);
-    if (Number.isNaN(joined.getTime())) return 0;
-    const serviceYears = (asOf.getTime() - joined.getTime()) / (1000 * 60 * 60 * 24 * DAYS_PER_YEAR);
-    if (serviceYears <= 0) return 0;
+    const oldEnd = minDate(end, NEW_LABOUR_LAW_FROM)!;
+    const oldYears = joined < oldEnd ? yearsBetween(joined, oldEnd) : 0;
+    const oldPart = Math.min(oldYears, 3) * 15 * daily + Math.max(oldYears - 3, 0) * 30 * daily;
 
-    const dailyWage = baseSalary / DAYS_PER_MONTH;
-    let gratuity: number;
-    if (serviceYears <= 3) {
-      gratuity = serviceYears * EOSB_DAYS_PER_YEAR_FIRST_3 * dailyWage;
-    } else {
-      const firstThree = 3 * EOSB_DAYS_PER_YEAR_FIRST_3 * dailyWage;
-      const remainder = (serviceYears - 3) * EOSB_DAYS_PER_YEAR_AFTER_3 * dailyWage;
-      gratuity = firstThree + remainder;
-    }
-    return this.round3(gratuity);
+    const newStart = maxDate(joined, NEW_LABOUR_LAW_FROM)!;
+    const newYears = newStart < end ? yearsBetween(newStart, end) : 0;
+    const newPart = newYears * basic;
+    return this.round3(oldPart + newPart);
   }
 
-  // Recomputes and re-posts (or clears) one employee's EOSB accrual —
-  // shared by the monthly cron and the manual "recompute now" endpoint.
-  // sourceId is per-employee so each has its own Journal Entry, easy to
-  // trace/audit individually. A terminated/archived employee is simply
-  // skipped by the caller — their last-posted balance is left exactly as
-  // it was until an actual payout settles it (a separate future feature;
-  // this is accrual only).
-  async postEosbFor(employee: { id: string; baseSalary?: number | string | null; joinedDate?: string | null; name?: string }, actor: ActorRef) {
-    const amount = this.computeEosbLiability(employee);
+  // What is already booked for this employee (all their EOSB entries except
+  // `exceptSourceId`), from the ledger.
+  private async eosbPosted(employeeId: string, exceptSourceId: string): Promise<number> {
+    const rows = await this.dataSource.query(
+      `SELECT COALESCE(SUM(l.credit - l.debit), 0) AS n
+         FROM journal_entry_lines l
+         JOIN journal_entries e ON e.id = l.journalEntryId
+         JOIN accounts a ON a.id = l.accountId
+        WHERE a.code = ? AND e.sourceType = 'eosb_accrual'
+          AND (e.sourceId = ? OR e.sourceId LIKE ?) AND e.sourceId <> ?`,
+      [EOSB_PAYABLE_CODE, employeeId, `${employeeId}:%`, exceptSourceId],
+    );
+    return this.round3(Number(rows?.[0]?.n || 0));
+  }
+
+  // Books only the CHANGE in the gratuity owed since the last posting, as
+  // one entry per employee per month (dated `asOf`). Re-running the same
+  // month replaces that month's entry; earlier months - even in closed
+  // VAT periods - are never touched. A lower salary gives a reversal.
+  async postEosbFor(
+    employee: { id: string; baseSalary?: number | string | null; joinedDate?: string | null; leftDate?: string | null; socialProtectionCovered?: boolean; name?: string },
+    actor: ActorRef,
+    asOf: string = omanToday(),
+    savingsSchemeStart?: string | null,
+  ) {
+    const sourceId = `${employee.id}:${asOf.slice(0, 7)}`;
+    const target = this.computeEosbLiability(employee, asOf, savingsSchemeStart);
+    const change = this.round3(target - (await this.eosbPosted(employee.id, sourceId)));
     try {
-      if (amount <= 0) {
-        await this.journalPosting.postForSource('eosb_accrual', employee.id, omanToday(), '', [], actor);
+      if (Math.abs(change) < 0.0005) {
+        await this.journalPosting.postForSource('eosb_accrual', sourceId, asOf, '', [], actor);
         return 0;
       }
       const expenseAccountId = await this.journalPosting.findAccountIdByCode(EOSB_EXPENSE_CODE);
       const payableAccountId = await this.journalPosting.findAccountIdByCode(EOSB_PAYABLE_CODE);
+      const amount = Math.abs(change);
+      const up = change > 0;
       await this.journalPosting.postForSource(
         'eosb_accrual',
-        employee.id,
-        omanToday(),
-        `End of service benefits accrual — ${employee.name || employee.id}`,
-        [
-          { accountId: expenseAccountId, debit: amount, description: 'End of service benefits accrual' },
-          { accountId: payableAccountId, credit: amount, description: 'End of service benefits accrual' },
-        ],
+        sourceId,
+        asOf,
+        `End of service gratuity ${asOf.slice(0, 7)} - ${employee.name || employee.id} (owed ${target.toFixed(3)})`,
+        up
+          ? [
+              { accountId: expenseAccountId, debit: amount, description: 'End of service gratuity' },
+              { accountId: payableAccountId, credit: amount, description: 'End of service gratuity' },
+            ]
+          : [
+              { accountId: payableAccountId, debit: amount, description: 'End of service gratuity (decrease)' },
+              { accountId: expenseAccountId, credit: amount, description: 'End of service gratuity (decrease)' },
+            ],
         actor,
       );
     } catch (err) {
-      console.error(`Auto-posting failed for eosb_accrual ${employee.id}:`, err);
+      console.error(`Auto-posting failed for eosb_accrual ${sourceId}:`, err);
     }
-    return amount;
+    return change;
   }
 
   // Recomputes and re-posts (or clears) the Income Tax provision for the
@@ -162,20 +189,30 @@ export class AccrualPostingService {
   // this month's EOSB expense counted in net profit) and Payment
   // Reminders (08:00).
   @Cron('15 7 1 * *')
-  async runMonthlyEosbAccrual(actor: ActorRef = {}) {
+  async runMonthlyEosbAccrualCron() {
+    // the 1st of the month books the month just ended, dated its last day
+    const today = omanToday();
+    const d = new Date(Date.UTC(+today.slice(0, 4), +today.slice(5, 7) - 1, 0));
+    await this.runMonthlyEosbAccrual({}, d.toISOString().slice(0, 10));
+  }
+
+  async runMonthlyEosbAccrual(actor: ActorRef = {}, asOf: string = omanToday()) {
     if (String(this.config.get('ACCRUAL_POSTING_ENABLED')).toLowerCase() === 'false') return;
+    const settings = await this.settingsService.get();
     const employees = await this.employeeService.findAll();
     let posted = 0;
     for (const employee of employees) {
-      if (!employee.active || employee.status !== 'working') continue;
+      // everyone with a join date: leavers are computed up to their last day
+      // (their change is then 0), Social Protection staff get nothing
+      if (employee.socialProtectionCovered || !employee.joinedDate) continue;
       try {
-        const amount = await this.postEosbFor(employee, actor);
-        if (amount > 0) posted++;
+        const change = await this.postEosbFor(employee, actor, asOf, settings.expatSavingsSchemeStart);
+        if (change !== 0) posted++;
       } catch (err) {
         this.logger.error(`EOSB accrual failed for employee ${employee.id}:`, err as Error);
       }
     }
-    this.logger.log(`Monthly EOSB accrual run: ${posted} of ${employees.length} employee(s) posted.`);
+    this.logger.log(`EOSB accrual as of ${asOf}: ${posted} of ${employees.length} employee(s) changed.`);
   }
 
   // Runs at 07:30 on the 1st of every month.

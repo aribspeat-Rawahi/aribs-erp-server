@@ -14,6 +14,7 @@ export enum BankTransactionCategory {
   OWNERS_DRAW = 'owners_draw', // Withdrawal — owner taking money out
   BANK_CHARGES = 'bank_charges', // Withdrawal — bank fees/charges
   OTHER_EXPENSE = 'other_expense', // Withdrawal — anything else not worth its own Expense entry
+  SPF_PAYMENT = 'spf_payment', // Withdrawal — paying the Social Protection Fund what payroll owes it
 }
 
 // code = Chart of Accounts code to Dr (withdrawal) or Cr (deposit)
@@ -25,6 +26,7 @@ export const BANK_TRANSACTION_CATEGORY_ACCOUNT_CODE: Record<BankTransactionCateg
   [BankTransactionCategory.OWNERS_DRAW]: '310', // Owner's Draw (Equity)
   [BankTransactionCategory.BANK_CHARGES]: '606', // Bank Transaction Charge (Expense)
   [BankTransactionCategory.OTHER_EXPENSE]: '628', // General Expenses
+  [BankTransactionCategory.SPF_PAYMENT]: '2170', // Social Insurance (SPF) Payable - clears what payroll booked
 };
 
 export const BANK_TRANSACTION_CATEGORY_LABEL: Record<BankTransactionCategory, string> = {
@@ -34,4 +36,5 @@ export const BANK_TRANSACTION_CATEGORY_LABEL: Record<BankTransactionCategory, st
   [BankTransactionCategory.OWNERS_DRAW]: "Owner's Draw",
   [BankTransactionCategory.BANK_CHARGES]: 'Bank Charges',
   [BankTransactionCategory.OTHER_EXPENSE]: 'Other Expense',
+  [BankTransactionCategory.SPF_PAYMENT]: 'Social Protection Fund payment',
 };

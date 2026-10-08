@@ -44,6 +44,29 @@ export class CreateEmployeeDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  housingAllowance?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  transportAllowance?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  otherAllowance?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  socialProtectionCovered?: boolean;
+
+  @IsOptional()
+  @IsString()
+  leftDate?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   otRatePerHour?: number;
 
   @IsOptional()
@@ -189,6 +212,29 @@ export class UpdateEmployeeDto {
   @IsNumber()
   @Min(0)
   baseSalary?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  housingAllowance?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  transportAllowance?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  otherAllowance?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  socialProtectionCovered?: boolean;
+
+  @IsOptional()
+  @IsString()
+  leftDate?: string;
 
   @IsOptional()
   @IsNumber()

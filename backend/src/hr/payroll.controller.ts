@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { PayrollService } from './payroll.service';
-import { GeneratePayrollDto, UpdatePayrollDto, MarkPayrollPaidDto } from './dto/payroll.dto';
+import { GeneratePayrollDto, UpdatePayrollDto, MarkPayrollPaidDto, ApprovePayrollDto } from './dto/payroll.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
 import { ModuleAccess } from '../auth/module-access.decorator';
@@ -28,6 +28,26 @@ export class PayrollController {
   @Post('generate')
   generate(@Body() dto: GeneratePayrollDto) {
     return this.service.generate(dto);
+  }
+
+  // Approve every draft row of a month: books the salary cost (accrual).
+  @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @Post('approve')
+  approveMonth(@Body() dto: ApprovePayrollDto, @Req() req: AuthedRequest) {
+    return this.service.approveMonth(dto, { userId: req.user?.userId, email: req.user?.email });
+  }
+
+  @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @Post(':id/approve')
+  approve(@Param('id') id: string, @Req() req: AuthedRequest) {
+    return this.service.approve(id, { userId: req.user?.userId, email: req.user?.email });
+  }
+
+  // approved -> draft again (not once paid)
+  @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @Post(':id/unapprove')
+  unapprove(@Param('id') id: string, @Req() req: AuthedRequest) {
+    return this.service.unapprove(id, { userId: req.user?.userId, email: req.user?.email });
   }
 
   @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)

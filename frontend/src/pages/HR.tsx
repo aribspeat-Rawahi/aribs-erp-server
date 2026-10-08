@@ -208,6 +208,11 @@ interface Employee {
   team?: string;
   shift?: string;
   baseSalary?: number;
+  housingAllowance?: number;
+  transportAllowance?: number;
+  otherAllowance?: number;
+  socialProtectionCovered?: boolean;
+  leftDate?: string | null;
   otRatePerHour?: number;
   biometricId?: string;
   photoPath?: string;
@@ -2481,6 +2486,17 @@ interface PayrollRow {
   otRate: number;
   otPay: number;
   staffSalary: number;
+  allowances: number;
+  status: 'draft' | 'approved' | 'paying' | 'paid';
+  periodDays: number;
+  employedDays: number;
+  unpaidDays: number;
+  grossPay: number;
+  absenceDeduction: number;
+  socialProtectionCovered: boolean;
+  spfEmployee: number;
+  spfEmployer: number;
+  advanceRecovery: number;
   salaryPaidBy: string | null;
   calculatedSalary: number;
   createdAt: string;
@@ -2500,21 +2516,31 @@ interface PayrollDocument {
   filePath: string;
   uploadedAt: string;
 }
-// Minimal shape needed here — the full record-keeping page is SalaryAdvance.tsx.
-interface SalaryAdvanceRow {
-  employeeId: string | null;
-  amount: number;
-  disbursed: boolean;
+
+const m3 = (n: number | string | null | undefined) => Number(n || 0).toFixed(3);
+
+function payrollStatusOf(r: PayrollRow): 'draft' | 'approved' | 'paid' {
+  if (r.isPaid || r.status === 'paid') return 'paid';
+  if (r.status === 'approved' || r.status === 'paying') return 'approved';
+  return 'draft';
 }
+
+const PAYROLL_STATUS_STYLE: Record<string, string> = {
+  draft: 'bg-black/5 text-ink/70',
+  approved: 'bg-amber-50 text-amber-700',
+  paid: 'bg-brand-50 text-brand-700',
+};
 
 const PAYROLL_PAGE_SIZE_OPTIONS = [10, 25, 50];
 
 function PayrollTab({ employees }: { employees: Employee[] }) {
-  const [from, setFrom] = useState(`${todayStr().slice(0, 7)}-01`);
-  const [to, setTo] = useState(todayStr());
+  // payroll runs per calendar month
+  const [month, setMonth] = useState(todayStr().slice(0, 7));
+  const range = monthToRange(month);
   const [rows, setRows] = useState<PayrollRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -2522,9 +2548,7 @@ function PayrollTab({ employees }: { employees: Employee[] }) {
   const [payingItem, setPayingItem] = useState<PayrollRow | null>(null);
   const [docsItem, setDocsItem] = useState<PayrollRow | null>(null);
   const [bankAccounts, setBankAccounts] = useState<PayrollBankAccount[]>([]);
-  // Salary Advance moved here from its own left-menu item — it's a sibling
-  // concern to Payroll (both pay employees money) so it now lives as a
-  // sub-view of this tab instead of a separate top-level page.
+  // Salary Advance lives as a sub-view of this tab (both pay employees money).
   const [subView, setSubView] = useState<'payroll' | 'salary-advance'>('payroll');
 
   function load() {
@@ -2536,34 +2560,44 @@ function PayrollTab({ employees }: { employees: Employee[] }) {
   useEffect(() => {
     api.get('/bank-accounts').then((res) => setBankAccounts(res.data));
   }, []);
-  useEffect(() => setPage(1), [search, pageSize]);
-  // employees isn't read directly here — Generate recomputes staff/attendance
-  // stats on the backend from the currently-active employee list — but it's
-  // kept as a prop so this tab reloads correctly when the roster changes.
+  useEffect(() => setPage(1), [search, pageSize, month]);
   void employees;
 
-  async function onGenerate() {
-    if (!from || !to) return;
-    setGenerating(true);
+  async function run(key: string, fn: () => Promise<unknown>) {
+    setBusy(key);
+    setError('');
     try {
-      await api.post('/payroll/generate', { from, to });
+      await fn();
       load();
+    } catch (err: any) {
+      const m = err?.response?.data?.message;
+      setError(Array.isArray(m) ? m.join(' ') : m || 'Something went wrong.');
     } finally {
-      setGenerating(false);
+      setBusy('');
     }
   }
 
   async function onDelete(row: PayrollRow) {
-    if (!window.confirm(`Remove the payroll row for "${row.staffName}"?`)) return;
-    await api.delete(`/payroll/${row.id}`);
-    load();
+    if (!window.confirm(`Remove the draft payroll row for "${row.staffName}"?`)) return;
+    run(`del:${row.id}`, () => api.delete(`/payroll/${row.id}`));
   }
 
+  const monthRows = rows.filter((r) => r.periodFrom === range.from && r.periodTo === range.to);
   const searchTerm = search.trim().toLowerCase();
-  const filtered = searchTerm ? rows.filter((r) => r.staffName.toLowerCase().includes(searchTerm)) : rows;
+  const filtered = searchTerm ? monthRows.filter((r) => r.staffName.toLowerCase().includes(searchTerm)) : monthRows;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const drafts = monthRows.filter((r) => payrollStatusOf(r) === 'draft').length;
+  const totals = monthRows.reduce(
+    (t, r) => ({
+      gross: t.gross + Number(r.grossPay) - Number(r.absenceDeduction) + Number(r.otPay),
+      spf: t.spf + Number(r.spfEmployee) + Number(r.spfEmployer),
+      net: t.net + Number(r.calculatedSalary),
+    }),
+    { gross: 0, spf: 0, net: 0 },
+  );
+  const cols = 'grid-cols-[32px_minmax(140px,1.2fr)_50px_50px_80px_75px_65px_75px_75px_90px_75px_180px]';
 
   return (
     <>
@@ -2579,9 +2613,7 @@ function PayrollTab({ employees }: { employees: Employee[] }) {
             type="button"
             onClick={() => setSubView(o.value)}
             className={`text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors ${
-              subView === o.value
-                ? 'bg-brand-500 border-brand-500 text-ink'
-                : 'bg-white border-black/10 text-ink/70 hover:bg-black/5'
+              subView === o.value ? 'bg-brand-500 border-brand-500 text-ink' : 'bg-white border-black/10 text-ink/70 hover:bg-black/5'
             }`}
           >
             {o.label}
@@ -2593,180 +2625,216 @@ function PayrollTab({ employees }: { employees: Employee[] }) {
         <SalaryAdvance />
       ) : (
         <>
-      <PageHeader title="Pay Roll" subtitle="Manage and calculate salary distributions for all company employees." />
+          <PageHeader title="Pay Roll" subtitle="Monthly salaries: generate, check, approve (books the cost), then pay." />
 
-      <Card className="p-4 mb-5">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="w-52">
-            <Field label="Select Starting Date">
-              <input className={inputClass} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-            </Field>
-          </div>
-          <div className="w-52">
-            <Field label="Select End Date">
-              <input className={inputClass} type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-            </Field>
-          </div>
-          <PrimaryButton icon={FileText} onClick={onGenerate} disabled={generating} requires="edit">
-            {generating ? 'Generating…' : 'Generate'}
-          </PrimaryButton>
-        </div>
-      </Card>
-
-      <Card>
-        <div className="px-4 py-3 border-b border-black/10">
-          <h3 className="text-sm font-semibold text-brand-700">Salary Pay Roll</h3>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 border-b border-black/10 text-sm">
-          <label className="flex items-center gap-2 text-muted">
-            Show
-            <select
-              className="rounded-lg border border-black/15 px-2 py-1 text-sm"
-              value={pageSize}
-              onChange={(e) => setPageSize(Number(e.target.value))}
-            >
-              {PAYROLL_PAGE_SIZE_OPTIONS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-            entries
-          </label>
-          <div className="relative w-full sm:w-56">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
-            <input className={`${inputClass} pl-8`} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search" />
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="p-4 text-sm text-muted">Loading…</div>
-        ) : filtered.length === 0 ? (
-          <EmptyState>
-            {rows.length === 0 ? 'No data available in table — pick a date range and click Generate.' : `No rows match "${search}".`}
-          </EmptyState>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <div className="grid grid-cols-[45px_1.3fr_1.5fr_80px_80px_80px_90px_110px_1fr_100px_110px_100px_140px] px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02] min-w-[1380px]">
-                <span>No.</span>
-                <span>Staff Name</span>
-                <span>Month</span>
-                <span>Working Days</span>
-                <span>Present Days</span>
-                <span>Absent Days</span>
-                <span>Working Hours</span>
-                <span>OT Pay</span>
-                <span>Salary Paid By</span>
-                <span>Staff Salary</span>
-                <span>Net Payable</span>
-                <span>Status</span>
-                <span className="text-right">Actions</span>
+          <Card className="p-4 mb-5">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="w-52">
+                <Field label="Month">
+                  <input className={inputClass} type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} />
+                </Field>
               </div>
-              <div className="divide-y divide-black/5 min-w-[1380px]">
-                {paged.map((r, i) => (
-                  <div
-                    key={r.id}
-                    className="grid grid-cols-[45px_1.3fr_1.5fr_80px_80px_80px_90px_110px_1fr_100px_110px_100px_140px] items-center px-4 py-3"
-                  >
-                    <span className="text-sm text-muted">{(currentPage - 1) * pageSize + i + 1}.</span>
-                    <span className="text-sm text-ink truncate pr-2">{r.staffName}</span>
-                    <span className="text-sm text-muted">
-                      {formatDate(r.periodFrom)} – {formatDate(r.periodTo)}
-                    </span>
-                    <span className="text-sm text-muted">{r.workingDays}</span>
-                    <span className="text-sm text-muted">{r.presentDays}</span>
-                    <span className="text-sm text-muted">{r.absentDays}</span>
-                    <span className="text-sm text-muted">{Number(r.workingHours).toFixed(1)}h</span>
-                    <span className="text-sm text-muted" title={`${Number(r.otHours).toFixed(2)}h × ${Number(r.otRate).toFixed(2)}/hr`}>
-                      {Number(r.otPay).toFixed(2)}
-                    </span>
-                    <span className="text-sm text-muted truncate pr-2">{r.salaryPaidBy || '-'}</span>
-                    <span className="text-sm text-ink">{Number(r.staffSalary).toFixed(2)}</span>
-                    <span className="text-sm font-semibold text-brand-700">{Number(r.calculatedSalary).toFixed(2)}</span>
-                    <span>
-                      {r.isPaid ? (
-                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-brand-50 text-brand-700" title={r.paidDate ? `Paid on ${r.paidDate}` : undefined}>
-                          Paid
-                        </span>
-                      ) : (
-                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-amber-50 text-amber-700">Unpaid</span>
-                      )}
-                    </span>
-                    <div className="flex items-center justify-end gap-2">
-                      {r.isPaid ? (
-                        <>
-                          <span className="text-xs text-muted">{r.paidDate ? `Paid ${formatDate(r.paidDate)}` : ''}</span>
-                          <IconButton icon={FileText} title="Payment documents" onClick={() => setDocsItem(r)} />
-                        </>
-                      ) : (
-                        <>
-                          <SecondaryButton onClick={() => setPayingItem(r)} requires="edit">Pay</SecondaryButton>
-                          <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(r)} requires="edit" />
-                          <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(r)} requires="full" />
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center justify-between px-4 py-3 text-xs text-muted">
-              <span>
-                Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, filtered.length)} of{' '}
-                {filtered.length} entries
-              </span>
-              <div className="flex items-center gap-1">
-                <SecondaryButton onClick={() => setPage(Math.max(1, currentPage - 1))} className={currentPage === 1 ? 'opacity-50' : ''}>
-                  Previous
-                </SecondaryButton>
-                {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setPage(n)}
-                    className={`w-8 h-8 rounded-lg text-xs font-medium border ${
-                      n === currentPage ? 'bg-brand-500 border-brand-500 text-ink' : 'bg-white border-black/10 text-ink/70 hover:bg-black/5'
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
+              <PrimaryButton
+                icon={FileText}
+                onClick={() => run('generate', () => api.post('/payroll/generate', range))}
+                disabled={!!busy}
+                requires="edit"
+              >
+                {busy === 'generate' ? 'Generating…' : 'Generate'}
+              </PrimaryButton>
+              {drafts > 0 && (
                 <SecondaryButton
-                  onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
-                  className={currentPage === totalPages ? 'opacity-50' : ''}
+                  onClick={() => {
+                    if (window.confirm(`Approve ${drafts} draft row(s) for ${month}? This books the salary cost in the accounts.`)) {
+                      run('approveAll', () => api.post('/payroll/approve', range));
+                    }
+                  }}
+                  disabled={!!busy}
+                  requires="edit"
                 >
-                  Next
+                  {busy === 'approveAll' ? 'Approving…' : `Approve all drafts (${drafts})`}
                 </SecondaryButton>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-muted">
+              Full monthly salary (basic + allowances); only absent days are deducted (monthly ÷ 30 per day), approved leave is paid. Joiners and leavers
+              are paid for their days. Social Protection (Omani staff) and salary advance installments are deducted.
+            </p>
+            {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+          </Card>
+
+          {monthRows.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+              <Card className="p-3"><div className="text-xs text-muted">Salary cost (earned + OT)</div><div className="text-lg font-semibold text-ink">{m3(totals.gross)} OMR</div></Card>
+              <Card className="p-3"><div className="text-xs text-muted">Social Protection (employee + employer)</div><div className="text-lg font-semibold text-ink">{m3(totals.spf)} OMR</div></Card>
+              <Card className="p-3"><div className="text-xs text-muted">Net pay</div><div className="text-lg font-semibold text-brand-700">{m3(totals.net)} OMR</div></Card>
+            </div>
+          )}
+
+          <Card>
+            <div className="px-4 py-3 border-b border-black/10">
+              <h3 className="text-sm font-semibold text-brand-700">Salary Pay Roll - {month}</h3>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 border-b border-black/10 text-sm">
+              <label className="flex items-center gap-2 text-muted">
+                Show
+                <select className="rounded-lg border border-black/15 px-2 py-1 text-sm" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+                  {PAYROLL_PAGE_SIZE_OPTIONS.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                entries
+              </label>
+              <div className="relative w-full sm:w-56">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+                <input className={`${inputClass} pl-8`} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search" />
               </div>
             </div>
-          </>
-        )}
-      </Card>
 
-      {editItem && (
-        <PayrollEditModal
-          row={editItem}
-          onClose={() => setEditItem(null)}
-          onSaved={() => {
-            setEditItem(null);
-            load();
-          }}
-        />
-      )}
-      {payingItem && (
-        <PayrollMarkPaidModal
-          row={payingItem}
-          bankAccounts={bankAccounts}
-          onClose={() => setPayingItem(null)}
-          onSaved={() => {
-            setPayingItem(null);
-            load();
-          }}
-        />
-      )}
-      {docsItem && <PayrollDocumentsModal row={docsItem} onClose={() => setDocsItem(null)} />}
+            {loading ? (
+              <div className="p-4 text-sm text-muted">Loading…</div>
+            ) : filtered.length === 0 ? (
+              <EmptyState>{monthRows.length === 0 ? `No payroll for ${month} yet - click Generate.` : `No rows match "${search}".`}</EmptyState>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <div className={`grid ${cols} px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wide bg-black/[0.02] min-w-[1040px]`}>
+                    <span>No.</span>
+                    <span>Staff Name</span>
+                    <span>Days</span>
+                    <span>Unpaid</span>
+                    <span className="text-right">Gross</span>
+                    <span className="text-right">Absence</span>
+                    <span className="text-right">OT</span>
+                    <span className="text-right">SPF</span>
+                    <span className="text-right">Advance</span>
+                    <span className="text-right">Net Pay</span>
+                    <span className="text-center">Status</span>
+                    <span className="text-right">Actions</span>
+                  </div>
+                  <div className="divide-y divide-black/5 min-w-[1040px]">
+                    {paged.map((r, i) => {
+                      const st = payrollStatusOf(r);
+                      return (
+                        <div key={r.id} className={`grid ${cols} items-center px-4 py-3`}>
+                          <span className="text-sm text-muted">{(currentPage - 1) * pageSize + i + 1}.</span>
+                          <span className="text-sm text-ink truncate pr-2" title={`Basic ${m3(r.staffSalary)} + allowances ${m3(r.allowances)} a month`}>
+                            {r.staffName}
+                            {r.socialProtectionCovered && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">SPF</span>}
+                          </span>
+                          <span className="text-sm text-muted">
+                            {Number(r.employedDays || 0)}/{r.periodDays || '-'}
+                          </span>
+                          <span className="text-sm text-muted">{Number(r.unpaidDays || 0)}</span>
+                          <span className="text-sm text-ink text-right">{m3(r.grossPay)}</span>
+                          <span className="text-sm text-muted text-right">{Number(r.absenceDeduction) ? `-${m3(r.absenceDeduction)}` : '-'}</span>
+                          <span className="text-sm text-muted text-right" title={`${Number(r.otHours).toFixed(2)}h × ${m3(r.otRate)}/hr`}>
+                            {Number(r.otPay) ? m3(r.otPay) : '-'}
+                          </span>
+                          <span className="text-sm text-muted text-right" title={`Employer share ${m3(r.spfEmployer)}`}>
+                            {Number(r.spfEmployee) ? `-${m3(r.spfEmployee)}` : '-'}
+                          </span>
+                          <span className="text-sm text-muted text-right">{Number(r.advanceRecovery) ? `-${m3(r.advanceRecovery)}` : '-'}</span>
+                          <span className="text-sm font-semibold text-brand-700 text-right">{m3(r.calculatedSalary)}</span>
+                          <span className="text-center">
+                            <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${PAYROLL_STATUS_STYLE[st]}`} title={r.paidDate ? `Paid on ${r.paidDate}` : undefined}>
+                              {st}
+                            </span>
+                          </span>
+                          <div className="flex items-center justify-end gap-2">
+                            {st === 'draft' && (
+                              <>
+                                <SecondaryButton onClick={() => run(`ap:${r.id}`, () => api.post(`/payroll/${r.id}/approve`))} disabled={!!busy} requires="edit">
+                                  {busy === `ap:${r.id}` ? '…' : 'Approve'}
+                                </SecondaryButton>
+                                <IconButton icon={Pencil} title="Edit" onClick={() => setEditItem(r)} requires="edit" />
+                                <IconButton icon={Trash2} tone="danger" title="Remove" onClick={() => onDelete(r)} requires="full" />
+                              </>
+                            )}
+                            {st === 'approved' && (
+                              <>
+                                <PrimaryButton onClick={() => setPayingItem(r)} disabled={!!busy} requires="edit">
+                                  Pay
+                                </PrimaryButton>
+                                <SecondaryButton
+                                  onClick={() => {
+                                    if (window.confirm('Move back to draft? This removes its salary entry from the books.')) {
+                                      run(`un:${r.id}`, () => api.post(`/payroll/${r.id}/unapprove`));
+                                    }
+                                  }}
+                                  disabled={!!busy}
+                                  requires="edit"
+                                >
+                                  Undo
+                                </SecondaryButton>
+                              </>
+                            )}
+                            {st === 'paid' && (
+                              <>
+                                <span className="text-xs text-muted">{r.paidDate ? `Paid ${formatDate(r.paidDate)}` : ''}</span>
+                                <IconButton icon={FileText} title="Payment documents" onClick={() => setDocsItem(r)} />
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3 text-xs text-muted">
+                  <span>
+                    Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, filtered.length)} of {filtered.length} entries
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <SecondaryButton onClick={() => setPage(Math.max(1, currentPage - 1))} className={currentPage === 1 ? 'opacity-50' : ''}>
+                      Previous
+                    </SecondaryButton>
+                    {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setPage(n)}
+                        className={`w-8 h-8 rounded-lg text-xs font-medium border ${
+                          n === currentPage ? 'bg-brand-500 border-brand-500 text-ink' : 'bg-white border-black/10 text-ink/70 hover:bg-black/5'
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                    <SecondaryButton onClick={() => setPage(Math.min(totalPages, currentPage + 1))} className={currentPage === totalPages ? 'opacity-50' : ''}>
+                      Next
+                    </SecondaryButton>
+                  </div>
+                </div>
+              </>
+            )}
+          </Card>
+
+          {editItem && (
+            <PayrollEditModal
+              row={editItem}
+              onClose={() => setEditItem(null)}
+              onSaved={() => {
+                setEditItem(null);
+                load();
+              }}
+            />
+          )}
+          {payingItem && (
+            <PayrollMarkPaidModal
+              row={payingItem}
+              bankAccounts={bankAccounts}
+              onClose={() => setPayingItem(null)}
+              onSaved={() => {
+                setPayingItem(null);
+                load();
+              }}
+            />
+          )}
+          {docsItem && <PayrollDocumentsModal row={docsItem} onClose={() => setDocsItem(null)} />}
         </>
       )}
     </>
@@ -2934,6 +3002,30 @@ function PayrollDocumentsModal({ row, onClose }: { row: PayrollRow; onClose: () 
 
 // Payroll "Mark Paid" — the one place salary actually leaves the
 // business. Mirrors Accounting.tsx's Reimbursement MarkPaidModal.
+function PayslipLines({ row }: { row: PayrollRow }) {
+  const lines: [string, string][] = [
+    [`Basic + allowances (${Number(row.employedDays || 0)} of ${row.periodDays || '-'} days)`, m3(row.grossPay)],
+  ];
+  if (Number(row.absenceDeduction)) lines.push([`Absence (${Number(row.unpaidDays)} unpaid day(s))`, `-${m3(row.absenceDeduction)}`]);
+  if (Number(row.otPay)) lines.push([`Overtime (${Number(row.otHours).toFixed(2)}h)`, m3(row.otPay)]);
+  if (Number(row.spfEmployee)) lines.push(['Social Protection Fund (employee share)', `-${m3(row.spfEmployee)}`]);
+  if (Number(row.advanceRecovery)) lines.push(['Salary advance installment', `-${m3(row.advanceRecovery)}`]);
+  return (
+    <div className="text-sm bg-black/[0.03] rounded-lg p-3 space-y-1">
+      {lines.map(([k, v]) => (
+        <div key={k} className="flex justify-between gap-3">
+          <span className="text-ink/70">{k}</span>
+          <span className="text-ink">{v}</span>
+        </div>
+      ))}
+      <div className="flex justify-between gap-3 border-t border-black/10 pt-1 font-semibold">
+        <span>Net pay</span>
+        <span className="text-brand-700">{m3(row.calculatedSalary)} OMR</span>
+      </div>
+    </div>
+  );
+}
+
 function PayrollMarkPaidModal({
   row,
   bankAccounts,
@@ -2948,27 +3040,14 @@ function PayrollMarkPaidModal({
   const [bankAccountId, setBankAccountId] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  // Reminder only — Payroll's own calculation is untouched by salary
-  // advances (no automatic deduction); this just surfaces disbursed,
-  // not-yet-settled advances for this employee so it isn't overlooked.
-  const [outstandingAdvance, setOutstandingAdvance] = useState(0);
-
-  useEffect(() => {
-    if (!row.employeeId) return;
-    api.get('/salary-advances').then((res) => {
-      const total = (res.data as SalaryAdvanceRow[])
-        .filter((a) => a.employeeId === row.employeeId && a.disbursed)
-        .reduce((sum, a) => sum + Number(a.amount), 0);
-      setOutstandingAdvance(total);
-    });
-  }, [row.employeeId]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
-      await api.post(`/payroll/${row.id}/pay`, { bankAccountId: bankAccountId || undefined });
+      await api.post(`/payroll/${row.id}/pay`, { bankAccountId });
       onSaved();
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Could not mark this salary as paid.');
@@ -2980,20 +3059,17 @@ function PayrollMarkPaidModal({
   return (
     <Modal title={`Pay salary — ${row.staffName}`} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-3">
-        <div className="text-sm text-ink/80 bg-black/[0.03] rounded-lg p-3">
-          {Number(row.calculatedSalary).toFixed(3)} OMR to be paid, for {formatDate(row.periodFrom)} – {formatDate(row.periodTo)}
+        <div className="text-xs text-muted">
+          {formatDate(row.periodFrom)} – {formatDate(row.periodTo)}
         </div>
-        {outstandingAdvance > 0 && (
-          <div className="text-sm text-amber-700 bg-amber-50 rounded-lg p-3">
-            Reminder: {row.staffName} has {outstandingAdvance.toFixed(3)} OMR in disbursed salary advances not yet
-            settled — this isn't deducted automatically, adjust manually if needed.
-          </div>
-        )}
+        <PayslipLines row={row} />
         <BankAccountSelect label="Paid from account" value={bankAccountId} onChange={setBankAccountId} accounts={bankAccounts as any} />
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy} requires="edit">{busy ? 'Saving…' : 'Confirm payment'}</PrimaryButton>
+          <PrimaryButton type="submit" disabled={busy} requires="edit">
+            {busy ? 'Saving…' : 'Confirm payment'}
+          </PrimaryButton>
         </div>
       </form>
     </Modal>
@@ -3002,13 +3078,11 @@ function PayrollMarkPaidModal({
 
 function PayrollEditModal({ row, onClose, onSaved }: { row: PayrollRow; onClose: () => void; onSaved: () => void }) {
   const [staffSalary, setStaffSalary] = useState(String(row.staffSalary ?? 0));
+  const [allowances, setAllowances] = useState(String(row.allowances ?? 0));
+  const [unpaidDays, setUnpaidDays] = useState(String(row.unpaidDays ?? 0));
   const [salaryPaidBy, setSalaryPaidBy] = useState(row.salaryPaidBy || '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-
-  const proratedBase =
-    row.workingDays > 0 ? Number(staffSalary || 0) * (row.presentDays / row.workingDays) : Number(staffSalary || 0);
-  const preview = (proratedBase + Number(row.otPay || 0)).toFixed(2);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -3017,6 +3091,8 @@ function PayrollEditModal({ row, onClose, onSaved }: { row: PayrollRow; onClose:
     try {
       await api.patch(`/payroll/${row.id}`, {
         staffSalary: Number(staffSalary) || 0,
+        allowances: Number(allowances) || 0,
+        unpaidDays: Number(unpaidDays) || 0,
         salaryPaidBy: salaryPaidBy || undefined,
       });
       onSaved();
@@ -3030,34 +3106,25 @@ function PayrollEditModal({ row, onClose, onSaved }: { row: PayrollRow; onClose:
   return (
     <Modal title={`Edit Salary — ${row.staffName}`} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-3">
-        <Field label="Staff Salary">
-          <input
-            className={inputClass}
-            type="number"
-            min="0"
-            step="0.01"
-            value={staffSalary}
-            onChange={(e) => setStaffSalary(e.target.value)}
-          />
+        <PayslipLines row={row} />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Field label="Basic (monthly)">
+            <input className={inputClass} type="number" min="0" step="0.001" value={staffSalary} onChange={(e) => setStaffSalary(e.target.value)} />
+          </Field>
+          <Field label="Allowances (monthly)">
+            <input className={inputClass} type="number" min="0" step="0.001" value={allowances} onChange={(e) => setAllowances(e.target.value)} />
+          </Field>
+          <Field label="Unpaid days">
+            <input className={inputClass} type="number" min="0" step="0.5" value={unpaidDays} onChange={(e) => setUnpaidDays(e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Salary Paid By (note)">
+          <input className={inputClass} value={salaryPaidBy} onChange={(e) => setSalaryPaidBy(e.target.value)} placeholder="e.g. Bank Transfer, Accounts" />
         </Field>
-        <Field label="Salary Paid By">
-          <input
-            className={inputClass}
-            value={salaryPaidBy}
-            onChange={(e) => setSalaryPaidBy(e.target.value)}
-            placeholder="e.g. Bank Transfer, Accounts"
-          />
-        </Field>
-        <p className="text-xs text-muted">
-          Net Payable (prorated by attendance: {row.presentDays}/{row.workingDays} working days, plus OT Pay of{' '}
-          {Number(row.otPay || 0).toFixed(2)} for {Number(row.otHours || 0).toFixed(2)}h at {Number(row.otRate || 0).toFixed(2)}/hr) ={' '}
-          <span className="font-semibold text-brand-700">{preview}</span>
-        </p>
+        <p className="text-xs text-muted">Net pay is recalculated when you save. Changes here apply to this month only - edit the employee for the future.</p>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
-          <SecondaryButton onClick={onClose}>
-            Cancel
-          </SecondaryButton>
+          <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
           <PrimaryButton type="submit" disabled={busy} requires="edit">
             {busy ? 'Saving…' : 'Save'}
           </PrimaryButton>
@@ -4463,6 +4530,68 @@ function OtherDetailFields({
   );
 }
 
+interface PayExtrasValue {
+  housing: string;
+  transport: string;
+  other: string;
+  spf: boolean | null; // null = follow nationality (Omani -> covered)
+  leftDate: string;
+}
+function emptyPayExtras(): PayExtrasValue {
+  return { housing: '', transport: '', other: '', spf: null, leftDate: '' };
+}
+function payExtrasFromEmployee(e: Employee): PayExtrasValue {
+  const n = (v?: number) => (v != null && Number(v) !== 0 ? String(v) : '');
+  return {
+    housing: n(e.housingAllowance),
+    transport: n(e.transportAllowance),
+    other: n(e.otherAllowance),
+    spf: e.socialProtectionCovered ?? null,
+    leftDate: e.leftDate || '',
+  };
+}
+function payExtrasPayload(v: PayExtrasValue) {
+  return {
+    housingAllowance: Number(v.housing) || 0,
+    transportAllowance: Number(v.transport) || 0,
+    otherAllowance: Number(v.other) || 0,
+    ...(v.spf === null ? {} : { socialProtectionCovered: v.spf }),
+    leftDate: v.leftDate || '',
+  };
+}
+
+// Allowances, Social Protection cover and last working day - feed payroll
+// and end-of-service gratuity (gratuity is on basic only).
+function PayExtras({ value, onChange, nationality }: { value: PayExtrasValue; onChange: (v: PayExtrasValue) => void; nationality?: string }) {
+  const covered = value.spf ?? (nationality || '').toUpperCase() === 'OM';
+  const num = (key: 'housing' | 'transport' | 'other', label: string) => (
+    <Field label={label}>
+      <input className={inputClass} type="number" min="0" step="0.001" value={value[key]} onChange={(e) => onChange({ ...value, [key]: e.target.value })} placeholder="0.000" />
+    </Field>
+  );
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {num('housing', 'Housing allowance')}
+        {num('transport', 'Transport allowance')}
+        {num('other', 'Other allowance')}
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="flex items-start gap-2 text-sm text-ink/80 mt-1">
+          <input type="checkbox" className="mt-0.5" checked={covered} onChange={(e) => onChange({ ...value, spf: e.target.checked })} />
+          <span>
+            Social Protection Fund (Omani staff)
+            <span className="block text-xs text-muted">SPF is deducted from pay; no end-of-service gratuity.</span>
+          </span>
+        </label>
+        <Field label="Last working day (leaving staff)">
+          <input className={inputClass} type="date" value={value.leftDate} onChange={(e) => onChange({ ...value, leftDate: e.target.value })} />
+        </Field>
+      </div>
+    </div>
+  );
+}
+
 function AddEmployeeModal({
   designations,
   teams,
@@ -4487,6 +4616,7 @@ function AddEmployeeModal({
   const [team, setTeam] = useState('');
   const [shift, setShift] = useState('');
   const [baseSalary, setBaseSalary] = useState('');
+  const [pay, setPay] = useState<PayExtrasValue>(emptyPayExtras());
   const [otRatePerHour, setOtRatePerHour] = useState('');
   const [biometricId, setBiometricId] = useState('');
   const [joinedDate, setJoinedDate] = useState(todayStr());
@@ -4532,6 +4662,7 @@ function AddEmployeeModal({
         team: team || undefined,
         shift: shift || undefined,
         baseSalary: baseSalary ? Number(baseSalary) : undefined,
+        ...payExtrasPayload(pay),
         otRatePerHour: otRatePerHour ? Number(otRatePerHour) : undefined,
         biometricId: biometricId || undefined,
         joinedDate: joinedDate || undefined,
@@ -4675,17 +4806,18 @@ function AddEmployeeModal({
               ))}
             </select>
           </Field>
-          <Field label="Base Salary (optional — used to prefill Payroll)">
+          <Field label="Basic salary (monthly, OMR)">
             <input
               className={inputClass}
               type="number"
               min="0"
-              step="0.01"
+              step="0.001"
               value={baseSalary}
               onChange={(e) => setBaseSalary(e.target.value)}
             />
           </Field>
         </div>
+        <PayExtras value={pay} onChange={setPay} nationality={otherDetail.nationality} />
         <div className="grid grid-cols-2 gap-3">
           <Field label="OT Rate Override (optional, per hour)">
             <input
@@ -4755,6 +4887,7 @@ function EditEmployeeModal({
   const [team, setTeam] = useState(employee.team || '');
   const [shift, setShift] = useState(employee.shift || '');
   const [baseSalary, setBaseSalary] = useState(employee.baseSalary != null ? String(employee.baseSalary) : '');
+  const [pay, setPay] = useState<PayExtrasValue>(() => payExtrasFromEmployee(employee));
   const [otRatePerHour, setOtRatePerHour] = useState(employee.otRatePerHour != null ? String(employee.otRatePerHour) : '');
   const [biometricId, setBiometricId] = useState(employee.biometricId || '');
   const [joinedDate, setJoinedDate] = useState(employee.joinedDate || '');
@@ -4850,6 +4983,7 @@ function EditEmployeeModal({
         team,
         shift,
         baseSalary: baseSalary ? Number(baseSalary) : undefined,
+        ...payExtrasPayload(pay),
         otRatePerHour: otRatePerHour ? Number(otRatePerHour) : undefined,
         biometricId,
         joinedDate: joinedDate || undefined,
@@ -4997,17 +5131,18 @@ function EditEmployeeModal({
               ))}
             </select>
           </Field>
-          <Field label="Base Salary (optional — used to prefill Payroll)">
+          <Field label="Basic salary (monthly, OMR)">
             <input
               className={inputClass}
               type="number"
               min="0"
-              step="0.01"
+              step="0.001"
               value={baseSalary}
               onChange={(e) => setBaseSalary(e.target.value)}
             />
           </Field>
         </div>
+        <PayExtras value={pay} onChange={setPay} nationality={otherDetail.nationality} />
         <div className="grid grid-cols-2 gap-3">
           <Field label="OT Rate Override (optional, per hour)">
             <input
@@ -5160,9 +5295,25 @@ function ViewEmployeeModal({
           <div className="text-ink">{employee.shift || '-'}</div>
         </div>
         <div>
-          <div className="text-xs text-muted">Base Salary</div>
-          <div className="text-ink">{employee.baseSalary != null ? Number(employee.baseSalary).toFixed(2) : '-'}</div>
+          <div className="text-xs text-muted">Basic salary</div>
+          <div className="text-ink">{employee.baseSalary != null ? Number(employee.baseSalary).toFixed(3) : '-'}</div>
         </div>
+        <div>
+          <div className="text-xs text-muted">Allowances (housing / transport / other)</div>
+          <div className="text-ink">
+            {Number(employee.housingAllowance || 0).toFixed(3)} / {Number(employee.transportAllowance || 0).toFixed(3)} / {Number(employee.otherAllowance || 0).toFixed(3)}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-muted">Social Protection Fund</div>
+          <div className="text-ink">{employee.socialProtectionCovered ? 'Covered (no gratuity)' : 'Not covered (gratuity accrues)'}</div>
+        </div>
+        {employee.leftDate && (
+          <div>
+            <div className="text-xs text-muted">Last working day</div>
+            <div className="text-ink">{employee.leftDate}</div>
+          </div>
+        )}
         <div>
           <div className="text-xs text-muted">OT Rate (per hour)</div>
           <div className="text-ink">
