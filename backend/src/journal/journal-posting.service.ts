@@ -204,11 +204,11 @@ export class JournalPostingService {
     return outerManager ? run(outerManager) : this.dataSource.transaction(run);
   }
 
-  async removeForSource(sourceType: string, sourceId: string) {
-    const existing = await this.dataSource.manager.findOne(JournalEntry, { where: { sourceType, sourceId } });
+  async removeForSource(sourceType: string, sourceId: string, manager: EntityManager = this.dataSource.manager) {
+    const existing = await manager.findOne(JournalEntry, { where: { sourceType, sourceId } });
     if (!existing) return;
-    if (sourceType !== 'opening_balance') await this.assertDateOpen(existing.date, 'The journal entry being removed');
-    await this.dataSource.manager.delete(JournalEntryLine, { journalEntryId: existing.id });
-    await this.dataSource.manager.delete(JournalEntry, { id: existing.id });
+    if (sourceType !== 'opening_balance') await this.assertDateOpen(existing.date, 'The journal entry being removed', manager, { existing: true });
+    await manager.delete(JournalEntryLine, { journalEntryId: existing.id });
+    await manager.delete(JournalEntry, { id: existing.id });
   }
 }

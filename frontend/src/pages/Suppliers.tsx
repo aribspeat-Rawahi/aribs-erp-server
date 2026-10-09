@@ -929,12 +929,16 @@ function SupplierModal({
       vatStatus,
       vatin: vatin.trim() || undefined,
     };
+    // set once the record exists: a failing attachment after that must not
+    // lead to a second Save creating the record (and moving money) twice
+    let created = false;
     try {
       let supplierId = supplier?.id;
       if (supplier) await api.patch(`/suppliers/${supplier.id}`, payload);
       else {
         const res = await api.post('/suppliers', payload);
         supplierId = res.data.id;
+        created = true;
       }
       // Bank accounts/documents are saved as a separate step since they
       // need the supplier's id, which only exists once created above.
@@ -944,6 +948,11 @@ function SupplierModal({
       }
       onSaved();
     } catch (err: any) {
+      if (created) {
+        window.alert(`The supplier was saved, but bank details/documents could not be saved: ${err?.response?.data?.message || 'unknown error'}. Open it again (Edit) to add them.`);
+        onSaved();
+        return;
+      }
       setError(err?.response?.data?.message || 'Could not save.');
     } finally {
       setBusy(false);

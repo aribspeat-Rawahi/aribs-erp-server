@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
@@ -127,7 +128,7 @@ export class DeliveryNoteService {
       paymentType: dto.paymentType,
       deliveryMethod: dto.deliveryMethod,
       status: DeliveryNoteStatus.DRAFT,
-      deliveryNoteNumber: 'PENDING',
+      deliveryNoteNumber: `PENDING-${randomUUID()}`,
     });
     const saved = await this.repo.save(note);
 

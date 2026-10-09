@@ -343,12 +343,16 @@ function TaxPaymentModal({
       note: note || undefined,
       bankAccountId: bankAccountId || undefined,
     };
+    // set once the record exists: a failing attachment after that must not
+    // lead to a second Save creating the record (and moving money) twice
+    let created = false;
     try {
       let id = payment?.id;
       if (payment) await api.patch(`/tax-payments/${payment.id}`, payload);
       else {
         const res = await api.post('/tax-payments', payload);
         id = res.data.id;
+        created = true;
       }
       // Uploaded right after the payment exists (backend requires the
       // record's id first) — same two-step flow used across this app.
@@ -361,6 +365,11 @@ function TaxPaymentModal({
       }
       onSaved();
     } catch (err: any) {
+      if (created) {
+        window.alert(`The tax payment was saved, but its document could not be uploaded: ${err?.response?.data?.message || 'unknown error'}. Open it again (Edit) to add it.`);
+        onSaved();
+        return;
+      }
       setError(err?.response?.data?.message || `Could not ${payment ? 'update' : 'save'} this tax payment.`);
     } finally {
       setBusy(false);

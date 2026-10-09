@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+import { withNamedLock } from '../common/named-lock';
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -135,7 +137,7 @@ export class QuotationService {
       template: dto.template || (await this.settingsService.get()).defaultInvoiceTemplate,
       vatExcluded,
       status: QuotationStatus.DRAFT,
-      quotationNumber: 'PENDING',
+      quotationNumber: `PENDING-${randomUUID()}`,
     });
     const saved = await this.quotationRepo.save(quotation);
 
@@ -502,6 +504,12 @@ export class QuotationService {
   // One-click convert: builds an Invoice from this quotation's items and
   // prices exactly as they are (including any manual price adjustments).
   async convertToInvoice(id: string) {
+    return withNamedLock(this.quotationRepo.manager.connection, `quote-convert:${id}`, 'This quotation is already being converted - wait a moment.', () =>
+      this.convertToInvoiceLocked(id),
+    );
+  }
+
+  private async convertToInvoiceLocked(id: string) {
     const quotation = await this.quotationRepo.findOne({ where: { id } });
     if (!quotation) throw new NotFoundException('Quotation not found');
     if (quotation.status === QuotationStatus.CONVERTED) {

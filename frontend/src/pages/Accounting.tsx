@@ -722,12 +722,16 @@ function ReimbursementModal({
       description: description || undefined,
       invoiceNumber: invoiceNumber || undefined,
     };
+    // set once the record exists: a failing attachment after that must not
+    // lead to a second Save creating the record (and moving money) twice
+    let created = false;
     try {
       let id = claim?.id;
       if (claim) await api.patch(`/reimbursements/${claim.id}`, payload);
       else {
         const res = await api.post('/reimbursements', payload);
         id = res.data.id;
+        created = true;
       }
       // Uploaded right after the claim exists (backend requires the
       // record's id first) — same two-step flow Expense's own upload uses.
@@ -740,6 +744,11 @@ function ReimbursementModal({
       }
       onSaved();
     } catch (err: any) {
+      if (created) {
+        window.alert(`The claim was saved, but its receipt could not be uploaded: ${err?.response?.data?.message || 'unknown error'}. Open it again (Edit) to add it.`);
+        onSaved();
+        return;
+      }
       setError(err?.response?.data?.message || `Could not ${claim ? 'update' : 'submit'} the claim.`);
     } finally {
       setBusy(false);

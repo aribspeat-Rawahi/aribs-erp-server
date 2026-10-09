@@ -100,20 +100,25 @@ export class SupplierPaymentService {
     }
 
     const amount = this.round3(Number(dto.amount));
-    const alreadyPaid = Number(order.paidAmount || 0);
-    // what is owed = value of the goods actually received
-    const total = Number(order.receivedTotal || 0);
-    // 0.001 tolerance matches the 3-decimal OMR precision used everywhere
-    // else, so settling the exact remaining balance never gets rejected
-    // over a floating-point sliver.
-    if (alreadyPaid + amount > total + 0.001) {
-      const remaining = this.round3(Math.max(0, total - alreadyPaid));
-      throw new BadRequestException(
-        `This payment (${amount.toFixed(3)} OMR) would exceed what is owed for the goods received (${remaining.toFixed(3)} OMR). Pay ahead with a vendor prepayment instead.`,
-      );
-    }
 
+    // The order row is locked for the whole payment: payments saved at the
+    // same moment are checked one after the other against the real balance.
     const payment = await this.dataSource.transaction(async (manager) => {
+      const locked = await manager.findOne(PurchaseOrder, { where: { id: purchaseOrderId }, lock: { mode: 'pessimistic_write' } });
+      if (!locked) throw new NotFoundException('Purchase order not found');
+      const alreadyPaid = Number(locked.paidAmount || 0);
+      // what is owed = value of the goods actually received
+      const total = Number(locked.receivedTotal || 0);
+      // 0.001 tolerance matches the 3-decimal OMR precision used everywhere
+      // else, so settling the exact remaining balance never gets rejected
+      // over a floating-point sliver.
+      if (alreadyPaid + amount > total + 0.001) {
+        const remaining = this.round3(Math.max(0, total - alreadyPaid));
+        throw new BadRequestException(
+          `This payment (${amount.toFixed(3)} OMR) would exceed what is owed for the goods received (${remaining.toFixed(3)} OMR). Pay ahead with a vendor prepayment instead.`,
+        );
+      }
+
       let bankTransactionId: string | undefined;
       if (dto.bankAccountId) {
         const account = await manager.findOne(BankAccount, {
@@ -148,12 +153,11 @@ export class SupplierPaymentService {
         bankAccountId: dto.bankAccountId,
         bankTransactionId,
       });
-      return manager.save(row);
+      const saved = await manager.save(row);
+      const paidAmount = this.round3(alreadyPaid + amount);
+      await manager.update(PurchaseOrder, { id: purchaseOrderId }, { paidAmount, paymentStatus: computePaymentStatus(paidAmount, total) });
+      return saved;
     });
-
-    order.paidAmount = this.round3(alreadyPaid + amount);
-    order.paymentStatus = computePaymentStatus(order.paidAmount, total);
-    await this.orderRepo.save(order);
 
     await this.postJournalEntry(payment, actor);
     return payment;
@@ -170,34 +174,24 @@ export class SupplierPaymentService {
       throw new BadRequestException('This row is a credit from a purchase return, vendor credit or prepayment - it is removed together with that record, not here.');
     }
 
-    if (payment.bankAccountId && payment.bankTransactionId) {
-      try {
-        const account = await this.dataSource.manager.findOne(BankAccount, { where: { id: payment.bankAccountId } });
+    await this.dataSource.transaction(async (manager) => {
+      const order = await manager.findOne(PurchaseOrder, { where: { id: purchaseOrderId }, lock: { mode: 'pessimistic_write' } });
+      if (payment.bankAccountId && payment.bankTransactionId) {
+        const account = await manager.findOne(BankAccount, { where: { id: payment.bankAccountId }, lock: { mode: 'pessimistic_write' } });
         if (account) {
-          account.currentBalance = Number(account.currentBalance) + Number(payment.amount);
-          await this.dataSource.manager.save(account);
+          account.currentBalance = this.round3(Number(account.currentBalance) + Number(payment.amount));
+          await manager.save(account);
         }
-        await this.dataSource.manager.delete(BankTransaction, payment.bankTransactionId);
-      } catch (err) {
-        console.error(`Reversing bank withdrawal failed for supplier_payment ${payment.id}:`, err);
+        await manager.delete(BankTransaction, payment.bankTransactionId);
       }
-    }
-    try {
-      await this.journalPosting.removeForSource('supplier_payment', payment.id);
-    } catch (err) {
-      console.error(`Removing auto-posted journal entry failed for supplier_payment ${payment.id}:`, err);
-    }
-
-    await this.repo.remove(payment);
-
-    const order = await this.orderRepo.findOne({ where: { id: purchaseOrderId } });
-    if (order) {
-      const remaining = await this.repo.find({ where: { purchaseOrderId } });
-      const paidAmount = this.round3(remaining.reduce((sum, p) => sum + Number(p.amount), 0));
-      order.paidAmount = paidAmount;
-      order.paymentStatus = computePaymentStatus(paidAmount, Number(order.receivedTotal || 0));
-      await this.orderRepo.save(order);
-    }
+      await this.journalPosting.removeForSource('supplier_payment', payment.id, manager);
+      await manager.remove(payment);
+      if (order) {
+        const remaining = await manager.find(SupplierPayment, { where: { purchaseOrderId } });
+        const paidAmount = this.round3(remaining.reduce((sum, p) => sum + Number(p.amount), 0));
+        await manager.update(PurchaseOrder, { id: purchaseOrderId }, { paidAmount, paymentStatus: computePaymentStatus(paidAmount, Number(order.receivedTotal || 0)) });
+      }
+    });
     return { ok: true };
   }
 

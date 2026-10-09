@@ -639,12 +639,16 @@ function TransferModal({
     // Only meaningful on create — editing never flips in-transit ↔
     // completed (that only happens via the "Mark Received" action).
     if (!transfer) payload.inTransit = inTransit;
+    // set once the record exists: a failing attachment after that must not
+    // lead to a second Save creating the record (and moving money) twice
+    let created = false;
     try {
       let id = transfer?.id;
       if (transfer) await api.patch(`/fund-transfers/${transfer.id}`, payload);
       else {
         const res = await api.post('/fund-transfers', payload);
         id = res.data.id;
+        created = true;
       }
       // Uploaded right after the transfer exists (backend requires the
       // record's id first) — same two-step flow Expense/Reimbursement use.
@@ -657,6 +661,11 @@ function TransferModal({
       }
       onSaved();
     } catch (err: any) {
+      if (created) {
+        window.alert(`The transfer was saved, but its document could not be uploaded: ${err?.response?.data?.message || 'unknown error'}. Open it again (Edit) to add it.`);
+        onSaved();
+        return;
+      }
       setError(err?.response?.data?.message || `Could not ${transfer ? 'update' : 'save'} this transfer.`);
     } finally {
       setBusy(false);

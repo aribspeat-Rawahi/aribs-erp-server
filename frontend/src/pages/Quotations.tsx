@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Plus, Eye, Pencil, Download, MessageCircle, Share2, Trash2, CheckCircle2, ArrowRightCircle } from 'lucide-react';
 import api from '../api/client';
 import { viewPdf, downloadPdf, openWhatsapp, sharePdf } from '../api/docActions';
@@ -44,6 +44,7 @@ export default function Quotations() {
   const { hasAnyRole } = useAuth();
   const canDelete = hasAnyRole(['admin', 'accountant']);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
+  const converting = useRef(new Set<string>());
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [finishedGoods, setFinishedGoods] = useState<FinishedGood[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,11 +75,15 @@ export default function Quotations() {
     }
   }
   async function convert(id: string) {
+    if (converting.current.has(id)) return; // a second click while the first is running
+    converting.current.add(id);
     try {
       await api.post(`/quotations/${id}/convert-to-invoice`);
       load();
     } catch (err: any) {
       window.alert(err?.response?.data?.message || 'Could not convert this quotation to an invoice.');
+    } finally {
+      converting.current.delete(id);
     }
   }
   async function remove(id: string) {

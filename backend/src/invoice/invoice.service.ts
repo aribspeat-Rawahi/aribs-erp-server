@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, In } from 'typeorm';
@@ -553,7 +554,7 @@ export class InvoiceService {
       deliveryMethod: dto.deliveryMethod,
       template: dto.template || settings.defaultInvoiceTemplate,
       version: 1,
-      invoiceNumber: 'PENDING', // replaced right after insert, once we know sequenceNumber
+      invoiceNumber: `PENDING-${randomUUID()}`, // replaced right after insert, once we know sequenceNumber
     });
     const saved = await this.invoiceRepo.save(invoice);
 

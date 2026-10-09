@@ -124,19 +124,25 @@ export class InvoicePaymentService {
     await this.journalPosting.assertDateOpen(dto.paymentDate || this.todayStr(), 'This payment');
 
     const amount = this.round3(Number(dto.amount));
-    const alreadyPaid = Number(invoice.paidAmount || 0);
-    const total = Number(invoice.total);
-    // 0.001 tolerance matches the 3-decimal OMR precision used everywhere
-    // else, so settling the exact remaining balance never gets rejected
-    // over a floating-point sliver.
-    if (alreadyPaid + amount > total + 0.001) {
-      const remaining = this.round3(Math.max(0, total - alreadyPaid));
-      throw new BadRequestException(
-        `This payment (${amount.toFixed(3)} OMR) would exceed the remaining balance (${remaining.toFixed(3)} OMR). Reduce the amount, or check the invoice total.`,
-      );
-    }
 
+    // The invoice row is locked for the whole payment: two payments saved
+    // at the same moment (double click, two users) are checked one after
+    // the other against the real balance - no overpayment, no lost total.
     const payment = await this.dataSource.transaction(async (manager) => {
+      const locked = await manager.findOne(Invoice, { where: { id: invoiceId }, lock: { mode: 'pessimistic_write' } });
+      if (!locked) throw new NotFoundException('Invoice not found');
+      const alreadyPaid = Number(locked.paidAmount || 0);
+      const total = Number(locked.total);
+      // 0.001 tolerance matches the 3-decimal OMR precision used everywhere
+      // else, so settling the exact remaining balance never gets rejected
+      // over a floating-point sliver.
+      if (alreadyPaid + amount > total + 0.001) {
+        const remaining = this.round3(Math.max(0, total - alreadyPaid));
+        throw new BadRequestException(
+          `This payment (${amount.toFixed(3)} OMR) would exceed the remaining balance (${remaining.toFixed(3)} OMR). Reduce the amount, or check the invoice total.`,
+        );
+      }
+
       let bankTransactionId: string | undefined;
       if (dto.bankAccountId) {
         const account = await manager.findOne(BankAccount, {
@@ -167,12 +173,11 @@ export class InvoicePaymentService {
         bankAccountId: dto.bankAccountId,
         bankTransactionId,
       });
-      return manager.save(row);
+      const saved = await manager.save(row);
+      const paidAmount = this.round3(alreadyPaid + amount);
+      await manager.update(Invoice, { id: invoiceId }, { paidAmount, paymentStatus: computePaymentStatus(paidAmount, total) });
+      return saved;
     });
-
-    invoice.paidAmount = this.round3(alreadyPaid + amount);
-    invoice.paymentStatus = computePaymentStatus(invoice.paidAmount, total);
-    await this.invoiceRepo.save(invoice);
 
     await this.postJournalEntry(payment, invoice.invoiceNumber, actor);
     return payment;
@@ -190,34 +195,24 @@ export class InvoicePaymentService {
       throw new BadRequestException('This is the credit note of an approved sales return and cannot be deleted.');
     }
 
-    if (payment.bankAccountId && payment.bankTransactionId) {
-      try {
-        const account = await this.dataSource.manager.findOne(BankAccount, { where: { id: payment.bankAccountId } });
+    await this.dataSource.transaction(async (manager) => {
+      const invoice = await manager.findOne(Invoice, { where: { id: invoiceId }, lock: { mode: 'pessimistic_write' } });
+      if (payment.bankAccountId && payment.bankTransactionId) {
+        const account = await manager.findOne(BankAccount, { where: { id: payment.bankAccountId }, lock: { mode: 'pessimistic_write' } });
         if (account) {
-          account.currentBalance = Number(account.currentBalance) - Number(payment.amount);
-          await this.dataSource.manager.save(account);
+          account.currentBalance = this.round3(Number(account.currentBalance) - Number(payment.amount));
+          await manager.save(account);
         }
-        await this.dataSource.manager.delete(BankTransaction, payment.bankTransactionId);
-      } catch (err) {
-        console.error(`Reversing bank deposit failed for invoice_payment ${payment.id}:`, err);
+        await manager.delete(BankTransaction, payment.bankTransactionId);
       }
-    }
-    try {
-      await this.journalPosting.removeForSource('invoice_payment', payment.id);
-    } catch (err) {
-      console.error(`Removing auto-posted journal entry failed for invoice_payment ${payment.id}:`, err);
-    }
-
-    await this.repo.remove(payment);
-
-    const invoice = await this.invoiceRepo.findOne({ where: { id: invoiceId } });
-    if (invoice) {
-      const remaining = await this.repo.find({ where: { invoiceId } });
-      const paidAmount = this.round3(remaining.reduce((sum, p) => sum + Number(p.amount), 0));
-      invoice.paidAmount = paidAmount;
-      invoice.paymentStatus = computePaymentStatus(paidAmount, Number(invoice.total));
-      await this.invoiceRepo.save(invoice);
-    }
+      await this.journalPosting.removeForSource('invoice_payment', payment.id, manager);
+      await manager.remove(payment);
+      if (invoice) {
+        const remaining = await manager.find(InvoicePayment, { where: { invoiceId } });
+        const paidAmount = this.round3(remaining.reduce((sum, p) => sum + Number(p.amount), 0));
+        await manager.update(Invoice, { id: invoiceId }, { paidAmount, paymentStatus: computePaymentStatus(paidAmount, Number(invoice.total)) });
+      }
+    });
     return { ok: true };
   }
 
