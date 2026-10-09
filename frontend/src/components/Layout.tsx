@@ -13,6 +13,12 @@ export default function Layout({ children }: { children: ReactNode }) {
   // While an opening date is set but not finalized nothing can be booked
   // (the backend refuses it) - say so up front instead of on every save.
   const [openingPending, setOpeningPending] = useState<string | null>(null);
+  const [openingTick, setOpeningTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setOpeningTick((n) => n + 1);
+    window.addEventListener('opening-status-changed', bump);
+    return () => window.removeEventListener('opening-status-changed', bump);
+  }, []);
   useEffect(() => {
     api
       .get('/settings')
@@ -21,7 +27,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         setOpeningPending(s.openingBalanceDate && !s.openingBalanceFinalizedAt ? String(s.openingBalanceDate).slice(0, 10) : null);
       })
       .catch(() => {});
-  }, [location.pathname, location.search]);
+  }, [location.pathname, location.search, openingTick]);
   const canFinalize = hasAnyRole(['admin', 'accountant', 'ceo', 'md']);
 
   return (

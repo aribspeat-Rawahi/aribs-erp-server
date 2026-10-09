@@ -126,6 +126,8 @@ export default function OpeningBalancesPanel() {
     const res = await api.get('/opening-balances');
     setData(res.data);
     setDateInput(res.data.openingBalanceDate || '');
+    // the "not finalized" banner and account notes listen for this
+    window.dispatchEvent(new Event('opening-status-changed'));
   }, []);
 
   useEffect(() => {
