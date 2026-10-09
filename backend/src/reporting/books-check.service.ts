@@ -147,7 +147,9 @@ export class BooksCheckService {
     const vatPaid = await this.scalar(
       "SELECT COALESCE(SUM(l.debit),0) FROM journal_entry_lines l JOIN accounts a ON a.id = l.accountId JOIN journal_entries e ON e.id = l.journalEntryId WHERE a.code = '2100' AND e.sourceType = 'tax_payment'",
     );
-    const ledgerNet = this.r3(-(await this.balance('2100', ['opening_balance'])) - (await this.balance('1400', ['opening_balance'])));
+    // imported history (Journals > Import) has no VAT documents behind it -
+    // its VAT was declared on returns filed outside the ERP
+    const ledgerNet = this.r3(-(await this.balance('2100', ['opening_balance', 'journal_import'])) - (await this.balance('1400', ['opening_balance', 'journal_import'])));
     checks.push(
       this.make(
         'vat',
@@ -156,7 +158,7 @@ export class BooksCheckService {
         ledgerNet,
         'VAT reports - VAT paid',
         this.r3(Number(v.netVatPayable) - vatPaid),
-        `Net VAT owed in the books (without opening balances) = output VAT - input VAT on the VAT reports from ${from}, less VAT paid with Tax Payments.`,
+        `Net VAT owed in the books (without opening balances and imported history) = output VAT - input VAT on the VAT reports from ${from}, less VAT paid with Tax Payments.`,
       ),
     );
 

@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Plus, BookOpen, Landmark, Scale, Trash2, Pencil, Ban } from 'lucide-react';
+import { Plus, BookOpen, Landmark, Scale, Trash2, Pencil, Ban, Upload } from 'lucide-react';
+import JournalImportModal from '../components/JournalImportModal';
 import api from '../api/client';
 import {
   PrimaryButton,
@@ -93,6 +94,7 @@ export default function JournalsPanel() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [entriesLoading, setEntriesLoading] = useState(true);
   const [showAddEntry, setShowAddEntry] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const [trialBalance, setTrialBalance] = useState<TrialBalance | null>(null);
   const [trialBalanceLoading, setTrialBalanceLoading] = useState(true);
@@ -167,9 +169,24 @@ export default function JournalsPanel() {
           ]}
         />
         {subTab === 'entries' && (
-          <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAddEntry(true)}>
-            New journal entry
-          </PrimaryButton>
+          <div className="flex flex-wrap items-center gap-2">
+            <SecondaryButton icon={Upload} requires="edit" onClick={() => setShowImport(true)}>
+              Import
+            </SecondaryButton>
+            <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAddEntry(true)}>
+              New journal entry
+            </PrimaryButton>
+          </div>
+        )}
+        {showImport && (
+          <JournalImportModal
+            accounts={accounts}
+            onClose={() => setShowImport(false)}
+            onImported={() => {
+              loadEntries();
+              loadAccounts();
+            }}
+          />
         )}
         {subTab === 'accounts' && (
           <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAddAccount(true)}>

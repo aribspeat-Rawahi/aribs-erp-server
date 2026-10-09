@@ -154,9 +154,9 @@ export class ImportService {
     return rows;
   }
 
-  private async readGrid(file: UploadedSheet): Promise<string[][]> {
+  async readGrid(file: UploadedSheet, maxRows = MAX_IMPORT_ROWS, maxBytes = MAX_IMPORT_BYTES): Promise<string[][]> {
     if (!file?.buffer?.length) throw new BadRequestException('Choose a file to upload.');
-    if (file.size > MAX_IMPORT_BYTES) throw new BadRequestException('The file is larger than 5 MB.');
+    if (file.size > maxBytes) throw new BadRequestException(`The file is larger than ${Math.round(maxBytes / 1024 / 1024)} MB.`);
     const name = (file.originalname || '').toLowerCase();
     if (name.endsWith('.csv')) {
       return this.parseCsv(file.buffer.toString('utf8').replace(/^﻿/, ''));
@@ -173,7 +173,7 @@ export class ImportService {
     const grid: string[][] = [];
     const width = sheet.columnCount;
     sheet.eachRow({ includeEmpty: true }, (r, n) => {
-      if (n > MAX_IMPORT_ROWS + 50) return;
+      if (n > maxRows + 50) return;
       const cells: string[] = [];
       for (let c = 1; c <= width; c++) cells.push(this.cellText(r.getCell(c).value));
       grid[n - 1] = cells;

@@ -229,6 +229,7 @@ export class OpeningBalanceService {
       production_order: 'Production orders',
       payroll: 'Payroll payments',
       payroll_accrual: 'Payroll accruals',
+      journal_import: 'Imported journal entries',
       invoice_cogs: 'Invoice stock costs (COGS)',
       purchase_order: 'Purchase orders',
       vendor_credit: 'Vendor credits',
