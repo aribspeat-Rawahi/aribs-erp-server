@@ -52,6 +52,7 @@ the full list. Required:
 | `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_DATABASE` | separate DB for staging |
 | `JWT_SECRET`    | long random string, different per environment |
 | `DATA_DIR`      | persistent folder **outside** the app, e.g. `/home/<user>/erp-data` (staging: `/home/<user>/erp-data-staging`) |
+| `TRUST_PROXY`   | optional, default `1` (one proxy hop, Hostinger). `false` when the app is reached directly. Makes the login rate limit count real visitor addresses. |
 | `CORS_ALLOWED_ORIGINS` | the site's own URL |
 
 Generate a random secret:

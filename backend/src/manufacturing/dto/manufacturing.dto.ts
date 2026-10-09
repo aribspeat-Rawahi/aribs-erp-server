@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { IsString, IsNumber, IsOptional, Min } from 'class-validator';
 
 export class AddBomLineDto {
@@ -24,3 +25,9 @@ export class CreateProductionOrderDto {
   @IsString()
   notes?: string;
 }
+
+// every field optional, but still validated (a plain Partial<> type is not)
+export class UpdateBomLineDto extends PartialType(AddBomLineDto) {}
+
+// every field optional, but still validated (a plain Partial<> type is not)
+export class UpdateProductionOrderDto extends PartialType(CreateProductionOrderDto) {}

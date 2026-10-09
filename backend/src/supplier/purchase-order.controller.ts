@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { PurchaseOrderService } from './purchase-order.service';
-import { CreatePurchaseOrderDto, ReceivePurchaseOrderDto } from './dto/supplier.dto';
+import { CreatePurchaseOrderDto, UpdatePurchaseOrderDto, ReceivePurchaseOrderDto } from './dto/supplier.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
 import { ModuleAccess } from '../auth/module-access.decorator';
@@ -46,7 +46,7 @@ export class PurchaseOrderController {
   // Only while status is still "ordered" — see PurchaseOrderService.update().
   @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: Partial<CreatePurchaseOrderDto>) {
+  update(@Param('id') id: string, @Body() dto: UpdatePurchaseOrderDto) {
     return this.service.update(id, dto);
   }
 

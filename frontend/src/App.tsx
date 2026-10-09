@@ -4,6 +4,7 @@ import Layout from './components/Layout';
 import PageErrorBoundary from './components/PageErrorBoundary';
 import { PageModuleContext } from './components/Permission';
 import Login from './pages/Login';
+import { ForgotPassword, ResetPassword } from './pages/ResetPassword';
 import Setup from './pages/Setup';
 import Dashboard from './pages/Dashboard';
 import Inventory from './pages/Inventory';
@@ -94,6 +95,8 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/setup" element={<Setup />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/" element={<ProtectedRoute module="dashboard"><Dashboard /></ProtectedRoute>} />
       <Route path="/inventory" element={<ProtectedRoute module="inventory"><Inventory /></ProtectedRoute>} />
       {/* Manufacturing and Traceability were merged into Inventory — keep old

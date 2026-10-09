@@ -1,3 +1,4 @@
+import { DocumentUpload } from '../common/upload';
 import {
   BadRequestException,
   Body,
@@ -10,7 +11,6 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { CustomerDocumentService } from './customer-document.service';
 import { UploadCustomerDocumentDto } from './dto/customer.dto';
@@ -31,7 +31,7 @@ export class CustomerDocumentController {
   }
 
   @Post()
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(DocumentUpload())
   async upload(
     @Param('customerId') customerId: string,
     @UploadedFile() file: Express.Multer.File,

@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { SupplierService } from './supplier.service';
-import { CreateSupplierDto } from './dto/supplier.dto';
+import { CreateSupplierDto, UpdateSupplierDto } from './dto/supplier.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
 import { ModuleAccess } from '../auth/module-access.decorator';
@@ -40,7 +40,7 @@ export class SupplierController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: Partial<CreateSupplierDto>) {
+  update(@Param('id') id: string, @Body() dto: UpdateSupplierDto) {
     return this.service.update(id, dto);
   }
 

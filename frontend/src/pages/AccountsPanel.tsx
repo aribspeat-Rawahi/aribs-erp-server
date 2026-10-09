@@ -97,12 +97,17 @@ export default function AccountsPanel() {
   // opening date set but not finalized: an account's opening balance is
   // shown on its card but is not in the books (Trial Balance) yet
   const [openingPending, setOpeningPending] = useState<string | null>(null);
+  const [openingDate, setOpeningDate] = useState<string | null>(null);
+  const [booksStarted, setBooksStarted] = useState(false);
   useEffect(() => {
     api
       .get('/settings')
       .then((res) => {
         const s = res.data || {};
-        setOpeningPending(s.openingBalanceDate && !s.openingBalanceFinalizedAt ? String(s.openingBalanceDate).slice(0, 10) : null);
+        const d = s.openingBalanceDate ? String(s.openingBalanceDate).slice(0, 10) : null;
+        setOpeningDate(d);
+        setOpeningPending(d && !s.openingBalanceFinalizedAt ? d : null);
+        setBooksStarted(!!s.openingBalanceFinalizedAt);
       })
       .catch(() => {});
   }, []);
@@ -278,6 +283,8 @@ export default function AccountsPanel() {
 
       {showAdd && (
         <AccountModal
+          booksStarted={booksStarted}
+          openingDate={openingDate}
           onClose={() => setShowAdd(false)}
           onSaved={() => {
             setShowAdd(false);
@@ -338,10 +345,14 @@ export default function AccountsPanel() {
 
 function AccountModal({
   account,
+  booksStarted = false,
+  openingDate = null,
   onClose,
   onSaved,
 }: {
   account?: BankAccount;
+  booksStarted?: boolean;
+  openingDate?: string | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -371,7 +382,7 @@ function AccountModal({
           type,
           bankName: bankName || undefined,
           accountNumber: accountNumber || undefined,
-          openingBalance: Number(openingBalance) || 0,
+          openingBalance: booksStarted ? 0 : Number(openingBalance) || 0,
         });
       }
       onSaved();
@@ -404,8 +415,13 @@ function AccountModal({
             </Field>
           </div>
         )}
-        {!account && (
-          <Field label="Opening balance (OMR)">
+        {!account && booksStarted && (
+          <p className="text-xs text-muted">
+            The books have started, so a new account starts at 0. Put money in with a dated deposit (View transactions → Add) or a Fund Transfer.
+          </p>
+        )}
+        {!account && !booksStarted && (
+          <Field label={openingDate ? `Balance at the end of ${openingDate} (OMR)` : 'Opening balance (OMR)'}>
             <input
               className={inputClass}
               type="number"

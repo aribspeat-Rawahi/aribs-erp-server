@@ -1,5 +1,5 @@
-import { BadRequestException, Controller, Get, Param, Post, Req, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { BackupUpload } from '../common/upload';
+import { BadRequestException, Body, Controller, Get, Param, Post, Req, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { BackupService } from './backup.service';
 import { OffsiteBackupService } from './offsite-backup.service';
@@ -83,8 +83,8 @@ export class BackupController {
   // the restore itself fails — see backup.service.ts for the full flow.
   @Roles(UserRole.ADMIN)
   @Post('restore')
-  @UseInterceptors(FileInterceptor('file'))
-  async restore(@UploadedFile() file: Express.Multer.File, @Req() req: AuthedRequest) {
+  @UseInterceptors(BackupUpload())
+  async restore(@UploadedFile() file: Express.Multer.File, @Body() body: { password?: string; confirm?: string }, @Req() req: AuthedRequest) {
     if (!file) throw new BadRequestException('No backup file uploaded.');
     if (file.size > MAX_RESTORE_FILE_BYTES) {
       throw new BadRequestException('That file is larger than 100 MB — too large to be a normal backup for this app.');
@@ -94,6 +94,8 @@ export class BackupController {
     }
 
     const sql = file.buffer.toString('utf8');
+    await this.backupService.assertRestoreConfirmed(req.user?.userId, body?.password, body?.confirm);
+    await this.backupService.assertSameVersion(sql);
     const result = await this.backupService.restoreFromSqlDump(sql);
 
     await this.activityLog.log({

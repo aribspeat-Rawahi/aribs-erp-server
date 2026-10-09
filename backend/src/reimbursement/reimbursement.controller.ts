@@ -1,3 +1,4 @@
+import { DocumentUpload } from '../common/upload';
 import {
   Body,
   Controller,
@@ -12,7 +13,6 @@ import {
   UseInterceptors,
   BadRequestException,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { ReimbursementService } from './reimbursement.service';
 import {
@@ -89,7 +89,7 @@ export class ReimbursementController {
 
   // Upload (or replace) the receipt scan for an already-saved claim.
   @Post(':id/receipt')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(DocumentUpload())
   uploadReceipt(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file uploaded');
     if (!ALLOWED_RECEIPT_MIME_TYPES.includes(file.mimetype)) {

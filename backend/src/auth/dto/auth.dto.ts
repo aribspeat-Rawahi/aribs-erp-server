@@ -43,3 +43,33 @@ export class UpdateUserDto {
   @IsObject()
   modulePermissions?: ModulePermissions | null;
 }
+
+export class ChangePasswordDto {
+  @IsString()
+  currentPassword: string;
+
+  @IsString()
+  @MinLength(8)
+  newPassword: string;
+}
+
+export class SetPasswordDto {
+  @IsString()
+  @MinLength(8)
+  newPassword: string;
+}
+
+export class ForgotPasswordDto {
+  @IsEmail()
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  @MinLength(20)
+  token: string;
+
+  @IsString()
+  @MinLength(8)
+  newPassword: string;
+}

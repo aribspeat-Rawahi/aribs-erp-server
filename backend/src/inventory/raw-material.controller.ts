@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/
 import type { Request } from 'express';
 import { StockInRequestService } from './stock-in-request.service';
 import { RawMaterialService } from './raw-material.service';
-import { CreateRawMaterialDto, AddStockDto } from './dto/raw-material.dto';
+import { CreateRawMaterialDto, UpdateRawMaterialDto, AddStockDto } from './dto/raw-material.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
 import { ModuleAccess } from '../auth/module-access.decorator';
@@ -51,7 +51,7 @@ export class RawMaterialController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: Partial<CreateRawMaterialDto>) {
+  update(@Param('id') id: string, @Body() dto: UpdateRawMaterialDto) {
     return this.service.update(id, dto);
   }
 

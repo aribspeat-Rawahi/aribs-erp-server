@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { IsString, IsOptional, IsBoolean, IsIn, IsNumber, Min, IsEnum } from 'class-validator';
 import { InteractionType } from '../../common/interaction-type.enum';
 
@@ -99,3 +100,6 @@ export class CreateCustomerInteractionDto {
   @IsString()
   interactionDate?: string;
 }
+
+// every field optional, but still validated (a plain Partial<> type is not)
+export class UpdateCustomerDto extends PartialType(CreateCustomerDto) {}

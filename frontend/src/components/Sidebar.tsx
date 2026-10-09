@@ -1,3 +1,4 @@
+import { ChangePasswordModal } from './PasswordModals';
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import api from '../api/client';
@@ -22,6 +23,7 @@ import {
   Hourglass,
   Settings as SettingsIcon,
   LogOut,
+  KeyRound,
   ShieldCheck,
   RefreshCw,
   X,
@@ -64,6 +66,7 @@ function Item({
 export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const location = useLocation();
   const { logout, canAccessModule } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
   const [salesOpen, setSalesOpen] = useState(location.pathname.startsWith('/sales') || ['/quotations', '/delivery-notes', '/invoices'].some((p) => location.pathname.startsWith(p)));
   const [crmOpen, setCrmOpen] = useState(['/customers', '/suppliers'].some((p) => location.pathname.startsWith(p)));
   const [paymentOpen, setPaymentOpen] = useState(['/payments', '/pending'].some((p) => location.pathname.startsWith(p)));
@@ -232,7 +235,14 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
         )}
       </nav>
 
-        <div className="px-3 py-3 bg-tan shrink-0">
+        <div className="px-3 py-3 bg-tan shrink-0 space-y-0.5">
+          <button
+            onClick={() => setShowPassword(true)}
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-tan-ink hover:bg-white/40 w-full"
+          >
+            <KeyRound size={16} />
+            Change password
+          </button>
           <button
             onClick={logout}
             className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-tan-ink hover:bg-white/40 w-full"
@@ -242,6 +252,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
           </button>
         </div>
       </aside>
+      {showPassword && <ChangePasswordModal onClose={() => setShowPassword(false)} />}
     </>
   );
 }

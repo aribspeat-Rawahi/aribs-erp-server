@@ -58,6 +58,19 @@ export class User {
   @Column({ type: 'timestamp', nullable: true })
   deletedAt: Date | null;
 
+  // Set whenever the password changes: sign-ins (tokens) issued before it
+  // stop working, so a reset really locks out whoever knew the old one.
+  @Column({ type: 'datetime', nullable: true })
+  passwordChangedAt: Date | null;
+
+  // "Forgot password" link: only a SHA-256 hash of the emailed token is
+  // kept, valid until resetTokenExpiresAt, usable once.
+  @Column({ type: 'varchar', length: 64, nullable: true, select: false })
+  resetTokenHash: string | null;
+
+  @Column({ type: 'datetime', nullable: true, select: false })
+  resetTokenExpiresAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

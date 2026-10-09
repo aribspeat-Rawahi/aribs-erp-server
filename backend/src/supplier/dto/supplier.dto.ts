@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { IsString, IsNumber, IsOptional, IsArray, IsIn, IsEnum, ValidateNested, Min, IsNotEmpty } from 'class-validator';
 import { Type } from 'class-transformer';
 import { InteractionType } from '../../common/interaction-type.enum';
@@ -202,3 +203,9 @@ export class CreateSupplierPaymentDto {
   @IsNotEmpty({ message: 'Choose the bank or cash account.' })
   bankAccountId: string;
 }
+
+// every field optional, but still validated (a plain Partial<> type is not)
+export class UpdatePurchaseOrderDto extends PartialType(CreatePurchaseOrderDto) {}
+
+// every field optional, but still validated (a plain Partial<> type is not)
+export class UpdateSupplierDto extends PartialType(CreateSupplierDto) {}

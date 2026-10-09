@@ -1,3 +1,4 @@
+import { DocumentUpload } from '../common/upload';
 import {
   Body,
   Controller,
@@ -11,7 +12,6 @@ import {
   UseInterceptors,
   BadRequestException,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { ExpenseService } from './expense.service';
 import { CreateExpenseDto, UpdateExpenseDto } from './dto/accounting.dto';
@@ -50,7 +50,7 @@ export class ExpenseController {
 
   // Upload (or replace) the invoice scan/PDF for an already-saved expense.
   @Post(':id/invoice')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(DocumentUpload())
   uploadInvoice(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file uploaded');
     if (!ALLOWED_INVOICE_MIME_TYPES.includes(file.mimetype)) {

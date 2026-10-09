@@ -48,6 +48,11 @@ async function bootstrap() {
   // responses under 1 KB are not worth compressing.
   app.use(compression({ threshold: 1024 }));
   app.setGlobalPrefix(API_PREFIX);
+  // Behind Hostinger's proxy every request would look like it came from the
+  // proxy - the login rate limit would then be shared by the whole company.
+  // Trust one proxy hop (TRUST_PROXY=false to turn off, or a number/list).
+  const trust = process.env.TRUST_PROXY ?? '1';
+  app.set('trust proxy', trust === 'false' ? false : /^\d+$/.test(trust) ? Number(trust) : trust);
   // DateFieldsPipe first: dates must be YYYY-MM-DD before anything compares them
   app.useGlobalPipes(new DateFieldsPipe(), new ValidationPipe({ whitelist: true, transform: true }));
 

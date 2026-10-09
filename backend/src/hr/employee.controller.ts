@@ -1,3 +1,4 @@
+import { DocumentUpload } from '../common/upload';
 import {
   Body,
   Controller,
@@ -11,7 +12,6 @@ import {
   UseInterceptors,
   BadRequestException,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { EmployeeService } from './employee.service';
 import { ArchiveEmployeeDto, CreateEmployeeDto, UpdateEmployeeDto } from './dto/hr.dto';
@@ -83,7 +83,7 @@ export class EmployeeController {
   // photos are shown inside the app only, not public.
   @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)
   @Post(':id/photo')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(DocumentUpload())
   uploadPhoto(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file uploaded');
     if (!ALLOWED_PHOTO_MIME_TYPES.includes(file.mimetype)) {
@@ -104,7 +104,7 @@ export class EmployeeController {
   // Same upload/serve pattern as the profile photo above.
   @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)
   @Post(':id/guardian-photo')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(DocumentUpload())
   uploadGuardianPhoto(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file uploaded');
     if (!ALLOWED_PHOTO_MIME_TYPES.includes(file.mimetype)) {
@@ -121,7 +121,7 @@ export class EmployeeController {
 
   @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)
   @Post(':id/nominee-photo')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(DocumentUpload())
   uploadNomineePhoto(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file uploaded');
     if (!ALLOWED_PHOTO_MIME_TYPES.includes(file.mimetype)) {

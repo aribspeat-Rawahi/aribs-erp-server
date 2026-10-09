@@ -10,6 +10,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
+import { EmailService } from '../common/email.service';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { RolesGuard } from './roles.guard';
   controllers: [AuthController],
   providers: [
     AuthService,
+    EmailService,
     JwtStrategy,
     // Global: every request across every module now needs a valid JWT
     // unless the handler is marked @Public() (login/register only).

@@ -1,3 +1,4 @@
+import { DocumentUpload } from '../common/upload';
 import {
   BadRequestException,
   Body,
@@ -11,7 +12,6 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { CustomerBankAccountService } from './customer-bank-account.service';
 import { UpsertCustomerBankAccountDto } from './dto/customer.dto';
@@ -56,7 +56,7 @@ export class CustomerBankAccountController {
   }
 
   @Post(':id/statement')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(DocumentUpload())
   async uploadStatement(
     @Param('customerId') customerId: string,
     @Param('id') id: string,

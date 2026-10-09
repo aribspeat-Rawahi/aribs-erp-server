@@ -1,6 +1,6 @@
+import { DocumentUpload } from '../common/upload';
 import { Body, Controller, Get, NotFoundException, Patch, Post, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
 import type { Response } from 'express';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { SettingsService } from './settings.service';
 import { UpdateSettingsDto } from './dto/settings.dto';
 import { Roles } from '../auth/roles.guard';
@@ -36,7 +36,7 @@ export class SettingsController {
   // across all invoice templates, and as the dashboard header logo.
   @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD)
   @Post('logo')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(DocumentUpload())
   uploadLogo(@UploadedFile() file: Express.Multer.File) {
     return this.service.uploadLogo(file);
   }

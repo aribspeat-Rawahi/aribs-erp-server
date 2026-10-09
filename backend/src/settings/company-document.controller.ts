@@ -1,5 +1,5 @@
+import { DocumentUpload } from '../common/upload';
 import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { CompanyDocumentService } from './company-document.service';
 import { UploadCompanyDocumentDto, UpdateCompanyDocumentDto } from './dto/settings.dto';
@@ -24,7 +24,7 @@ export class CompanyDocumentController {
   }
 
   @Post()
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(DocumentUpload())
   async upload(@UploadedFile() file: Express.Multer.File, @Body() dto: UploadCompanyDocumentDto) {
     if (!file) throw new BadRequestException('No file uploaded');
     if (!ALLOWED_DOCUMENT_MIME_TYPES.includes(file.mimetype)) {

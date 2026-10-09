@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/
 import type { Request } from 'express';
 import { StockInRequestService } from './stock-in-request.service';
 import { FinishedGoodService } from './finished-good.service';
-import { CreateFinishedGoodDto, ScanStockDto } from './dto/finished-good.dto';
+import { CreateFinishedGoodDto, UpdateFinishedGoodDto, ScanStockDto } from './dto/finished-good.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
 import { ModuleAccess } from '../auth/module-access.decorator';
@@ -48,7 +48,7 @@ export class FinishedGoodController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: Partial<CreateFinishedGoodDto>) {
+  update(@Param('id') id: string, @Body() dto: UpdateFinishedGoodDto) {
     return this.service.update(id, dto);
   }
 

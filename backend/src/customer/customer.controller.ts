@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { CustomerService } from './customer.service';
-import { CreateCustomerDto } from './dto/customer.dto';
+import { CreateCustomerDto, UpdateCustomerDto } from './dto/customer.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
 import { ModuleAccess } from '../auth/module-access.decorator';
@@ -40,7 +40,7 @@ export class CustomerController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: Partial<CreateCustomerDto>) {
+  update(@Param('id') id: string, @Body() dto: UpdateCustomerDto) {
     return this.service.update(id, dto);
   }
 

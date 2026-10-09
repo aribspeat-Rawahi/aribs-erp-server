@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
-import { RegisterUserDto, LoginDto, UpdateUserDto } from './dto/auth.dto';
+import { RegisterUserDto, LoginDto, UpdateUserDto, ChangePasswordDto, SetPasswordDto, ForgotPasswordDto, ResetPasswordDto } from './dto/auth.dto';
 import { Roles } from './roles.guard';
 import { UserRole } from './user.entity';
 import { Public } from './public.decorator';
@@ -37,8 +37,8 @@ export class AuthController {
   @ModuleAccess('team', { strictRoles: true })
   @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD)
   @Post('register')
-  register(@Body() dto: RegisterUserDto) {
-    return this.service.register(dto);
+  register(@Body() dto: RegisterUserDto, @Req() req: any) {
+    return this.service.register(dto, { userId: req.user.userId, role: req.user.role });
   }
 
   // Rate-limited to slow down credential-stuffing/brute-force attempts.
@@ -47,6 +47,30 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.service.login(dto);
+  }
+
+  // "Forgot password" (public, rate-limited): emails a one-hour reset link.
+  @Public()
+  @UseGuards(ThrottlerGuard)
+  @Post('forgot-password')
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.service.forgotPassword(dto.email);
+  }
+
+  // Sets a new password from the emailed link (public, rate-limited).
+  @Public()
+  @UseGuards(ThrottlerGuard)
+  @Post('reset-password')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.service.resetPassword(dto.token, dto.newPassword);
+  }
+
+  // Any signed-in user changes their own password (current one required).
+  @AnySignedInUser()
+  @UseGuards(ThrottlerGuard)
+  @Post('change-password')
+  changePassword(@Body() dto: ChangePasswordDto, @Req() req: any) {
+    return this.service.changeOwnPassword(req.user.userId, dto.currentPassword, dto.newPassword);
   }
 
   // Any signed-in user: their own up-to-date name, role and module
@@ -72,8 +96,17 @@ export class AuthController {
   @ModuleAccess('team', { strictRoles: true })
   @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD)
   @Patch('users/:id')
-  updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return this.service.updateUser(id, dto);
+  updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto, @Req() req: any) {
+    return this.service.updateUser(id, dto, { userId: req.user.userId, role: req.user.role });
+  }
+
+  // Set a new password for someone who forgot theirs (Admin accounts:
+  // only another Admin).
+  @ModuleAccess('team', { strictRoles: true })
+  @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD)
+  @Patch('users/:id/password')
+  setPassword(@Param('id') id: string, @Body() dto: SetPasswordDto, @Req() req: any) {
+    return this.service.adminSetPassword(id, dto.newPassword, { userId: req.user.userId, role: req.user.role });
   }
 
   // Soft-deletes the user — hides them from the Team list and blocks
@@ -84,7 +117,7 @@ export class AuthController {
   @Roles(UserRole.ADMIN, UserRole.CEO, UserRole.MD)
   @Delete('users/:id')
   remove(@Param('id') id: string, @Req() req: any) {
-    return this.service.remove(id, req.user.userId);
+    return this.service.remove(id, req.user.userId, req.user.role);
   }
 
   // Undoes a delete — brings the account back to the normal Team list.

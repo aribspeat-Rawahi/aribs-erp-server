@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Plus, UserX, UserCheck, Trash2, RotateCcw, ShieldCheck } from 'lucide-react';
+import { Plus, UserX, UserCheck, Trash2, RotateCcw, ShieldCheck, KeyRound } from 'lucide-react';
+import { SetPasswordModal } from '../components/PasswordModals';
 import api from '../api/client';
 import { PageHeader, PrimaryButton, SecondaryButton, IconButton, Card, EmptyState, Modal, Field, inputClass } from '../components/ui';
 import { USER_ROLE_OPTIONS, MODULE_OPTIONS, ACCESS_LEVEL_OPTIONS } from '../constants';
@@ -25,6 +26,7 @@ export default function Team() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [permissionsUser, setPermissionsUser] = useState<TeamUser | null>(null);
+  const [passwordUser, setPasswordUser] = useState<TeamUser | null>(null);
   // "Delete" only hides someone from this list (soft delete) — their
   // login history/activity stays intact and it's fully reversible from
   // this "Deleted" view via Restore.
@@ -142,6 +144,9 @@ export default function Team() {
                       ) : (
                         <IconButton icon={UserCheck} tone="success" title="Reactivate" onClick={() => toggleActive(u.id, true)} />
                       )}
+                      {u.id !== currentUser?.id && (
+                        <IconButton icon={KeyRound} title="Set a new password" onClick={() => setPasswordUser(u)} />
+                      )}
                       {canDelete && u.id !== currentUser?.id && (
                         <IconButton icon={Trash2} tone="danger" title="Delete" onClick={() => deleteUser(u.id, u.name)} />
                       )}
@@ -153,6 +158,7 @@ export default function Team() {
           </div>
         </Card>
       )}
+      {passwordUser && <SetPasswordModal user={passwordUser} onClose={() => setPasswordUser(null)} />}
       {showAdd && (
         <AddTeamMemberModal
           onClose={() => setShowAdd(false)}

@@ -1,4 +1,7 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import * as bcrypt from 'bcryptjs';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import * as fs from 'fs';
@@ -44,6 +47,7 @@ export class BackupService {
   constructor(
     private config: ConfigService,
     private offsite: OffsiteBackupService,
+    @InjectDataSource() private dataSource: DataSource,
   ) {
     // Safety backups taken automatically right before a restore live here
     // (never the download-only backups from createSqlDump(), which are
@@ -208,6 +212,38 @@ export class BackupService {
   //      safety backup from step 1 to put the database back the way it
   //      was, then report the original error — the caller never keeps a
   //      half-restored database silently.
+  // A restore replaces every record, so it needs more than a signed-in
+  // session: the word RESTORE and the admin's own password again.
+  async assertRestoreConfirmed(userId: string | undefined, password: unknown, confirm: unknown) {
+    if (String(confirm || '').trim() !== 'RESTORE') throw new BadRequestException('Type RESTORE to confirm.');
+    if (!userId || typeof password !== 'string' || !password) throw new BadRequestException('Enter your password to confirm the restore.');
+    const [u] = await this.dataSource.query('SELECT passwordHash FROM users WHERE id = ? AND active = 1 AND deletedAt IS NULL', [userId]);
+    if (!u || !(await bcrypt.compare(password, u.passwordHash))) throw new ForbiddenException('Wrong password - nothing was restored.');
+  }
+
+  // A backup from another version of the app has other tables/columns:
+  // restoring an older one would make the next update re-run changes that
+  // are already there (and stop the app), a newer one does not fit at all.
+  async assertSameVersion(sql: string) {
+    const names = new Set<string>();
+    const re = /INSERT INTO\s*`typeorm_migrations`[\s\S]*?;/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(sql))) for (const n of m[0].match(/'([A-Za-z]+\d{13})'/g) || []) names.add(n.slice(1, -1));
+    const current: string[] = (await this.dataSource.query('SELECT name FROM typeorm_migrations')).map((r: { name: string }) => r.name);
+    if (!names.size) {
+      throw new BadRequestException("This backup has no version information (it wasn't made by this app's Download Backup), so it can't be restored safely.");
+    }
+    const missing = current.filter((n) => !names.has(n));
+    const extra = [...names].filter((n) => !current.includes(n));
+    if (missing.length || extra.length) {
+      throw new BadRequestException(
+        missing.length
+          ? `This backup is from an older version of the app (it is missing ${missing.length} later update(s), latest: ${missing[missing.length - 1].replace(/\d+$/, '')}). Restoring it here would break the app - ask for it to be restored together with the matching app version.`
+          : `This backup is from a newer version of the app (${extra.length} update(s) this server doesn't have yet). Update the app first.`,
+      );
+    }
+  }
+
   async restoreFromSqlDump(sql: string): Promise<RestoreResult> {
     const trimmed = sql.trim();
     if (!trimmed) {

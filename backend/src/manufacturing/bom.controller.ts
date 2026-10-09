@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { BomService } from './bom.service';
-import { AddBomLineDto } from './dto/manufacturing.dto';
+import { AddBomLineDto, UpdateBomLineDto } from './dto/manufacturing.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
 import { ModuleAccess } from '../auth/module-access.decorator';
@@ -24,7 +24,7 @@ export class BomController {
   // production run consumes, not something to expose to every role.
   @Roles(UserRole.ADMIN, UserRole.PRODUCTION)
   @Patch(':id')
-  updateLine(@Param('id') id: string, @Body() dto: Partial<AddBomLineDto>) {
+  updateLine(@Param('id') id: string, @Body() dto: UpdateBomLineDto) {
     return this.service.updateLine(id, dto);
   }
 

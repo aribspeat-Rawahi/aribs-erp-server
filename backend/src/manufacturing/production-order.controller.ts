@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { ProductionOrderService } from './production-order.service';
-import { CreateProductionOrderDto } from './dto/manufacturing.dto';
+import { CreateProductionOrderDto, UpdateProductionOrderDto } from './dto/manufacturing.dto';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
 import { ModuleAccess } from '../auth/module-access.decorator';
@@ -44,7 +44,7 @@ export class ProductionOrderController {
   // Only while still 'planned' — see ProductionOrderService.update().
   @Roles(UserRole.ADMIN, UserRole.PRODUCTION)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: Partial<CreateProductionOrderDto>) {
+  update(@Param('id') id: string, @Body() dto: UpdateProductionOrderDto) {
     return this.service.update(id, dto);
   }
 

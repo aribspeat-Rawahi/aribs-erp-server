@@ -100,6 +100,11 @@ export default function Login() {
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+        <p className="text-xs text-center mt-3">
+          <Link to="/forgot-password" className="text-brand-600 font-medium">
+            Forgot password?
+          </Link>
+        </p>
         {needsSetup && (
           <p className="text-xs text-muted mt-5 text-center">
             First time setting this up?{' '}

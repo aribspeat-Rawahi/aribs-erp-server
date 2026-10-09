@@ -27,9 +27,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   // Re-checks the account on every request (see AuthService.findActiveForToken):
   // deleted/deactivated users are rejected immediately, and the CURRENT
   // role and module permissions are used.
-  async validate(payload: { sub: string; role: string; email: string }) {
+  async validate(payload: { sub: string; role: string; email: string; iat?: number }) {
     const user = await this.authService.findActiveForToken(payload.sub);
     if (!user) throw new UnauthorizedException('Your account is no longer active. Please contact an administrator.');
+    // signed in before the last password change -> sign in again
+    if (user.passwordChangedAt && (payload.iat || 0) * 1000 < new Date(user.passwordChangedAt).getTime()) {
+      throw new UnauthorizedException('Your password was changed. Please sign in again.');
+    }
     return {
       userId: user.id,
       role: user.role,

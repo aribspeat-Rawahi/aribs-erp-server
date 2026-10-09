@@ -68,6 +68,14 @@ export class BankAccountService {
 
   async create(dto: CreateBankAccountDto, actor: { userId?: string; email?: string } = {}) {
     const opening = dto.openingBalance ?? 0;
+    // Once the books have started, money in a new account must come from
+    // somewhere (a dated deposit or a fund transfer) - an "opening balance"
+    // then would land in Opening Balance Equity dated today.
+    if (opening !== 0 && (await this.journalPosting.lockedThrough())) {
+      throw new BadRequestException(
+        'The opening balances are already finalized, so a new account starts at 0. Put the money in with a dated deposit or a Fund Transfer.',
+      );
+    }
     const item = this.accountRepo.create({
       ...dto,
       openingBalance: opening,
@@ -88,25 +96,8 @@ export class BankAccountService {
       /* linked lazily later if this failed */
     }
 
-    // Before opening balances are finalized, finalize posts this balance.
-    // After that (books started), post it now so the bank page and the
-    // Balance Sheet always agree: Dr bank, Cr 3900 Opening Balance Equity.
-    if (opening > 0 && (await this.journalPosting.lockedThrough())) {
-      const bankGl = await this.ensureJournalAccountId(saved.id);
-      const equity = await this.journalPosting.findAccountIdByCode('3900');
-      await this.journalPosting.postForSource(
-        'bank_opening',
-        saved.id,
-        omanToday(),
-        `Opening balance - ${saved.name}`,
-        [
-          { accountId: bankGl, debit: opening, description: `Opening balance - ${saved.name}` },
-          { accountId: equity, credit: opening, description: `Opening balance - ${saved.name}` },
-        ],
-        actor,
-      );
-    }
-
+    // Before the opening balances are finalized, finalizing posts this
+    // balance (Dr bank / Cr 3900) as of the opening date.
     return saved;
   }
 

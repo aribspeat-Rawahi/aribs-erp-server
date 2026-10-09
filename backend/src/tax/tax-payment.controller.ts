@@ -1,3 +1,4 @@
+import { DocumentUpload } from '../common/upload';
 import {
   Body,
   Controller,
@@ -12,7 +13,6 @@ import {
   UseInterceptors,
   BadRequestException,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { TaxPaymentService } from './tax-payment.service';
 import { CreateTaxPaymentDto, UpdateTaxPaymentDto } from './dto/tax-payment.dto';
@@ -62,7 +62,7 @@ export class TaxPaymentController {
 
   @Roles(...MANAGE_ROLES)
   @Post(':id/document')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(DocumentUpload())
   uploadDocument(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file uploaded');
     if (!ALLOWED_DOCUMENT_MIME_TYPES.includes(file.mimetype)) {

@@ -198,6 +198,7 @@ export default function Settings() {
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [confirmingRestore, setConfirmingRestore] = useState(false);
   const [confirmText, setConfirmText] = useState('');
+  const [restorePassword, setRestorePassword] = useState('');
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState('');
   const [restoreNotice, setRestoreNotice] = useState('');
@@ -214,15 +215,18 @@ export default function Settings() {
     setConfirmingRestore(false);
     setRestoreFile(null);
     setConfirmText('');
+    setRestorePassword('');
     if (restoreFileInputRef.current) restoreFileInputRef.current.value = '';
   }
 
   async function onConfirmRestore() {
-    if (!restoreFile || confirmText !== 'RESTORE') return;
+    if (!restoreFile || confirmText !== 'RESTORE' || !restorePassword) return;
     setRestoring(true);
     setRestoreError('');
     try {
       const formData = new FormData();
+      formData.append('confirm', confirmText);
+      formData.append('password', restorePassword);
       formData.append('file', restoreFile);
       const res = await api.post('/backup/restore', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       setRestoreNotice(
@@ -231,6 +235,7 @@ export default function Settings() {
       setConfirmingRestore(false);
       setRestoreFile(null);
       setConfirmText('');
+      setRestorePassword('');
       if (restoreFileInputRef.current) restoreFileInputRef.current.value = '';
     } catch (err: any) {
       setRestoreError(err?.response?.data?.message || 'Restore failed.');
@@ -785,6 +790,15 @@ export default function Settings() {
                 autoFocus
               />
             </Field>
+            <Field label="Your password">
+              <input
+                className={inputClass}
+                type="password"
+                autoComplete="current-password"
+                value={restorePassword}
+                onChange={(e) => setRestorePassword(e.target.value)}
+              />
+            </Field>
             {restoreError && <p className="text-xs text-red-600">{restoreError}</p>}
             <div className="flex justify-end gap-2 pt-2">
               <SecondaryButton onClick={closeRestoreModal} disabled={restoring}>
@@ -792,7 +806,7 @@ export default function Settings() {
               </SecondaryButton>
               <PrimaryButton
                 onClick={onConfirmRestore}
-                disabled={confirmText !== 'RESTORE' || restoring}
+                disabled={confirmText !== 'RESTORE' || !restorePassword || restoring}
                 className="!bg-red-600 hover:!bg-red-700"
               >
                 {restoring ? 'Restoring…' : 'Restore and overwrite all data'}

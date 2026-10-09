@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { IsString, IsNumber, IsOptional, Min, IsIn } from 'class-validator';
 import { UNITS } from '../../units/units';
 
@@ -57,3 +58,6 @@ export class ScanStockDto {
   @Min(0.001)
   quantity: number;
 }
+
+// every field optional, but still validated (a plain Partial<> type is not)
+export class UpdateFinishedGoodDto extends PartialType(CreateFinishedGoodDto) {}
