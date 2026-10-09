@@ -73,9 +73,40 @@ export class JournalPostingService {
     return (await this.lockInfo(manager))?.date || null;
   }
 
+  // Opening balances must be the first thing in the books: once an opening
+  // date is set, nothing else may be booked until the opening balances are
+  // finalized (anything booked earlier would block the finalize, and a bank
+  // balance would count money that is not in the ledger yet). With no
+  // opening date set the company simply starts from zero - no rule.
+  // For the monthly/daily jobs: skip quietly while the opening balances
+  // are still being prepared (instead of failing - and alerting - per row).
+  async waitingForOpening(manager: EntityManager = this.dataSource.manager): Promise<boolean> {
+    const s = await manager.findOne(Settings, { where: { id: 1 } });
+    return !!(s?.openingBalanceDate && !s.openingBalanceFinalizedAt);
+  }
+
+  async assertBooksStarted(what = 'This entry', manager: EntityManager = this.dataSource.manager): Promise<void> {
+    const s = await manager.findOne(Settings, { where: { id: 1 } });
+    if (s?.openingBalanceDate && !s.openingBalanceFinalizedAt) {
+      throw new BadRequestException(
+        `${what} can't be recorded yet: the opening balances (as of ${String(s.openingBalanceDate).slice(0, 10)}) are not finalized. ` +
+          'An Admin or Accountant must finalize them first in Accounting > Opening Balances.',
+      );
+    }
+  }
+
   // Call BEFORE saving anything dated, so a record is never half-saved.
-  async assertDateOpen(date: string | Date | null | undefined, what = 'This entry', manager?: EntityManager): Promise<void> {
+  // `existing: true` = checking a record that is already in the books
+  // (removing it): allowed before the opening balances are finalized, so
+  // entries made before an opening date was set can still be cleared away.
+  async assertDateOpen(
+    date: string | Date | null | undefined,
+    what = 'This entry',
+    manager?: EntityManager,
+    opts: { existing?: boolean } = {},
+  ): Promise<void> {
     if (!date) return;
+    if (!opts.existing) await this.assertBooksStarted(what, manager);
     const lock = await this.lockInfo(manager);
     // A DATE read from MariaDB arrives as a JS Date at LOCAL midnight -
     // toISOString() would shift it to the previous day east of UTC.
@@ -125,7 +156,7 @@ export class JournalPostingService {
       // also check before saving their own record).
       if (sourceType !== 'opening_balance') {
         if (lines.length) await this.assertDateOpen(date, 'This entry', manager);
-        if (existing) await this.assertDateOpen(existing.date, 'The existing journal entry', manager);
+        if (existing) await this.assertDateOpen(existing.date, 'The existing journal entry', manager, { existing: true });
       }
       if (existing) {
         await manager.delete(JournalEntryLine, { journalEntryId: existing.id });

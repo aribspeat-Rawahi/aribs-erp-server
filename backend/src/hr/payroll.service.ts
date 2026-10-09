@@ -289,8 +289,11 @@ export class PayrollService {
     return { success: true };
   }
 
-  // Approve: books the month's salary cost and what is owed, dated the last
-  // day of the month. Advance installments are taken now (re-checked
+  // Approve: books the month's salary cost and what is owed. Dated the last
+  // day of the month - or today, when approved before the month ends (so
+  // paying early never leaves Salaries Payable upside down in between; the
+  // cost still lands in the same month). A month that hasn't started yet
+  // can't be approved. Advance installments are taken now (re-checked
   // against what is still outstanding).
   async approve(id: string, actor: ActorRef = {}) {
     const s = await this.settings();
@@ -298,7 +301,12 @@ export class PayrollService {
       const row = await manager.findOne(PayrollRecord, { where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!row) throw new NotFoundException('Payroll record not found');
       if (row.status !== 'draft') throw new BadRequestException(`This payroll row is already ${row.status}.`);
-      await this.journalPosting.assertDateOpen(row.periodTo, `Payroll for ${row.periodFrom.slice(0, 7)}`, manager);
+      const today = omanToday();
+      if (row.periodFrom > today) {
+        throw new BadRequestException(`Payroll for ${row.periodFrom.slice(0, 7)} can be approved from ${row.periodFrom}. To pay something earlier, use a salary advance.`);
+      }
+      const accrualDate = row.periodTo < today ? row.periodTo : today;
+      await this.journalPosting.assertDateOpen(accrualDate, `Payroll for ${row.periodFrom.slice(0, 7)}`, manager);
 
       const payable = this.computeAmounts(row, s);
       const alloc = row.employeeId ? await this.allocateAdvances(row.employeeId, payable, manager) : [];
@@ -330,7 +338,7 @@ export class PayrollService {
       await this.journalPosting.postForSource(
         'payroll_accrual',
         row.id,
-        row.periodTo,
+        accrualDate,
         `Payroll ${row.periodFrom.slice(0, 7)} - ${row.staffName}`,
         lines,
         actor,

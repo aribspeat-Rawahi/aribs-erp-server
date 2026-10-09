@@ -105,6 +105,12 @@ export default function Accounting() {
   const [searchParams] = useSearchParams();
   const initialTab = (searchParams.get('tab') as Tab) || 'expenses';
   const [tab, setTab] = useState<Tab>(VALID_TABS.includes(initialTab) ? initialTab : 'expenses');
+  // a link to another tab (e.g. the opening-balances banner) while already
+  // on this page changes only the query string - follow it
+  const urlTab = searchParams.get('tab') as Tab | null;
+  useEffect(() => {
+    if (urlTab && VALID_TABS.includes(urlTab)) setTab(urlTab);
+  }, [urlTab]);
 
   // Expenses
   const [expenses, setExpenses] = useState<Expense[]>([]);

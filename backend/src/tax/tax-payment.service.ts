@@ -236,7 +236,7 @@ export class TaxPaymentService {
     const removed = await this.dataSource.transaction(async (manager) => {
       const item = await manager.findOne(TaxPayment, { where: { id } });
       if (!item) throw new NotFoundException('Tax payment not found');
-      await this.journalPosting.assertDateOpen(item.datePaid, 'This tax payment', manager);
+      await this.journalPosting.assertDateOpen(item.datePaid, 'This tax payment', manager, { existing: true });
 
       if (item.bankAccountId && item.bankTransactionId) {
         const account = await manager.findOne(BankAccount, {

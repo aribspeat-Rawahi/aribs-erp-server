@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
 import { BankAccount, BankAccountType } from './bank-account.entity';
+import { BankReconciliation } from './bank-reconciliation.entity';
 import { BankTransaction, BankTransactionType } from './bank-transaction.entity';
 import { CreateBankAccountDto, CreateBankTransactionDto, UpdateBankAccountDto } from './dto/bank-account.dto';
 import { AccountService } from '../journal/account.service';
@@ -125,6 +126,10 @@ export class BankAccountService {
     // .remove() (not .delete()) so the transaction history is kept with
     // the delete record and comes back on "Undo"
     const txns = await this.txnRepo.find({ where: { bankAccountId: id } });
+    // its bank reconciliations go with it (an Undo brings the lines back
+    // unreconciled)
+    for (const t of txns) t.reconciliationId = null;
+    await this.accountRepo.manager.delete(BankReconciliation, { bankAccountId: id });
     if (txns.length) await this.txnRepo.remove(txns);
     await this.journalPosting.removeForSource('bank_opening', id);
     await this.accountRepo.remove(item);

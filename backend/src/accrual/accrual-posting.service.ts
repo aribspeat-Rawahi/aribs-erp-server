@@ -190,6 +190,7 @@ export class AccrualPostingService {
   // Reminders (08:00).
   @Cron('15 7 1 * *')
   async runMonthlyEosbAccrualCron() {
+    if (await this.journalPosting.waitingForOpening()) return;
     // the 1st of the month books the month just ended, dated its last day
     const today = omanToday();
     const d = new Date(Date.UTC(+today.slice(0, 4), +today.slice(5, 7) - 1, 0));
@@ -219,6 +220,7 @@ export class AccrualPostingService {
   @Cron('30 7 1 * *')
   async runMonthlyIncomeTaxProvision() {
     if (String(this.config.get('ACCRUAL_POSTING_ENABLED')).toLowerCase() === 'false') return;
+    if (await this.journalPosting.waitingForOpening()) return;
     try {
       const provision = await this.postIncomeTaxProvision({});
       this.logger.log(`Monthly income tax provision run: ${provision} OMR posted for year-to-date.`);

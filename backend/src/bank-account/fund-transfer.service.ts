@@ -401,7 +401,7 @@ export class FundTransferService {
     const removed = await this.dataSource.transaction(async (manager) => {
       const item = await manager.findOne(FundTransfer, { where: { id } });
       if (!item) throw new NotFoundException('Fund transfer not found');
-      await this.journalPosting.assertDateOpen(item.date, 'This transfer', manager);
+      await this.journalPosting.assertDateOpen(item.date, 'This transfer', manager, { existing: true });
       // An IN_TRANSIT transfer never credited the destination account, so
       // there is nothing to reverse on that side (and no toTransactionId).
       const wasInTransit = item.status === FundTransferStatus.IN_TRANSIT;

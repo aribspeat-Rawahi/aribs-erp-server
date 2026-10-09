@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsNumber, Min } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, Min, IsArray } from 'class-validator';
 import { BankAccountType } from '../bank-account.entity';
 import { BankTransactionType } from '../bank-transaction.entity';
 import { BankTransactionCategory } from '../bank-transaction-category.enum';
@@ -69,4 +69,16 @@ export class CreateBankTransactionDto {
   @IsOptional()
   @IsEnum(BankTransactionCategory)
   category?: BankTransactionCategory;
+}
+
+export class CompleteReconciliationDto {
+  @IsString()
+  statementDate: string;
+
+  @IsNumber()
+  statementBalance: number;
+
+  @IsArray()
+  @IsString({ each: true })
+  transactionIds: string[];
 }

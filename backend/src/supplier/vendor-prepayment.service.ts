@@ -193,7 +193,7 @@ export class VendorPrepaymentService {
   // Entry (and the AP relief it represents) must stay intact.
   async remove(id: string, actor: ActorRef) {
     const item = await this.findOne(id);
-    await this.journalPosting.assertDateOpen(item.date, 'This prepayment');
+    await this.journalPosting.assertDateOpen(item.date, 'This prepayment', undefined, { existing: true });
     if (Number(item.appliedAmount) > 0) {
       throw new BadRequestException('This prepayment has already been applied — it can no longer be deleted.');
     }

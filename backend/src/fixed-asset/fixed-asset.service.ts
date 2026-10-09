@@ -200,7 +200,7 @@ export class FixedAssetService {
   async remove(id: string, actor: ActorRef) {
     const item = await this.findOne(id);
     // its purchase is in the books on that date - closed periods stay as filed
-    await this.journalPosting.assertDateOpen(item.purchaseDate, 'This asset purchase');
+    await this.journalPosting.assertDateOpen(item.purchaseDate, 'This asset purchase', undefined, { existing: true });
     if (Number(item.accumulatedDepreciation) > 0 || item.status === FixedAssetStatus.DISPOSED) {
       throw new BadRequestException(
         'This asset already has posted depreciation history — use Dispose instead of deleting it.',
@@ -303,6 +303,10 @@ export class FixedAssetService {
   @Cron('0 7 1 * *')
   async runMonthlyDepreciation() {
     if (String(this.config.get('FIXED_ASSET_DEPRECIATION_ENABLED')).toLowerCase() === 'false') return;
+    if (await this.journalPosting.waitingForOpening()) {
+      this.logger.log('Monthly depreciation skipped: opening balances are not finalized yet.');
+      return;
+    }
     const period = omanToday().slice(0, 7); // "YYYY-MM"
     const assets = await this.repo.find({ where: { status: FixedAssetStatus.ACTIVE } });
     let posted = 0;

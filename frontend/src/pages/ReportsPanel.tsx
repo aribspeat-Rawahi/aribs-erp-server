@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ShieldCheck,
@@ -71,9 +71,8 @@ interface LowStockItem {
   unit: string;
 }
 interface AgingRow {
-  customerId: string;
-  customerName: string;
-  customerPhone?: string;
+  partyId: string;
+  partyName: string;
   current: number;
   days1to30: number;
   days31to60: number;
@@ -81,11 +80,103 @@ interface AgingRow {
   days90plus: number;
   totalOutstanding: number;
   oldestDaysOverdue: number;
+  bills?: { purchaseOrderId: string; poNumber: string; referenceDate: string; daysOverdue: number; outstanding: number }[];
 }
 interface AgingReport {
   asOfDate: string;
   rows: AgingRow[];
-  grandTotal: Omit<AgingRow, 'customerId' | 'customerName' | 'customerPhone' | 'oldestDaysOverdue'>;
+  grandTotal: Omit<AgingRow, 'partyId' | 'partyName' | 'oldestDaysOverdue' | 'bills'>;
+}
+
+const fmtAmt = (n: number) => (Number(n) > 0 ? Number(n).toFixed(3) : '-');
+
+// One aging table - receivables (customers) or payables (suppliers).
+function AgingCard({ title, partyLabel, emptyText, report }: { title: string; partyLabel: string; emptyText: string; report: AgingReport | null }) {
+  const [open, setOpen] = useState<string | null>(null);
+  return (
+    <Card className="p-4 mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+          <Clock size={15} />
+          {title}
+        </div>
+        {report?.asOfDate && <span className="text-xs text-muted">As of {report.asOfDate}</span>}
+      </div>
+      {!report ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : report.rows.length === 0 ? (
+        <EmptyState>{emptyText}</EmptyState>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead>
+              <tr className="text-left text-xs text-muted border-b border-black/10">
+                <th className="py-2 pr-3 font-medium">{partyLabel}</th>
+                <th className="py-2 px-3 font-medium text-right whitespace-nowrap">Current</th>
+                <th className="py-2 px-3 font-medium text-right whitespace-nowrap">1-30 Days</th>
+                <th className="py-2 px-3 font-medium text-right whitespace-nowrap">31-60 Days</th>
+                <th className="py-2 px-3 font-medium text-right whitespace-nowrap">61-90 Days</th>
+                <th className="py-2 px-3 font-medium text-right whitespace-nowrap">90+ Days</th>
+                <th className="py-2 pl-3 font-medium text-right whitespace-nowrap">Total Outstanding</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-black/5">
+              {report.rows.map((r) => (
+                <Fragment key={r.partyId}>
+                  <tr>
+                    <td className="py-2 pr-3">
+                      {r.bills?.length ? (
+                        <button
+                          type="button"
+                          className="text-left text-ink font-medium hover:text-brand-700"
+                          onClick={() => setOpen(open === r.partyId ? null : r.partyId)}
+                          title="Show bills"
+                        >
+                          {r.partyName} <span className="text-xs text-muted">({r.bills.length})</span>
+                        </button>
+                      ) : (
+                        <div className="text-ink font-medium">{r.partyName}</div>
+                      )}
+                      {r.oldestDaysOverdue > 90 && <div className="text-xs text-red-600">{r.oldestDaysOverdue} days overdue</div>}
+                    </td>
+                    <td className="py-2 px-3 text-right whitespace-nowrap text-ink/70">{fmtAmt(r.current)}</td>
+                    <td className="py-2 px-3 text-right whitespace-nowrap text-amber-700">{fmtAmt(r.days1to30)}</td>
+                    <td className="py-2 px-3 text-right whitespace-nowrap text-amber-800">{fmtAmt(r.days31to60)}</td>
+                    <td className="py-2 px-3 text-right whitespace-nowrap text-red-600">{fmtAmt(r.days61to90)}</td>
+                    <td className="py-2 px-3 text-right whitespace-nowrap text-red-700 font-medium">{fmtAmt(r.days90plus)}</td>
+                    <td className="py-2 pl-3 text-right whitespace-nowrap font-semibold text-ink">{Number(r.totalOutstanding).toFixed(3)}</td>
+                  </tr>
+                  {open === r.partyId &&
+                    r.bills?.map((b) => (
+                      <tr key={b.purchaseOrderId} className="bg-black/[0.02] text-xs">
+                        <td className="py-1.5 pr-3 pl-4 text-muted whitespace-nowrap">
+                          {b.poNumber} · {b.referenceDate}
+                        </td>
+                        <td colSpan={5} className="py-1.5 px-3 text-right text-muted whitespace-nowrap">
+                          {b.daysOverdue > 0 ? `${b.daysOverdue} days overdue` : 'not due yet'}
+                        </td>
+                        <td className="py-1.5 pl-3 text-right whitespace-nowrap text-ink">{Number(b.outstanding).toFixed(3)}</td>
+                      </tr>
+                    ))}
+                </Fragment>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-black/10 font-semibold text-ink">
+                <td className="py-2 pr-3">Total</td>
+                <td className="py-2 px-3 text-right whitespace-nowrap">{Number(report.grandTotal.current).toFixed(3)}</td>
+                <td className="py-2 px-3 text-right whitespace-nowrap">{Number(report.grandTotal.days1to30).toFixed(3)}</td>
+                <td className="py-2 px-3 text-right whitespace-nowrap">{Number(report.grandTotal.days31to60).toFixed(3)}</td>
+                <td className="py-2 px-3 text-right whitespace-nowrap">{Number(report.grandTotal.days61to90).toFixed(3)}</td>
+                <td className="py-2 px-3 text-right whitespace-nowrap">{Number(report.grandTotal.days90plus).toFixed(3)}</td>
+                <td className="py-2 pl-3 text-right whitespace-nowrap">{Number(report.grandTotal.totalOutstanding).toFixed(3)} OMR</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
 }
 
 function MonthlyTrendChart({ data }: { data: TrendPoint[] }) {
@@ -117,6 +208,7 @@ export default function ReportsPanel() {
   const [customerSales, setCustomerSales] = useState<CustomerBreakdown[]>([]);
   const [lowStock, setLowStock] = useState<{ rawMaterials: LowStockItem[]; finishedGoods: LowStockItem[] } | null>(null);
   const [aging, setAging] = useState<AgingReport | null>(null);
+  const [supplierAging, setSupplierAging] = useState<AgingReport | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -140,7 +232,18 @@ export default function ReportsPanel() {
   // loaded once on its own rather than re-fetched every time the range
   // picker above changes.
   useEffect(() => {
-    api.get('/reports/aging').then((res) => setAging(res.data));
+    api
+      .get('/reports/aging')
+      .then((res) => setAging({ ...res.data, rows: res.data.rows.map((r: any) => ({ ...r, partyId: r.customerId, partyName: r.customerName })) }));
+    api
+      .get('/reports/supplier-aging')
+      .then((res) =>
+        setSupplierAging({
+          ...res.data,
+          rows: res.data.rows.map((r: any) => ({ ...r, partyId: r.supplierId, partyName: r.supplierName })),
+        }),
+      )
+      .catch(() => setSupplierAging({ asOfDate: '', rows: [], grandTotal: { current: 0, days1to30: 0, days31to60: 0, days61to90: 0, days90plus: 0, totalOutstanding: 0 } }));
   }, []);
 
   // Ledger revenue (excl. VAT) — same basis as Net Profit / Income Statement.
@@ -187,65 +290,18 @@ export default function ReportsPanel() {
               />
             </div>
 
-            <Card className="p-4 mb-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-                  <Clock size={15} />
-                  Accounts Receivable Aging
-                </div>
-                {aging && <span className="text-xs text-muted">As of {aging.asOfDate}</span>}
-              </div>
-              {!aging ? (
-                <div className="text-sm text-muted">Loading…</div>
-              ) : aging.rows.length === 0 ? (
-                <EmptyState>No outstanding customer balances — everything is paid up.</EmptyState>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px] text-sm">
-                    <thead>
-                      <tr className="text-left text-xs text-muted border-b border-black/10">
-                        <th className="py-2 pr-3 font-medium">Customer</th>
-                        <th className="py-2 px-3 font-medium text-right whitespace-nowrap">Current</th>
-                        <th className="py-2 px-3 font-medium text-right whitespace-nowrap">1-30 Days</th>
-                        <th className="py-2 px-3 font-medium text-right whitespace-nowrap">31-60 Days</th>
-                        <th className="py-2 px-3 font-medium text-right whitespace-nowrap">61-90 Days</th>
-                        <th className="py-2 px-3 font-medium text-right whitespace-nowrap">90+ Days</th>
-                        <th className="py-2 pl-3 font-medium text-right whitespace-nowrap">Total Outstanding</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-black/5">
-                      {aging.rows.map((r) => (
-                        <tr key={r.customerId}>
-                          <td className="py-2 pr-3">
-                            <div className="text-ink font-medium">{r.customerName}</div>
-                            {r.oldestDaysOverdue > 90 && (
-                              <div className="text-xs text-red-600">{r.oldestDaysOverdue} days overdue</div>
-                            )}
-                          </td>
-                          <td className="py-2 px-3 text-right whitespace-nowrap text-ink/70">{Number(r.current) > 0 ? Number(r.current).toFixed(3) : '-'}</td>
-                          <td className="py-2 px-3 text-right whitespace-nowrap text-amber-700">{Number(r.days1to30) > 0 ? Number(r.days1to30).toFixed(3) : '-'}</td>
-                          <td className="py-2 px-3 text-right whitespace-nowrap text-amber-800">{Number(r.days31to60) > 0 ? Number(r.days31to60).toFixed(3) : '-'}</td>
-                          <td className="py-2 px-3 text-right whitespace-nowrap text-red-600">{Number(r.days61to90) > 0 ? Number(r.days61to90).toFixed(3) : '-'}</td>
-                          <td className="py-2 px-3 text-right whitespace-nowrap text-red-700 font-medium">{Number(r.days90plus) > 0 ? Number(r.days90plus).toFixed(3) : '-'}</td>
-                          <td className="py-2 pl-3 text-right whitespace-nowrap font-semibold text-ink">{Number(r.totalOutstanding).toFixed(3)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t border-black/10 font-semibold text-ink">
-                        <td className="py-2 pr-3">Total</td>
-                        <td className="py-2 px-3 text-right whitespace-nowrap">{Number(aging.grandTotal.current).toFixed(3)}</td>
-                        <td className="py-2 px-3 text-right whitespace-nowrap">{Number(aging.grandTotal.days1to30).toFixed(3)}</td>
-                        <td className="py-2 px-3 text-right whitespace-nowrap">{Number(aging.grandTotal.days31to60).toFixed(3)}</td>
-                        <td className="py-2 px-3 text-right whitespace-nowrap">{Number(aging.grandTotal.days61to90).toFixed(3)}</td>
-                        <td className="py-2 px-3 text-right whitespace-nowrap">{Number(aging.grandTotal.days90plus).toFixed(3)}</td>
-                        <td className="py-2 pl-3 text-right whitespace-nowrap">{Number(aging.grandTotal.totalOutstanding).toFixed(3)} OMR</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
-            </Card>
+            <AgingCard
+              title="Accounts Receivable Aging"
+              partyLabel="Customer"
+              emptyText="No outstanding customer balances - everything is paid up."
+              report={aging}
+            />
+            <AgingCard
+              title="Accounts Payable Aging"
+              partyLabel="Supplier"
+              emptyText="Nothing owed to suppliers."
+              report={supplierAging}
+            />
 
             <Card className="p-4 mb-4">
               <div className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-3">

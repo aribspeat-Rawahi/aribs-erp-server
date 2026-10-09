@@ -36,6 +36,12 @@ export class BankTransaction {
   @Column({ type: 'enum', enum: BankTransactionCategory, nullable: true })
   category?: BankTransactionCategory;
 
+  // The bank reconciliation (statement) this line was ticked off in, or
+  // null while it hasn't shown up on a reconciled bank statement yet.
+  @Index()
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  reconciliationId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

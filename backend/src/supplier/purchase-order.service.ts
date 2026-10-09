@@ -122,6 +122,46 @@ export class PurchaseOrderService {
     return this.withItems(await this.orderRepo.find({ order: { sequenceNumber: 'DESC' } }));
   }
 
+  // Accounts Payable Aging: what is still owed per received bill
+  // (received value - payments/credits applied), bucketed by days past
+  // its due date. A bill without a due date ages from its first delivery
+  // (the supplier invoice date when given).
+  async getAgingRows(asOf: string) {
+    const rows: {
+      id: string;
+      poNumber: string;
+      supplierId: string;
+      receivedTotal: string;
+      paidAmount: string | null;
+      dueDate: string | null;
+      firstReceived: string | null;
+      created: string;
+    }[] = await this.orderRepo.manager.query(
+      `SELECT po.id, po.poNumber, po.supplierId, po.receivedTotal, po.paidAmount,
+              DATE_FORMAT(po.dueDate, '%Y-%m-%d') AS dueDate,
+              DATE_FORMAT(MIN(COALESCE(gr.supplierInvoiceDate, gr.receivedDate)), '%Y-%m-%d') AS firstReceived,
+              DATE_FORMAT(po.createdAt, '%Y-%m-%d') AS created
+         FROM purchase_orders po
+         LEFT JOIN goods_receipts gr ON gr.purchaseOrderId = po.id
+        WHERE po.status <> ? AND po.receivedTotal - COALESCE(po.paidAmount, 0) > 0.0005
+        GROUP BY po.id`,
+      [PurchaseOrderStatus.CANCELLED],
+    );
+    const asOfMs = Date.parse(asOf + 'T00:00:00Z');
+    return rows.map((r) => {
+      const ref = r.dueDate || r.firstReceived || r.created;
+      const daysOverdue = Math.floor((asOfMs - Date.parse(ref + 'T00:00:00Z')) / 86400000);
+      return {
+        purchaseOrderId: r.id,
+        poNumber: r.poNumber,
+        supplierId: r.supplierId,
+        referenceDate: ref,
+        daysOverdue,
+        outstanding: this.round3(Number(r.receivedTotal) - Number(r.paidAmount || 0)),
+      };
+    });
+  }
+
   // Dashboard "Payable Bills": what is owed is the RECEIVED value.
   async getPayableBillsList(limit = 10) {
     const orders = await this.orderRepo.find({

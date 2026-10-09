@@ -143,7 +143,7 @@ export class JournalEntryService {
   // references a JournalEntry yet) but logged, mirroring Reimbursement.
   async remove(id: string, actor: ActorRef) {
     const item = await this.findOne(id);
-    await this.journalPosting.assertDateOpen(item.date, 'This journal entry');
+    await this.journalPosting.assertDateOpen(item.date, 'This journal entry', undefined, { existing: true });
     if (item.autoPosted) {
       throw new BadRequestException(
         'This entry was posted automatically from another record (Expense, Invoice, Reimbursement, Fund Transfer, or Tax Payment) — edit or delete that record instead of this entry directly.',

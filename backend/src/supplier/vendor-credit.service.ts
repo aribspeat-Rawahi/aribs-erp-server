@@ -235,7 +235,7 @@ export class VendorCreditService {
   // Only reversible before anything has been applied or refunded.
   async remove(id: string, actor: ActorRef) {
     const item = await this.findOne(id);
-    await this.journalPosting.assertDateOpen(item.date, 'This vendor credit');
+    await this.journalPosting.assertDateOpen(item.date, 'This vendor credit', undefined, { existing: true });
     if (Number(item.appliedAmount) > 0 || Number(item.refundedAmount) > 0) {
       throw new BadRequestException('This credit has already been applied or refunded — it can no longer be deleted.');
     }

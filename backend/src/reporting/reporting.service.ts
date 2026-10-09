@@ -265,6 +265,37 @@ export class ReportingService {
     return { asOfDate: omanToday(), rows: withNames, grandTotal };
   }
 
+  // Accounts Payable Aging Report - what we still owe each supplier,
+  // bucketed like the receivables report (Current / 1-30 / 31-60 / 61-90 /
+  // 90+ days past due), with the bills behind each total.
+  async getSupplierAgingReport() {
+    const asOfDate = omanToday();
+    const bills = await this.purchaseOrderService.getAgingRows(asOfDate);
+    const suppliers = await this.supplierService.findAll();
+    const nameById = new Map(suppliers.map((s: any) => [s.id, s.name]));
+    const empty = () => ({ current: 0, days1to30: 0, days31to60: 0, days61to90: 0, days90plus: 0, totalOutstanding: 0 });
+    const r3 = (n: number) => Math.round(n * 1000) / 1000;
+    const bySupplier = new Map<string, any>();
+    const grandTotal = empty();
+    for (const b of bills) {
+      const bucket =
+        b.daysOverdue <= 0 ? 'current' : b.daysOverdue <= 30 ? 'days1to30' : b.daysOverdue <= 60 ? 'days31to60' : b.daysOverdue <= 90 ? 'days61to90' : 'days90plus';
+      const row =
+        bySupplier.get(b.supplierId) ||
+        { supplierId: b.supplierId, supplierName: nameById.get(b.supplierId) || 'Unknown supplier', ...empty(), oldestDaysOverdue: 0, bills: [] as any[] };
+      row[bucket] = r3(row[bucket] + b.outstanding);
+      row.totalOutstanding = r3(row.totalOutstanding + b.outstanding);
+      row.oldestDaysOverdue = Math.max(row.oldestDaysOverdue, b.daysOverdue);
+      row.bills.push({ purchaseOrderId: b.purchaseOrderId, poNumber: b.poNumber, referenceDate: b.referenceDate, daysOverdue: b.daysOverdue, outstanding: b.outstanding });
+      bySupplier.set(b.supplierId, row);
+      (grandTotal as any)[bucket] = r3((grandTotal as any)[bucket] + b.outstanding);
+      grandTotal.totalOutstanding = r3(grandTotal.totalOutstanding + b.outstanding);
+    }
+    const rows = Array.from(bySupplier.values()).sort((a, b) => b.totalOutstanding - a.totalOutstanding);
+    for (const r of rows) r.bills.sort((a: any, b: any) => b.daysOverdue - a.daysOverdue);
+    return { asOfDate, rows, grandTotal };
+  }
+
   // Dashboard's bottom "Stock Value" bar — raw materials valued at their
   // cost price, finished goods valued at their selling price (finished
   // goods have no separate cost field), plus a product count.

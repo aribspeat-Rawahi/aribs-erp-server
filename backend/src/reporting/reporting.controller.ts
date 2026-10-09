@@ -79,6 +79,12 @@ export class ReportingController {
     return this.service.getAgingReport();
   }
 
+  // Accounts Payable Aging - what is owed to each supplier, by days past due.
+  @Get('supplier-aging')
+  getSupplierAgingReport() {
+    return this.service.getSupplierAgingReport();
+  }
+
   // CRM Step 9 — Combined Dashboard Alerts: overdue invoices, credit-limit
   // breaches, pending approvals, and stuck recurring invoices in one call.
   @Get('alerts')

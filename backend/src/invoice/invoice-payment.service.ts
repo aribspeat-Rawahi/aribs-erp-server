@@ -185,7 +185,7 @@ export class InvoicePaymentService {
   async remove(invoiceId: string, paymentId: string) {
     const payment = await this.repo.findOne({ where: { id: paymentId, invoiceId } });
     if (!payment) throw new NotFoundException('Payment not found');
-    await this.journalPosting.assertDateOpen(payment.paymentDate, 'This payment');
+    await this.journalPosting.assertDateOpen(payment.paymentDate, 'This payment', undefined, { existing: true });
     if (payment.salesReturnId) {
       throw new BadRequestException('This is the credit note of an approved sales return and cannot be deleted.');
     }

@@ -165,7 +165,7 @@ export class SupplierPaymentService {
   async remove(purchaseOrderId: string, paymentId: string) {
     const payment = await this.repo.findOne({ where: { id: paymentId, purchaseOrderId } });
     if (!payment) throw new NotFoundException('Payment not found');
-    await this.journalPosting.assertDateOpen(payment.paymentDate, 'This payment');
+    await this.journalPosting.assertDateOpen(payment.paymentDate, 'This payment', undefined, { existing: true });
     if (payment.creditSource) {
       throw new BadRequestException('This row is a credit from a purchase return, vendor credit or prepayment - it is removed together with that record, not here.');
     }

@@ -214,6 +214,10 @@ export class RecurringInvoiceService {
   async runDailyGeneration() {
     if (String(this.config.get('RECURRING_INVOICE_ENABLED')).toLowerCase() === 'false') return;
 
+    if (await this.invoiceService.waitingForOpening()) {
+      this.logger.log('Recurring invoice run skipped: opening balances are not finalized yet.');
+      return;
+    }
     const today = this.todayStr();
     const due = await this.repo
       .createQueryBuilder('ri')

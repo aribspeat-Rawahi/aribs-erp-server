@@ -819,7 +819,7 @@ export class InvoiceService {
     const invoice = await this.invoiceRepo.findOne({ where: { id } });
     if (!invoice) throw new NotFoundException('Invoice not found');
     this.assertNotOpening(invoice, 'deleted');
-    await this.journalPosting.assertDateOpen(invoice.issueDate, 'This invoice');
+    await this.journalPosting.assertDateOpen(invoice.issueDate, 'This invoice', undefined, { existing: true });
     if (await this.hasApprovedReturns(id)) {
       throw new BadRequestException('This invoice has an approved sales return and cannot be deleted.');
     }
@@ -1173,6 +1173,12 @@ export class InvoiceService {
   // invoice with no dueDate falls back to issueDate). ReportingService
   // attaches customer names on top of this — kept customerId-only here
   // since InvoiceService shouldn't depend on CustomerService for a report.
+  // true while an opening date is set but not finalized (no invoice may be
+  // booked yet) - used by the recurring-invoice job to skip quietly
+  waitingForOpening() {
+    return this.journalPosting.waitingForOpening();
+  }
+
   async getAgingReportRows(): Promise<CustomerAging[]> {
     const invoices = await this.invoiceRepo
       .createQueryBuilder('invoice')

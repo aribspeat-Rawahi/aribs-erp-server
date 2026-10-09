@@ -1,9 +1,10 @@
 import { BankTransactionCategory, BANK_TRANSACTION_CATEGORY_LABEL } from './bank-transaction-category.enum';
 import { BankTransactionType } from './bank-transaction.entity';
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { BankAccountService } from './bank-account.service';
-import { CreateBankAccountDto, CreateBankTransactionDto, UpdateBankAccountDto } from './dto/bank-account.dto';
+import { CompleteReconciliationDto, CreateBankAccountDto, CreateBankTransactionDto, UpdateBankAccountDto } from './dto/bank-account.dto';
+import { BankReconciliationService } from './bank-reconciliation.service';
 import { Roles } from '../auth/roles.guard';
 import { UserRole } from '../auth/user.entity';
 import { ModuleAccess } from '../auth/module-access.decorator';
@@ -21,7 +22,35 @@ const DEPOSIT_CATEGORIES: BankTransactionCategory[] = [
 @ModuleAccess('accounting')
 @Controller('bank-accounts')
 export class BankAccountController {
-  constructor(private service: BankAccountService) {}
+  constructor(
+    private service: BankAccountService,
+    private reconciliation: BankReconciliationService,
+  ) {}
+
+  // ---- Bank reconciliation (statement vs ERP) - finance roles only.
+  @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.CEO, UserRole.MD)
+  @Delete('reconciliations/:recId')
+  undoReconciliation(@Param('recId') recId: string) {
+    return this.reconciliation.undo(recId);
+  }
+
+  @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.CEO, UserRole.MD)
+  @Get(':id/reconciliation')
+  prepareReconciliation(@Param('id') id: string, @Query('statementDate') statementDate: string) {
+    return this.reconciliation.prepare(id, statementDate);
+  }
+
+  @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.CEO, UserRole.MD)
+  @Get(':id/reconciliations')
+  listReconciliations(@Param('id') id: string) {
+    return this.reconciliation.list(id);
+  }
+
+  @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.CEO, UserRole.MD)
+  @Post(':id/reconciliations')
+  completeReconciliation(@Param('id') id: string, @Body() dto: CompleteReconciliationDto, @Req() req: AuthedRequest) {
+    return this.reconciliation.complete(id, dto, { userId: req.user?.userId, email: req.user?.email });
+  }
 
   @ModuleAccess('accounting', { readAlso: ['invoices', 'suppliers', 'hr'] })
 
