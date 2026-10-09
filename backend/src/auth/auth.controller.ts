@@ -45,8 +45,8 @@ export class AuthController {
   @Public()
   @UseGuards(ThrottlerGuard)
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.service.login(dto);
+  login(@Body() dto: LoginDto, @Req() req: any) {
+    return this.service.login(dto, String(req.ip || ''));
   }
 
   // "Forgot password" (public, rate-limited): emails a one-hour reset link.

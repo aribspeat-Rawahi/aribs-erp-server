@@ -197,6 +197,10 @@ export class InvoicePaymentService {
 
     await this.dataSource.transaction(async (manager) => {
       const invoice = await manager.findOne(Invoice, { where: { id: invoiceId }, lock: { mode: 'pessimistic_write' } });
+      // a second delete of the same payment (double click) waited for the
+      // lock above - by now the payment is gone: change nothing
+      const stillThere = await manager.findOne(InvoicePayment, { where: { id: payment.id, invoiceId } });
+      if (!stillThere) throw new NotFoundException('This payment was already deleted.');
       if (payment.bankAccountId && payment.bankTransactionId) {
         const account = await manager.findOne(BankAccount, { where: { id: payment.bankAccountId }, lock: { mode: 'pessimistic_write' } });
         if (account) {

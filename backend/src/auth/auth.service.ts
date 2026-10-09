@@ -14,10 +14,13 @@ export interface Requester {
   role: string;
 }
 
-// Failed sign-ins per email: after MAX_FAILS within FAIL_WINDOW the account
-// is locked for LOCK_MS (on top of the per-IP rate limit, so guessing from
-// many addresses doesn't help). Kept in memory - one app process.
+// Failed sign-ins: after MAX_FAILS wrong passwords for one email from one
+// address within FAIL_WINDOW, that address is locked out of that account
+// for LOCK_MS - a stranger can't lock the real user out from elsewhere.
+// Guessing one account from many addresses hits MAX_FAILS_ALL_ADDRESSES,
+// which locks the account itself. Kept in memory - one app process.
 const MAX_FAILS = 8;
+const MAX_FAILS_ALL_ADDRESSES = 40;
 const FAIL_WINDOW_MS = 15 * 60 * 1000;
 const LOCK_MS = 15 * 60 * 1000;
 const RESET_TOKEN_MS = 60 * 60 * 1000;
@@ -146,25 +149,33 @@ export class AuthService {
     return { id: user.id, name: user.name, email: user.email, role: user.role, modulePermissions: user.modulePermissions || null };
   }
 
-  async login(dto: LoginDto) {
-    const key = String(dto.email || '').trim().toLowerCase();
+  async login(dto: LoginDto, ip = '') {
+    const email = String(dto.email || '').trim().toLowerCase();
+    const keys: [string, number][] = [
+      [`${email}|${ip}`, MAX_FAILS],
+      [`${email}|*`, MAX_FAILS_ALL_ADDRESSES],
+    ];
     const now = Date.now();
-    const f = this.fails.get(key);
-    if (f && f.lockedUntil > now) {
-      const mins = Math.ceil((f.lockedUntil - now) / 60000);
-      throw new HttpException(`Too many wrong passwords. Try again in ${mins} minute(s), or use "Forgot password".`, HttpStatus.TOO_MANY_REQUESTS);
+    for (const [key] of keys) {
+      const f = this.fails.get(key);
+      if (f && f.lockedUntil > now) {
+        const mins = Math.ceil((f.lockedUntil - now) / 60000);
+        throw new HttpException(`Too many wrong passwords. Try again in ${mins} minute(s), or use "Forgot password".`, HttpStatus.TOO_MANY_REQUESTS);
+      }
     }
     const fail = () => {
-      const cur = this.fails.get(key);
-      const rec = !cur || now - cur.firstAt > FAIL_WINDOW_MS ? { count: 0, firstAt: now, lockedUntil: 0 } : cur;
-      rec.count++;
-      if (rec.count >= MAX_FAILS) {
-        rec.lockedUntil = now + LOCK_MS;
-        rec.count = 0;
-        rec.firstAt = now;
-        this.logger.warn(`Sign-in locked for 15 minutes after ${MAX_FAILS} wrong passwords: ${key}`);
+      for (const [key, max] of keys) {
+        const cur = this.fails.get(key);
+        const rec = !cur || now - cur.firstAt > FAIL_WINDOW_MS ? { count: 0, firstAt: now, lockedUntil: 0 } : cur;
+        rec.count++;
+        if (rec.count >= max) {
+          rec.lockedUntil = now + LOCK_MS;
+          rec.count = 0;
+          rec.firstAt = now;
+          this.logger.warn(`Sign-in locked for 15 minutes after ${max} wrong passwords: ${key}`);
+        }
+        this.fails.set(key, rec);
       }
-      this.fails.set(key, rec);
       if (this.fails.size > 5000) this.fails.clear(); // never grows without bound
       return new UnauthorizedException('Invalid credentials');
     };
@@ -174,7 +185,7 @@ export class AuthService {
 
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) throw fail();
-    this.fails.delete(key);
+    this.fails.delete(keys[0][0]);
 
     const token = this.sign(user);
     return {
@@ -248,7 +259,9 @@ export class AuthService {
     // whole seconds: token "iat" is in seconds
     user.passwordChangedAt = new Date(Math.floor(Date.now() / 1000) * 1000);
     await this.userRepo.update({ id: user.id }, { passwordHash: user.passwordHash, passwordChangedAt: user.passwordChangedAt, resetTokenHash: null, resetTokenExpiresAt: null });
-    this.fails.delete(user.email.toLowerCase());
+    // a new password ends any lockout of this account
+    const prefix = `${user.email.toLowerCase()}|`;
+    for (const k of [...this.fails.keys()]) if (k.startsWith(prefix)) this.fails.delete(k);
   }
 
   // "Forgot password": emails a one-hour, one-time link. Always answers the
