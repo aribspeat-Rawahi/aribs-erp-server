@@ -881,7 +881,7 @@ function SalesTaxTransactionView() {
             emptyMessage="No invoices in this range."
             footer={
               <tr className="border-t border-black/10 font-semibold text-blue-700">
-                <td colSpan={3} className="py-2 pl-3">Total ({data.invoiceCount} invoices)</td>
+                <td colSpan={3} className="py-2 pl-3">Total ({data.invoiceCount} invoices{(() => { const n = data.rows.filter((r) => r.type === 'asset_sale').length; return n ? `, ${n} asset sale${n > 1 ? 's' : ''}` : ''; })()})</td>
                 <td className="py-2 px-3 text-right">{money(data.totalTaxableSales)}</td>
                 <td className="py-2 px-3 text-right">{money(data.totalVat)}</td>
                 <td className="py-2 px-3 text-right"></td>
@@ -1083,7 +1083,7 @@ function PurchaseVatReport() {
             emptyMessage="No goods received in this range."
             footer={
               <tr className="border-t border-black/10 font-semibold text-blue-700">
-                <td colSpan={5} className="py-2 pl-3">Total ({data.orderCount} goods receipts, net of debit notes)</td>
+                <td colSpan={5} className="py-2 pl-3">Total ({data.orderCount} goods receipts, net of debit notes and supplier credit notes)</td>
                 <td className="py-2 px-3 text-right">{money(data.totalTaxablePurchases)}</td>
                 <td className="py-2 px-3 text-right">{money(data.totalVat)}</td>
                 <td className="py-2 px-3 text-right"></td>
