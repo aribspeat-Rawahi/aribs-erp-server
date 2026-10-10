@@ -25,6 +25,11 @@ interface SettingsData {
   companyNameArabic?: string | null;
   companyCrNumber?: string | null;
   companyEmail?: string | null;
+  companyPoBox?: string | null;
+  companyPostalCode?: string | null;
+  companyCity?: string | null;
+  companyCityArabic?: string | null;
+  companyGsm?: string | null;
   defaultInvoiceTemplate: string;
   weeklyOffDays?: string;
   shiftStartTime?: string;
@@ -276,6 +281,11 @@ export default function Settings() {
         companyNameArabic: settings.companyNameArabic ?? undefined,
         companyCrNumber: settings.companyCrNumber ?? undefined,
         companyEmail: settings.companyEmail ?? undefined,
+        companyPoBox: settings.companyPoBox ?? undefined,
+        companyPostalCode: settings.companyPostalCode ?? undefined,
+        companyCity: settings.companyCity ?? undefined,
+        companyCityArabic: settings.companyCityArabic ?? undefined,
+        companyGsm: settings.companyGsm ?? undefined,
         defaultInvoiceTemplate: settings.defaultInvoiceTemplate,
         weeklyOffDays: settings.weeklyOffDays ?? '',
         shiftStartTime: settings.shiftStartTime || undefined,
@@ -458,6 +468,49 @@ export default function Settings() {
                 maxLength={120}
                 value={settings.companyEmail || ''}
                 onChange={(e) => setSettings({ ...settings, companyEmail: e.target.value })}
+              />
+            </Field>
+          </div>
+          <div className="text-xs text-muted pt-1">Letterhead of RFQs - shown in English and Arabic (Arabic digits are filled in automatically)</div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Field label="P.O. Box">
+              <input
+                className={inputClass}
+                maxLength={20}
+                value={settings.companyPoBox || ''}
+                onChange={(e) => setSettings({ ...settings, companyPoBox: e.target.value })}
+              />
+            </Field>
+            <Field label="P.C. (postal code)">
+              <input
+                className={inputClass}
+                maxLength={10}
+                value={settings.companyPostalCode || ''}
+                onChange={(e) => setSettings({ ...settings, companyPostalCode: e.target.value })}
+              />
+            </Field>
+            <Field label="City">
+              <input
+                className={inputClass}
+                maxLength={80}
+                value={settings.companyCity || ''}
+                onChange={(e) => setSettings({ ...settings, companyCity: e.target.value })}
+              />
+            </Field>
+            <Field label="City in Arabic">
+              <input
+                className={inputClass} dir="rtl"
+                maxLength={80}
+                value={settings.companyCityArabic || ''}
+                onChange={(e) => setSettings({ ...settings, companyCityArabic: e.target.value })}
+              />
+            </Field>
+            <Field label="GSM">
+              <input
+                className={inputClass}
+                maxLength={30}
+                value={settings.companyGsm || ''}
+                onChange={(e) => setSettings({ ...settings, companyGsm: e.target.value })}
               />
             </Field>
           </div>

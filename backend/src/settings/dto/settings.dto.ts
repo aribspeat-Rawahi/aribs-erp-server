@@ -34,6 +34,31 @@ export class UpdateSettingsDto {
   companyEmail?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  companyPoBox?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  companyPostalCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  companyCity?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  companyCityArabic?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  companyGsm?: string;
+
+  @IsOptional()
   @IsEnum(InvoiceTemplate)
   defaultInvoiceTemplate?: InvoiceTemplate;
 

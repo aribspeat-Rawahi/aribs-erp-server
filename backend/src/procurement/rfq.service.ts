@@ -62,6 +62,11 @@ export class RfqService {
       companyAddress: settings.companyAddress,
       companyPhone: settings.companyPhone,
       companyEmail: settings.companyEmail,
+      companyPoBox: settings.companyPoBox,
+      companyPostalCode: settings.companyPostalCode,
+      companyCity: settings.companyCity,
+      companyCityArabic: settings.companyCityArabic,
+      companyGsm: settings.companyGsm,
       logoBase64,
       supplier: supplier
         ? { name: supplier.name, contactPerson: supplier.contactPerson, address: supplier.address, phone: supplier.phone, email: supplier.email, vatin: supplier.vatin, paymentTermsDays: supplier.paymentTermsDays }

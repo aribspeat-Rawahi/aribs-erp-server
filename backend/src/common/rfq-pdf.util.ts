@@ -32,6 +32,12 @@ export interface RfqPdfData {
   companyAddress?: string | null;
   companyPhone?: string | null;
   companyEmail?: string | null;
+  // structured Omani address (letterhead in English and Arabic)
+  companyPoBox?: string | null;
+  companyPostalCode?: string | null;
+  companyCity?: string | null;
+  companyCityArabic?: string | null;
+  companyGsm?: string | null;
   logoBase64?: string;
   supplier?: {
     name: string;
@@ -110,33 +116,117 @@ export async function generateRfqPdf(data: RfqPdfData): Promise<Buffer> {
       .text(text, x, y, rest);
   };
 
-  // ---- letterhead
-  let x0 = L;
+  // ---- letterhead: English block on the left, Arabic block on the right
+  // (same lines, Arabic-Indic digits), logo in the middle
+  const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+  const toArabicDigits = (v: string) => v.replace(/[0-9]/g, (d) => AR_DIGITS[Number(d)]);
+  // fontkit lays an Arabic-script run out right-to-left as a whole, which
+  // also reverses Arabic-Indic digit strings - check once, then pre-reverse
+  let digitsReversed = false;
+  if (hasArabic) {
+    doc.font('ar');
+    const glyphs = (doc as any)._font.font.layout('١٢').glyphs as { codePoints: number[] }[];
+    digitsReversed = glyphs.length === 2 && glyphs[0].codePoints[0] === 0x0662;
+    doc.font('Helvetica');
+  }
+  const arNumber = (v: string) => {
+    const a = toArabicDigits(v);
+    return digitsReversed ? [...a].reverse().join('') : a;
+  };
+  // one Arabic line: "label: value" drawn right to left from the right edge
+  const arPair = (label: string, value: string, y: number, size = 8.5) => {
+    if (!hasArabic) return;
+    doc.font('ar').fontSize(size);
+    const lw = doc.widthOfString(label, { features: arFeatures(label) } as PDFKit.Mixins.TextOptions);
+    doc.fillColor(GREY).text(label, R - lw, y, { lineBreak: false, features: arFeatures(label) } as PDFKit.Mixins.TextOptions);
+    if (value) {
+      const digitsOnly = /^[0-9 +\-/]+$/.test(value);
+      const shown = digitsOnly ? arNumber(value) : value;
+      if (digitsOnly) {
+        const vw = doc.widthOfString(shown);
+        doc.text(shown, R - lw - 4 - vw, y, { lineBreak: false });
+      } else {
+        // Latin text (e.g. an e-mail) next to an Arabic label
+        doc.font('Helvetica').fontSize(size - 0.5);
+        const vw = doc.widthOfString(value);
+        doc.text(value, R - lw - 5 - vw, y + 2, { lineBreak: false });
+      }
+    }
+    doc.font('Helvetica');
+  };
+
+  const enLines: string[] = [];
+  const arLines: [string, string][] = [];
+  if (data.companyCrNumber) {
+    enLines.push(`C.R: ${data.companyCrNumber}`);
+    arLines.push(['س.ت:', data.companyCrNumber]);
+  }
+  if (data.companyPoBox) {
+    enLines.push(`P.O. Box: ${data.companyPoBox}`);
+    arLines.push(['ص.ب:', data.companyPoBox]);
+  }
+  if (data.companyPostalCode) {
+    enLines.push(`P.C: ${data.companyPostalCode}`);
+    arLines.push(['الرمز البريدي:', data.companyPostalCode]);
+  }
+  const structured = !!(data.companyPoBox || data.companyPostalCode || data.companyCity);
+  if (data.companyCity) enLines.push(data.companyCity);
+  else if (!structured && data.companyAddress) enLines.push(data.companyAddress);
+  if (data.companyCityArabic) arLines.push([data.companyCityArabic, '']);
+  enLines.push('Sultanate of Oman');
+  arLines.push(['سلطنة عمان', '']);
+  const phone = data.companyGsm || data.companyPhone;
+  if (phone) {
+    enLines.push(`${data.companyGsm ? 'GSM' : 'Tel'}: ${phone}`);
+    arLines.push(['هاتف:', phone]);
+  }
+  if (data.companyEmail) enLines.push(data.companyEmail);
+  if (data.companyVatin) {
+    enLines.push(`VATIN: ${data.companyVatin}`);
+    arLines.push(['الرقم الضريبي:', data.companyVatin]);
+  }
+
+  const half = W * 0.42;
   if (data.logoBase64) {
     try {
-      doc.image(Buffer.from(data.logoBase64, 'base64'), L, 34, { fit: [54, 54] });
-      x0 = L + 64;
+      doc.image(Buffer.from(data.logoBase64, 'base64'), L + W / 2 - 30, 32, { fit: [60, 60], align: 'center' });
     } catch {
       /* unreadable logo - leave it out */
     }
   }
-  en(data.companyName, x0, 38, { size: 16, bold: true, color: GREEN_DARK, width: data.companyNameArabic ? R - x0 - 230 : R - x0, lineBreak: false, ellipsis: true });
-  if (data.companyNameArabic) ar(data.companyNameArabic, R - 220, 34, 220, { size: 15, bold: true, color: GREEN_DARK });
-  const idLine = [data.companyCrNumber ? `C.R. No. ${data.companyCrNumber}` : '', data.companyVatin ? `VATIN ${data.companyVatin}` : ''].filter(Boolean).join('   |   ');
-  const contactLine = [data.companyAddress, data.companyPhone ? `Tel: ${data.companyPhone}` : '', data.companyEmail || ''].filter(Boolean).join('   |   ');
-  const idWithCountry = idLine ? `${idLine}   |   Sultanate of Oman` : 'Sultanate of Oman';
-  en(contactLine || idWithCountry, x0, 60, { size: 8.5, color: GREY, width: R - x0 - 130, lineBreak: false, ellipsis: true });
-  if (contactLine) en(idWithCountry, x0, 73, { size: 8.5, color: GREY, width: R - x0 - 130, lineBreak: false, ellipsis: true });
-  ar('سلطنة عُمان', R - 120, 56, 120, { size: 9 });
-  doc.moveTo(L, 94).lineTo(R, 94).lineWidth(1.5).strokeColor(GREEN).stroke();
+  // a long name is made smaller to fit; very long ones wrap to two lines
+  doc.font('Helvetica-Bold');
+  let nameSize = 15;
+  const fullW = doc.fontSize(15).widthOfString(data.companyName);
+  if (fullW > half) nameSize = Math.max(11, Math.floor((15 * half) / fullW * 10) / 10);
+  doc.fontSize(nameSize);
+  const nameH = doc.heightOfString(data.companyName, { width: half });
+  en(data.companyName, L, 34, { size: nameSize, bold: true, color: GREEN_DARK, width: half, height: nameH + 2 });
+  let enTop = 34 + nameH + 6;
+  let arTop = 52;
+  if (data.companyNameArabic && hasArabic) {
+    doc.font('arb');
+    let arSize = 15;
+    const aw = doc.fontSize(15).widthOfString(data.companyNameArabic, { features: arFeatures(data.companyNameArabic) } as PDFKit.Mixins.TextOptions);
+    if (aw > half) arSize = Math.max(9, Math.floor((15 * half) / aw * 10) / 10);
+    ar(data.companyNameArabic, R - half, 30, half, { size: arSize, bold: true, color: GREEN_DARK });
+    arTop = 30 + arSize * 1.45;
+  }
+  enTop = Math.max(enTop, 52);
+  const lineStep = 11;
+  enLines.forEach((t, i) => en(t, L, enTop + i * lineStep, { size: 8.5, color: GREY, width: half, lineBreak: false, ellipsis: true }));
+  arLines.forEach(([label, value], i) => arPair(label, value, arTop + i * lineStep));
+  const headBottom = Math.max(enTop + enLines.length * lineStep, hasArabic ? arTop + arLines.length * lineStep + 4 : 0, 96) + 4;
+  doc.moveTo(L, headBottom).lineTo(R, headBottom).lineWidth(1.5).strokeColor(GREEN).stroke();
+  const T = headBottom - 94; // everything below moves down with a taller letterhead
 
   // ---- title band
-  doc.rect(L, 102, W, 28).fill(GREEN);
-  en('REQUEST FOR QUOTATION', L + 12, 110, { size: 13, bold: true, color: '#fff', width: 300, lineBreak: false });
-  ar('طلب عرض سعر', R - 212, 104, 200, { size: 14, bold: true, color: '#fff' });
+  doc.rect(L, 102 + T, W, 28).fill(GREEN);
+  en('REQUEST FOR QUOTATION', L + 12, 110 + T, { size: 13, bold: true, color: '#fff', width: 300, lineBreak: false });
+  ar('طلب عرض سعر', R - 212, 104 + T, 200, { size: 14, bold: true, color: '#fff' });
 
   // ---- supplier box (left) and RFQ details (right)
-  const boxTop = 140;
+  const boxTop = 140 + T;
   const boxH = 112;
   const mid = L + W * 0.52;
   doc.lineWidth(0.8).strokeColor(LINE);

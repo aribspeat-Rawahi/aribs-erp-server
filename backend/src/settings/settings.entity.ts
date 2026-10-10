@@ -43,6 +43,17 @@ export class Settings {
   companyCrNumber: string | null;
   @Column({ type: 'varchar', length: 120, nullable: true })
   companyEmail: string | null;
+  // structured Omani address for the bilingual letterhead
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  companyPoBox: string | null;
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  companyPostalCode: string | null;
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  companyCity: string | null;
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  companyCityArabic: string | null;
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  companyGsm: string | null;
 
   @Column({ type: 'enum', enum: InvoiceTemplate, default: InvoiceTemplate.CLASSIC })
   defaultInvoiceTemplate: InvoiceTemplate;
