@@ -20,14 +20,14 @@ interface ActorRef {
 }
 
 const ACCOUNTS_PAYABLE_CODE = '2000';
-// Same contra account PurchaseReturnService uses (1200, an ASSET) — a
-// vendor credit is economically the same thing as a purchase return for
-// posting purposes. Previously this credited 1408 "Purchase Return",
-// which is typed REVENUE in the Chart of Accounts — that silently
-// inflated Total Revenue/Net Profit on the Income Statement by the value
-// of every vendor credit issued (and its refund). Fixed 2026-09-25 to
-// match the same fix already applied to purchase-return.service.ts.
-const INVENTORY_RAW_MATERIALS_CODE = '1200';
+// A vendor credit is a price reduction / rebate with no goods coming back
+// (returned goods go through Purchase Returns, which also take the stock
+// out). It used to credit 1200 Inventory, but no stock quantity or value
+// changed, so 1200 drifted away from the stock on hand. The goods it
+// relates to are usually already used or sold, so the reduction is
+// income: 475 Purchase Discount. The VAT part reverses input VAT (1400).
+const PURCHASE_DISCOUNT_CODE = '475';
+const INPUT_VAT_CODE = '1400';
 
 @Injectable()
 export class VendorCreditService {
@@ -63,11 +63,22 @@ export class VendorCreditService {
   }
 
   // Issuing the credit reduces Accounts Payable right away — Dr 2000 / Cr
-  // 1200 (Inventory — Raw Materials) — no bank/cash movement at this step.
+  // 475 Purchase Discount (+ Cr 1400 for its VAT) — no bank/cash movement
+  // at this step.
   async create(dto: CreateVendorCreditDto, actor: ActorRef) {
     const date = dto.date || omanToday();
     await this.journalPosting.assertDateOpen(date, 'This vendor credit');
-    const amount = Number(dto.amount);
+    const amount = this.round3(Number(dto.amount));
+    const vat = this.round3(Number(dto.vatAmount || 0));
+    if (vat > 0) {
+      const expected = this.round3((amount * 5) / 105);
+      if (Math.abs(vat - expected) > 0.01) {
+        throw new BadRequestException(`The VAT in a ${amount.toFixed(3)} OMR credit (VAT included) is ${expected.toFixed(3)} OMR (5/105).`);
+      }
+      if (!dto.supplierCreditNoteNumber?.trim()) {
+        throw new BadRequestException("Enter the supplier's tax credit note number - the VAT reversal needs it.");
+      }
+    }
 
     const saved = await this.repo.save(
       this.repo.create({
@@ -75,6 +86,8 @@ export class VendorCreditService {
         supplierId: dto.supplierId,
         amount,
         date,
+        vatAmount: vat,
+        supplierCreditNoteNumber: dto.supplierCreditNoteNumber?.trim() || null,
         reason: dto.reason,
         appliedAmount: 0,
         refundedAmount: 0,
@@ -258,21 +271,26 @@ export class VendorCreditService {
     return { deleted: true };
   }
 
-  // Dr Accounts Payable / Cr Raw Materials Inventory for the credit.
+  // Dr Accounts Payable / Cr Purchase Discount (+ Cr Input VAT).
   private async postCreditJournal(saved: VendorCredit, actor: ActorRef) {
     try {
       const amount = Number(saved.amount);
+      const vat = this.round3(Number(saved.vatAmount || 0));
       const apAccountId = await this.journalPosting.findAccountIdByCode(ACCOUNTS_PAYABLE_CODE);
-      const creditAccountId = await this.journalPosting.findAccountIdByCode(INVENTORY_RAW_MATERIALS_CODE);
+      const creditAccountId = await this.journalPosting.findAccountIdByCode(PURCHASE_DISCOUNT_CODE);
+      const lines = [
+        { accountId: apAccountId, debit: amount, description: 'Vendor credit received' },
+        { accountId: creditAccountId, credit: this.round3(amount - vat), description: 'Vendor credit received' },
+      ];
+      if (vat > 0) {
+        lines.push({ accountId: await this.journalPosting.findAccountIdByCode(INPUT_VAT_CODE), credit: vat, description: 'Input VAT reversed (supplier credit note)' });
+      }
       await this.journalPosting.postForSource(
         'vendor_credit',
         saved.id,
         saved.date,
-        `Vendor credit ${saved.creditNumber}`,
-        [
-          { accountId: apAccountId, debit: amount, description: 'Vendor credit received' },
-          { accountId: creditAccountId, credit: amount, description: 'Vendor credit received' },
-        ],
+        `Vendor credit ${saved.creditNumber}${saved.supplierCreditNoteNumber ? ` (credit note ${saved.supplierCreditNoteNumber})` : ''}`,
+        lines,
         actor,
         saved.creditNumber,
       );

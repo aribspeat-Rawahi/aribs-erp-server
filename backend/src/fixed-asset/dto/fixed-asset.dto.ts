@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsEnum, Min, IsInt } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsEnum, Min, IsInt, MaxLength } from 'class-validator';
 import { FixedAssetCategory } from '../fixed-asset.entity';
 
 export class CreateFixedAssetDto {
@@ -80,6 +80,17 @@ export class DisposeFixedAssetDto {
   @IsNumber()
   @Min(0)
   disposalProceeds: number;
+
+  // output VAT charged to the buyer: 0, or 5% of disposalProceeds
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  vatAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  buyer?: string;
 
   // Required when disposalProceeds > 0 (see FixedAssetService.dispose()).
   @IsOptional()

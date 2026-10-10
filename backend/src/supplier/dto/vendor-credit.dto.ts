@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, Min, MaxLength } from 'class-validator';
 
 export class CreateVendorCreditDto {
   @IsString()
@@ -15,6 +15,17 @@ export class CreateVendorCreditDto {
   @IsOptional()
   @IsString()
   reason?: string;
+
+  // VAT included in amount (5/105 of it), from the supplier's tax credit note
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  vatAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  supplierCreditNoteNumber?: string;
 }
 
 export class ApplyVendorCreditDto {

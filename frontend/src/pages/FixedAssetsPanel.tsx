@@ -32,6 +32,8 @@ interface FixedAsset {
   status: 'active' | 'disposed';
   disposalDate?: string;
   disposalProceeds?: number | string;
+  disposalVat?: number | string;
+  disposalBuyer?: string | null;
   bankAccountId?: string;
   vatAmount?: number | string;
   supplierId?: string;
@@ -61,10 +63,11 @@ function money(n: number | string) {
 }
 
 // "Fixed Assets" tab inside Accounting — the PP&E register: registering an
-// asset posts its cost to the Chart of Accounts immediately, a monthly
-// cron job (FixedAssetService.runMonthlyDepreciation, backend) auto-posts
-// straight-line depreciation every month until the asset is fully
-// depreciated or disposed, and Dispose posts the resulting gain/loss.
+// asset posts its cost to the Chart of Accounts immediately; after each
+// month ends, straight-line depreciation for it posts automatically (dated
+// the month's last day, first month pro-rata by days held) until the asset
+// is fully depreciated or disposed. Dispose depreciates up to the disposal
+// date first, then posts the gain/loss and any output VAT on a sale.
 export default function FixedAssetsPanel() {
   const { hasAnyRole } = useAuth();
   const canManage = hasAnyRole(['admin', 'accountant', 'ceo', 'md']);
@@ -121,7 +124,7 @@ export default function FixedAssetsPanel() {
     <div>
       <PageHeader
         title="Fixed Assets"
-        subtitle="Property, Plant & Equipment register — straight-line depreciation posts automatically every month"
+        subtitle="Property, Plant & Equipment register — straight-line depreciation posts automatically after each month ends"
         action={canManage ? <PrimaryButton icon={Plus} requires="edit" onClick={() => setShowAdd(true)}>Register asset</PrimaryButton> : undefined}
       />
 
@@ -149,18 +152,18 @@ export default function FixedAssetsPanel() {
                       {bankAccountName(a.bankAccountId) ? ` · from ${bankAccountName(a.bankAccountId)}` : ''}
                       {!a.bankAccountId && a.purchaseOrderId ? ' · on credit (supplier bill)' : ''}
                       {Number(a.vatAmount || 0) > 0 ? ` · VAT ${money(a.vatAmount || 0)} OMR (inv ${a.supplierInvoiceNumber})` : ''}
-                      {a.status === 'disposed' ? ` · Disposed ${a.disposalDate} (proceeds ${money(a.disposalProceeds || 0)} OMR)` : ''}
+                      {a.status === 'disposed' ? ` · Disposed ${a.disposalDate} (proceeds ${money(a.disposalProceeds || 0)} OMR${Number(a.disposalVat || 0) > 0 ? ` + VAT ${money(a.disposalVat || 0)}` : ''}${a.disposalBuyer ? `, sold to ${a.disposalBuyer}` : ''})` : ''}
                     </div>
                     <div className="text-xs text-muted mt-0.5">
                       Cost {money(a.cost)} OMR · Depreciated {money(a.accumulatedDepreciation)} OMR · NBV {money(nbv)} OMR
-                      {a.status === 'active' && a.lastDepreciationPeriod ? ` · Last posted ${a.lastDepreciationPeriod}` : ''}
+                      {a.status === 'active' && a.lastDepreciationPeriod ? ` · Depreciated through ${a.lastDepreciationPeriod}` : ''}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusTone[a.status]}`}>{a.status}</span>
                     {canManage && a.status === 'active' && (
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <IconButton icon={Zap} requires="edit" title={busyId === a.id ? 'Posting…' : "Post this month's depreciation now"} onClick={() => (busyId === a.id ? undefined : depreciateNow(a.id))} />
+                        <IconButton icon={Zap} requires="edit" title={busyId === a.id ? 'Posting…' : 'Post depreciation for months that have ended'} onClick={() => (busyId === a.id ? undefined : depreciateNow(a.id))} />
                         <IconButton icon={Pencil} requires="edit" title="Edit" onClick={() => setEditAsset(a)} />
                         <IconButton icon={RotateCcw} requires="edit" title="Dispose" onClick={() => setDisposingAsset(a)} />
                         {Number(a.accumulatedDepreciation) === 0 && (
@@ -382,20 +385,32 @@ function DisposeModal({
   const [disposalDate, setDisposalDate] = useState(localISODate());
   const [disposalProceeds, setDisposalProceeds] = useState('0');
   const [bankAccountId, setBankAccountId] = useState('');
+  const [chargeVat, setChargeVat] = useState(false);
+  const [buyer, setBuyer] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   const nbv = Number(asset.cost) - Number(asset.accumulatedDepreciation);
+  const proceeds = Number(disposalProceeds) || 0;
+  const vat = chargeVat && proceeds > 0 ? Math.round(proceeds * 0.05 * 1000) / 1000 : 0;
+
+  useEffect(() => {
+    // a VAT-registered company charges 5% VAT when it sells a business asset
+    api.get('/settings').then((r) => setChargeVat(!!String(r.data?.companyVatin || '').trim())).catch(() => undefined);
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
       await api.post(`/fixed-assets/${asset.id}/dispose`, {
         disposalDate,
-        disposalProceeds: Number(disposalProceeds),
-        bankAccountId: Number(disposalProceeds) > 0 ? bankAccountId || undefined : undefined,
+        disposalProceeds: proceeds,
+        vatAmount: vat || undefined,
+        buyer: proceeds > 0 && buyer.trim() ? buyer.trim() : undefined,
+        bankAccountId: proceeds > 0 ? bankAccountId || undefined : undefined,
       });
       onSaved();
     } catch (err: any) {
@@ -409,15 +424,28 @@ function DisposeModal({
     <Modal title={`Dispose — ${asset.name}`} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-3">
         <div className="text-sm text-ink/80 bg-black/[0.03] rounded-lg p-3">
-          Net book value: {money(nbv)} OMR (cost {money(asset.cost)} − accumulated depreciation {money(asset.accumulatedDepreciation)})
+          Net book value: {money(nbv)} OMR (cost {money(asset.cost)} − accumulated depreciation {money(asset.accumulatedDepreciation)}).
+          Depreciation for the months not posted yet, up to the disposal date, is posted first.
         </div>
         <Field label="Disposal date">
           <input className={inputClass} type="date" value={disposalDate} onChange={(e) => setDisposalDate(e.target.value)} required />
         </Field>
-        <Field label="Disposal proceeds (OMR) — 0 if scrapped with no sale">
+        <Field label="Sale price excl. VAT (OMR) — 0 if scrapped with no sale">
           <input className={inputClass} type="number" step="0.001" min="0" value={disposalProceeds} onChange={(e) => setDisposalProceeds(e.target.value)} required />
         </Field>
-        {Number(disposalProceeds) > 0 && (
+        {proceeds > 0 && (
+          <>
+            <Field label="Buyer (optional)">
+              <input className={inputClass} value={buyer} onChange={(e) => setBuyer(e.target.value)} maxLength={200} />
+            </Field>
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input type="checkbox" checked={chargeVat} onChange={(e) => setChargeVat(e.target.checked)} />
+              Charge 5% VAT to the buyer ({money(vat)} OMR — goes on the VAT return)
+            </label>
+            <div className="text-xs text-muted">Money received: {money(proceeds + vat)} OMR</div>
+          </>
+        )}
+        {proceeds > 0 && (
           <Field label="Deposit proceeds into">
             <select className={inputClass} value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} required>
               <option value="">Select account…</option>

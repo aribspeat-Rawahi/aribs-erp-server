@@ -706,9 +706,9 @@ function BalanceSheetReport() {
 
 interface SalesTaxRow {
   id: string;
-  type?: 'invoice' | 'credit_note';
+  type?: 'invoice' | 'credit_note' | 'asset_sale';
   invoiceNumber: string;
-  customerId: string;
+  customerId: string | null;
   customerName: string;
   issueDate: string;
   subtotal: number;
@@ -914,12 +914,14 @@ function SalesTaxCustomerView() {
   }, [range]);
 
   const grouped = (rows || []).reduce((acc, r) => {
-    const g = acc.get(r.customerId) || { customerName: r.customerName, taxable: 0, vat: 0, total: 0, invoices: 0 };
+    // fixed assets sold have a buyer name, not a customer record
+    const key = r.customerId || `asset:${r.customerName}`;
+    const g = acc.get(key) || { customerName: r.customerName, taxable: 0, vat: 0, total: 0, invoices: 0 };
     g.taxable += r.subtotal;
     g.vat += r.vatAmount;
     g.total += r.total;
     if (r.type !== 'credit_note') g.invoices += 1;
-    acc.set(r.customerId, g);
+    acc.set(key, g);
     return acc;
   }, new Map<string, { customerName: string; taxable: number; vat: number; total: number; invoices: number }>());
   const customerRows = Array.from(grouped.values()).sort((a, b) => b.total - a.total);
@@ -1028,7 +1030,7 @@ function SalesTaxCategoryView() {
 
 interface PurchaseVatRow {
   id: string;
-  type?: 'goods_receipt' | 'debit_note' | 'fixed_asset';
+  type?: 'goods_receipt' | 'debit_note' | 'fixed_asset' | 'vendor_credit';
   reference?: string;
   poNumber?: string;
   supplierId: string;
@@ -1092,7 +1094,7 @@ function PurchaseVatReport() {
               <tr key={r.id} className={r.missing?.length ? 'bg-amber-50/60' : ''}>
                 <td className="py-2 pl-3 text-ink whitespace-nowrap">
                   {r.reference || '-'}
-                  {r.type === 'debit_note' ? ' (debit note)' : r.type === 'fixed_asset' ? ' (fixed asset)' : ''}
+                  {r.type === 'debit_note' ? ' (debit note)' : r.type === 'fixed_asset' ? ' (fixed asset)' : r.type === 'vendor_credit' ? ' (supplier credit note)' : ''}
                   {r.poNumber ? <div className="text-xs text-muted">{r.poNumber}</div> : null}
                 </td>
                 <td className="py-2 px-3 text-ink">{r.supplierName}</td>

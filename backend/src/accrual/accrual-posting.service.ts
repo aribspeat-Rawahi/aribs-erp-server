@@ -142,45 +142,78 @@ export class AccrualPostingService {
     return change;
   }
 
-  // Recomputes and re-posts (or clears) the Income Tax provision for the
-  // current fiscal year (assumed calendar-year, Jan 1 – Dec 31, since
-  // Settings has no separate fiscal-year-start field yet) — one Journal
-  // Entry per year (sourceId keyed by year), replaced with the latest
-  // year-to-date total each run. No provision (and any existing entry is
-  // cleared) if YTD net profit is zero or negative.
-  async postIncomeTaxProvision(actor: ActorRef) {
+  // Income tax provision (Oman corporate tax, rate from Settings - 15%,
+  // or 3% for a company that meets the small-business conditions).
+  // Year-to-date profit BEFORE tax x rate = the provision the year should
+  // carry by `asOf`. Each month posts only the change since the earlier
+  // months of that year (Dr 710 / Cr 2160, or the reverse when the profit
+  // fell), dated in that month, so a month closed by a filed VAT return is
+  // never rewritten. Re-running the same month replaces its own entry.
+  // asOf defaults to today (manual recompute); the monthly job passes the
+  // last day of the month just ended, so December is finalized on 1 Jan.
+  async postIncomeTaxProvision(actor: ActorRef, asOf: string = omanToday()) {
+    await this.journalPosting.assertBooksStarted('The income tax provision');
     const settings = await this.settingsService.get();
     const rate = Number(settings.incomeTaxRatePercent) / 100;
-    const endDate = omanToday();
-    const year = Number(endDate.slice(0, 4));
+    const year = asOf.slice(0, 4);
     const startDate = `${year}-01-01`;
+    const sourceId = `income-tax-${asOf.slice(0, 7)}`;
 
-    const { netProfit } = await this.journalEntryService.getIncomeStatement(startDate, endDate);
-    const provision = this.round3(Math.max(0, netProfit) * rate);
-    const sourceId = `income-tax-${year}`;
+    const { netProfit } = await this.journalEntryService.getIncomeStatement(startDate, asOf);
+    // the tax itself is not part of the profit it is charged on
+    const [taxRow] = await this.dataSource.query(
+      `SELECT COALESCE(SUM(l.debit - l.credit), 0) AS t
+         FROM journal_entry_lines l JOIN journal_entries e ON e.id = l.journalEntryId JOIN accounts a ON a.id = l.accountId
+        WHERE a.code = ? AND e.date BETWEEN ? AND ?`,
+      [INCOME_TAX_EXPENSE_CODE, startDate, asOf],
+    );
+    const profitBeforeTax = this.round3(Number(netProfit) + Number(taxRow?.t || 0));
+    const target = this.round3(Math.max(0, profitBeforeTax) * rate);
 
-    try {
-      if (provision <= 0) {
-        await this.journalPosting.postForSource('income_tax_provision', sourceId, endDate, '', [], actor);
-        return 0;
-      }
-      const expenseAccountId = await this.journalPosting.findAccountIdByCode(INCOME_TAX_EXPENSE_CODE);
-      const payableAccountId = await this.journalPosting.findAccountIdByCode(INCOME_TAX_PAYABLE_CODE);
-      await this.journalPosting.postForSource(
-        'income_tax_provision',
-        sourceId,
-        endDate,
-        `Income tax provision ${year} (${settings.incomeTaxRatePercent}% of YTD net profit)`,
-        [
-          { accountId: expenseAccountId, debit: provision, description: `Income tax provision — ${year} year-to-date` },
-          { accountId: payableAccountId, credit: provision, description: `Income tax provision — ${year} year-to-date` },
-        ],
-        actor,
-      );
-    } catch (err) {
-      console.error(`Auto-posting failed for income_tax_provision ${sourceId}:`, err);
+    // provision already booked for this year by the other months' entries
+    // (and the older one-entry-per-year format, income-tax-YYYY)
+    const [doneRow] = await this.dataSource.query(
+      `SELECT COALESCE(SUM(l.credit - l.debit), 0) AS p
+         FROM journal_entry_lines l JOIN journal_entries e ON e.id = l.journalEntryId JOIN accounts a ON a.id = l.accountId
+        WHERE e.sourceType = 'income_tax_provision' AND a.code = ?
+          AND (e.sourceId = ? OR e.sourceId LIKE ?) AND e.sourceId <> ?`,
+      [INCOME_TAX_PAYABLE_CODE, `income-tax-${year}`, `income-tax-${year}-%`, sourceId],
+    );
+    const change = this.round3(target - Number(doneRow?.p || 0));
+
+    // closed books: book the change on the first open day instead
+    const lock = await this.journalPosting.lockedThrough();
+    let date = asOf;
+    if (lock && date <= lock) {
+      const d = new Date(`${lock}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + 1);
+      date = d.toISOString().slice(0, 10);
     }
-    return provision;
+
+    if (Math.abs(change) < 0.0005) {
+      await this.journalPosting.postForSource('income_tax_provision', sourceId, date, '', [], actor);
+      return target;
+    }
+    const expenseAccountId = await this.journalPosting.findAccountIdByCode(INCOME_TAX_EXPENSE_CODE);
+    const payableAccountId = await this.journalPosting.findAccountIdByCode(INCOME_TAX_PAYABLE_CODE);
+    const desc = `Income tax provision ${year} - ${settings.incomeTaxRatePercent}% of profit before tax to ${asOf}`;
+    await this.journalPosting.postForSource(
+      'income_tax_provision',
+      sourceId,
+      date,
+      `${desc} (year total ${target.toFixed(3)} OMR)`,
+      change > 0
+        ? [
+            { accountId: expenseAccountId, debit: change, description: desc },
+            { accountId: payableAccountId, credit: change, description: desc },
+          ]
+        : [
+            { accountId: payableAccountId, debit: -change, description: `${desc} - reduced` },
+            { accountId: expenseAccountId, credit: -change, description: `${desc} - reduced` },
+          ],
+      actor,
+    );
+    return target;
   }
 
   // Runs at 07:15 on the 1st of every month — after Fixed Asset
@@ -222,8 +255,11 @@ export class AccrualPostingService {
     if (String(this.config.get('ACCRUAL_POSTING_ENABLED')).toLowerCase() === 'false') return;
     if (await this.journalPosting.waitingForOpening()) return;
     try {
-      const provision = await this.postIncomeTaxProvision({});
-      this.logger.log(`Monthly income tax provision run: ${provision} OMR posted for year-to-date.`);
+      // the month just ended, dated its last day
+      const today = omanToday();
+      const monthEnd = new Date(Date.UTC(+today.slice(0, 4), +today.slice(5, 7) - 1, 0)).toISOString().slice(0, 10);
+      const provision = await this.postIncomeTaxProvision({}, monthEnd);
+      this.logger.log(`Income tax provision to ${monthEnd}: ${provision} OMR for the year.`);
     } catch (err) {
       this.logger.error('Monthly income tax provision failed:', err as Error);
     }

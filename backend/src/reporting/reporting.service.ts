@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { RawMaterialService } from '../inventory/raw-material.service';
 import { FinishedGoodService } from '../inventory/finished-good.service';
 import { SalesOrderService } from '../sales/sales-order.service';
@@ -46,6 +46,8 @@ export class ReportingService {
     private journalEntryService: JournalEntryService,
     @InjectRepository(RecurringInvoice)
     private recurringInvoiceRepo: Repository<RecurringInvoice>,
+    @InjectDataSource()
+    private dataSource: DataSource,
   ) {}
 
   // Single dashboard-style endpoint — everything a quick daily check
@@ -91,16 +93,73 @@ export class ReportingService {
     const report = await this.invoiceService.getSalesTaxReport(startDate, endDate);
     const customers = await this.customerService.findAll();
     const customerById = new Map(customers.map((c: any) => [c.id, c]));
+    const assets = await this.getAssetSalesVat(startDate, endDate);
+    const rows = [
+      ...report.rows.map((r) => ({ ...r, customerName: customerById.get(r.customerId)?.name || 'Unknown customer' })),
+      ...assets.rows.map((a) => ({
+        type: 'asset_sale' as const,
+        id: a.id,
+        invoiceNumber: `${a.assetNumber} (fixed asset sold: ${a.name})`,
+        customerId: null,
+        customerName: a.disposalBuyer || 'Fixed asset buyer',
+        issueDate: a.disposalDate,
+        grossAmount: a.proceeds,
+        discountAmount: 0,
+        subtotal: a.proceeds,
+        vatAmount: a.vat,
+        total: this.round3(a.proceeds + a.vat),
+        vatExcluded: false,
+      })),
+    ].sort((x, y) => (String(x.issueDate) < String(y.issueDate) ? -1 : String(x.issueDate) > String(y.issueDate) ? 1 : 0));
     return {
       ...report,
-      rows: report.rows.map((r) => ({ ...r, customerName: customerById.get(r.customerId)?.name || 'Unknown customer' })),
+      rows,
+      totalTaxableSales: this.round3(report.totalTaxableSales + assets.taxable),
+      totalVat: this.round3(report.totalVat + assets.vat),
+      assetSalesVat: assets.vat,
+    };
+  }
+
+  // Fixed assets sold with VAT in a period: a taxable supply (Oman VAT
+  // law), so their output VAT belongs on the VAT return with the sales.
+  async getAssetSalesVat(startDate: string, endDate: string) {
+    const rows: { id: string; assetNumber: string; name: string; disposalDate: string; disposalBuyer: string | null; proceeds: string; vat: string }[] =
+      await this.dataSource.query(
+        `SELECT id, assetNumber, name, DATE_FORMAT(disposalDate, '%Y-%m-%d') AS disposalDate, disposalBuyer,
+                disposalProceeds AS proceeds, disposalVat AS vat
+           FROM fixed_assets
+          WHERE status = 'disposed' AND disposalVat > 0 AND disposalDate BETWEEN ? AND ?
+          ORDER BY disposalDate`,
+        [startDate, endDate],
+      );
+    const out = rows.map((r) => ({ ...r, proceeds: Number(r.proceeds || 0), vat: Number(r.vat || 0) }));
+    return {
+      rows: out,
+      taxable: this.round3(out.reduce((t, r) => t + r.proceeds, 0)),
+      vat: this.round3(out.reduce((t, r) => t + r.vat, 0)),
     };
   }
 
   // Sales Tax — "Category Based" card (grouped by VAT rate; see
   // InvoiceService.getSalesTaxByVatRate for why).
   async getSalesTaxByVatRate(startDate: string, endDate: string) {
-    return this.invoiceService.getSalesTaxByVatRate(startDate, endDate);
+    const report = await this.invoiceService.getSalesTaxByVatRate(startDate, endDate);
+    const assets = await this.getAssetSalesVat(startDate, endDate);
+    if (!assets.vat) return report;
+    const rows = report.rows.map((r) => ({ ...r }));
+    let std = rows.find((r) => r.vatRate === 5);
+    if (!std) {
+      std = { vatRate: 5, label: 'Standard Rate (5%)', taxableAmount: 0, vatAmount: 0 };
+      rows.push(std);
+      rows.sort((a, b) => b.vatRate - a.vatRate);
+    }
+    std.taxableAmount = this.round3(std.taxableAmount + assets.taxable);
+    std.vatAmount = this.round3(std.vatAmount + assets.vat);
+    return {
+      rows,
+      totalTaxableSales: this.round3(report.totalTaxableSales + assets.taxable),
+      totalVat: this.round3(report.totalVat + assets.vat),
+    };
   }
 
   // Purchase VAT (Input VAT) report — received PO rows in range, supplier
@@ -116,7 +175,7 @@ export class ReportingService {
   }
 
   async getVatSummary(startDate: string, endDate: string) {
-    const sales = await this.invoiceService.getSalesTaxReport(startDate, endDate);
+    const sales = await this.getSalesTaxReport(startDate, endDate);
     const purchases = await this.purchaseOrderService.getVatReportInRange(startDate, endDate);
     const round3 = (n: number) => Math.round(n * 1000) / 1000;
     return {
@@ -124,6 +183,7 @@ export class ReportingService {
       taxableSales: sales.totalTaxableSales,
       outputVat: sales.totalVat,
       creditNotesVat: sales.creditNotesVat,
+      assetSalesVat: sales.assetSalesVat,
       taxablePurchases: purchases.totalTaxablePurchases,
       inputVat: purchases.totalVat,
       debitNotesVat: purchases.debitNotesVat,

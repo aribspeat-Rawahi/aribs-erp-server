@@ -70,6 +70,13 @@ export class FixedAsset {
   @Column('decimal', { precision: 12, scale: 3, nullable: true })
   disposalProceeds?: number;
 
+  // Output VAT charged to the buyer on a sale (5%, Cr 2100) - on the VAT return
+  @Column('decimal', { precision: 12, scale: 3, default: 0 })
+  disposalVat: number;
+
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  disposalBuyer: string | null;
+
   // If set, the purchase was paid from (and any disposal proceeds are
   // deposited back into) this bank/cash account — same optional-bank-leg
   // convention as Expense/PurchaseReturn. No DB foreign key, same

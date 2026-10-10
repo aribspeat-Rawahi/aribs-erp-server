@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
+import { VendorCredit } from './vendor-credit.entity';
 import { FixedAsset } from '../fixed-asset/fixed-asset.entity';
 import { PurchaseOrder, PurchaseOrderStatus } from './purchase-order.entity';
 import { PurchaseOrderItem } from './purchase-order-item.entity';
@@ -487,7 +488,13 @@ export class PurchaseOrderService {
         .andWhere('a.vatAmount > 0')
         .getMany()
     );
-    const assetSupplierIds = [...new Set(assets.map((a) => a.supplierId).filter((x): x is string => !!x))];
+    // supplier tax credit notes (vendor credits with VAT) reverse input VAT
+    const credits = await this.dataSource.manager
+      .createQueryBuilder(VendorCredit, 'c')
+      .where('c.date BETWEEN :startDate AND :endDate', { startDate, endDate })
+      .andWhere('c.vatAmount > 0')
+      .getMany();
+    const assetSupplierIds = [...new Set([...assets.map((a) => a.supplierId), ...credits.map((c) => c.supplierId)].filter((x): x is string => !!x))];
     const assetSuppliers = assetSupplierIds.length ? await this.dataSource.manager.find(Supplier, { where: { id: In(assetSupplierIds) } }) : [];
     const poNumberOf = (pid: string) => orders.find((o) => o.id === pid)?.poNumber || '';
 
@@ -555,6 +562,27 @@ export class PurchaseOrderService {
           missing: [!s?.vatin && 'supplier VATIN', !a.supplierInvoiceNumber && 'tax invoice no.'].filter(Boolean) as string[],
         };
       }),
+      ...credits.map((c) => {
+        const s = assetSuppliers.find((x) => x.id === c.supplierId);
+        const vat = Number(c.vatAmount || 0);
+        return {
+          type: 'vendor_credit' as const,
+          id: c.id,
+          reference: c.creditNumber,
+          poNumber: '',
+          supplierId: c.supplierId,
+          supplierName: s?.name || '',
+          supplierVatin: s?.vatin || '',
+          supplierInvoiceNumber: c.supplierCreditNoteNumber || '',
+          supplierInvoiceDate: '',
+          date: c.date,
+          receivedAt: c.date,
+          subtotal: -this.round3(Number(c.amount) - vat),
+          vatAmount: -vat,
+          total: -Number(c.amount),
+          missing: [] as string[],
+        };
+      }),
     ].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
     const totalTaxablePurchases = this.round3(rows.reduce((sum, r) => sum + r.subtotal, 0));
@@ -564,7 +592,7 @@ export class PurchaseOrderService {
       rows,
       totalTaxablePurchases,
       totalVat,
-      debitNotesVat: this.round3(returns.reduce((s, r) => s + Number(r.vatAmount || 0), 0)),
+      debitNotesVat: this.round3(returns.reduce((s, r) => s + Number(r.vatAmount || 0), 0) + credits.reduce((s, c) => s + Number(c.vatAmount || 0), 0)),
       orderCount: grns.length,
       rowsMissingDocuments: rows.filter((r) => r.missing.length > 0).length,
     };

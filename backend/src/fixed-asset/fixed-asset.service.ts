@@ -62,16 +62,6 @@ export class FixedAssetService {
     return Math.round(n * 1000) / 1000;
   }
 
-  // Straight-line monthly depreciation, capped so an asset never
-  // depreciates past (cost - salvageValue).
-  computeMonthlyDepreciation(asset: FixedAsset): number {
-    const depreciableBase = this.round3(Number(asset.cost) - Number(asset.salvageValue));
-    const remaining = this.round3(depreciableBase - Number(asset.accumulatedDepreciation));
-    if (remaining <= 0) return 0;
-    const monthly = this.round3(depreciableBase / asset.usefulLifeMonths);
-    return Math.min(monthly, remaining);
-  }
-
   findAll() {
     return this.repo.find({ order: { purchaseDate: 'DESC', createdAt: 'DESC' } });
   }
@@ -255,89 +245,174 @@ export class FixedAssetService {
     return { deleted: true };
   }
 
-  // Posts one month of straight-line depreciation for a single asset,
-  // regardless of the cron schedule — used by both the manual per-asset
-  // trigger endpoint and runMonthlyDepreciation() below. No-op (returns
-  // null) if the asset is disposed, inactive-for-this-period, or already
-  // fully depreciated.
-  private async postDepreciationFor(asset: FixedAsset, period: string, actor: ActorRef) {
-    if (asset.status !== FixedAssetStatus.ACTIVE) return null;
-    const amount = this.computeMonthlyDepreciation(asset);
-    if (amount <= 0) {
-      asset.lastDepreciationPeriod = period;
-      await this.repo.save(asset);
-      return null;
+  // ---- depreciation (straight line, IAS 16) ----
+  // Each month is posted on its LAST day, after the month has ended. The
+  // first month is pro-rata by the days the asset was held (bought on the
+  // 16th of a 31-day month = 16/31 of a month); a disposal mid-month
+  // depreciates up to the disposal date. Months that were missed (server
+  // down, asset entered late) are caught up one by one. Months that fall
+  // in closed books (opening balance date / filed VAT return) can't be
+  // posted there, so they are posted together on the first open day.
+  private dateStr(d: string | Date): string {
+    if (d instanceof Date) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
+    return String(d).slice(0, 10);
+  }
 
-    asset.accumulatedDepreciation = this.round3(Number(asset.accumulatedDepreciation) + amount);
-    asset.lastDepreciationPeriod = period;
-    await this.repo.save(asset);
+  private daysInMonth(period: string) {
+    const [y, m] = period.split('-').map(Number);
+    return new Date(Date.UTC(y, m, 0)).getUTCDate();
+  }
 
-    try {
-      const expenseAccountId = await this.journalPosting.findAccountIdByCode(DEPRECIATION_EXPENSE_CODE);
-      const accumAccountId = await this.journalPosting.findAccountIdByCode(ACCUMULATED_DEPRECIATION_CODE);
-      await this.journalPosting.postForSource(
+  private monthEnd(period: string) {
+    return `${period}-${String(this.daysInMonth(period)).padStart(2, '0')}`;
+  }
+
+  private shiftPeriod(period: string, months: number) {
+    const [y, m] = period.split('-').map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + months, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+
+  private addDays(date: string, n: number) {
+    const d = new Date(`${date}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  // last day of the month before the current one (Oman time)
+  private lastCompletedMonthEnd() {
+    return this.monthEnd(this.shiftPeriod(omanToday().slice(0, 7), -1));
+  }
+
+  // Depreciates a (row-locked) asset up to and including `through`, inside
+  // the caller's transaction, so the asset and its journal entries are
+  // saved together or not at all. Returns the amount posted.
+  private async depreciateThrough(manager: EntityManager, asset: FixedAsset, through: string, actor: ActorRef): Promise<number> {
+    if (asset.status !== FixedAssetStatus.ACTIVE) return 0;
+    const purchase = this.dateStr(asset.purchaseDate);
+    if (through < purchase) return 0;
+    const base = this.round3(Number(asset.cost) - Number(asset.salvageValue));
+    const life = Math.max(1, Number(asset.usefulLifeMonths) || 1);
+    const monthly = base / life;
+    const lastPeriod = through.slice(0, 7);
+    let period = asset.lastDepreciationPeriod ? this.shiftPeriod(asset.lastDepreciationPeriod, 1) : purchase.slice(0, 7);
+    if (period > lastPeriod) return 0;
+
+    const lock = await this.journalPosting.lockedThrough(manager);
+    const expenseAccountId = await this.journalPosting.findAccountIdByCode(DEPRECIATION_EXPENSE_CODE);
+    const accumAccountId = await this.journalPosting.findAccountIdByCode(ACCUMULATED_DEPRECIATION_CODE);
+    const post = (sourceId: string, date: string, memo: string, amount: number) =>
+      this.journalPosting.postForSource(
         'fixed_asset_depreciation',
-        `${asset.id}-${period}`,
-        `${period}-01`,
-        `Depreciation — ${asset.assetNumber} (${period})`,
+        sourceId,
+        date,
+        memo,
         [
-          { accountId: expenseAccountId, debit: amount, description: 'Monthly depreciation' },
-          { accountId: accumAccountId, credit: amount, description: 'Monthly depreciation' },
+          { accountId: expenseAccountId, debit: amount, description: 'Depreciation' },
+          { accountId: accumAccountId, credit: amount, description: 'Depreciation' },
         ],
         actor,
         asset.assetNumber,
+        manager,
       );
-    } catch (err) {
-      console.error(`Auto-posting failed for fixed_asset_depreciation ${asset.id}-${period}:`, err);
+
+    let accumulated = this.round3(Number(asset.accumulatedDepreciation));
+    let total = 0;
+    const closed = { amount: 0, from: '', to: '' };
+    for (; period <= lastPeriod; period = this.shiftPeriod(period, 1)) {
+      const remaining = this.round3(base - accumulated);
+      if (remaining <= 0) {
+        period = lastPeriod;
+        break;
+      }
+      const monthStart = `${period}-01`;
+      const start = purchase > monthStart ? purchase : monthStart;
+      const end = through < this.monthEnd(period) ? through : this.monthEnd(period);
+      const days = Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000) + 1;
+      const dim = this.daysInMonth(period);
+      const amount = Math.min(this.round3(days >= dim ? monthly : (monthly * days) / dim), remaining);
+      if (amount <= 0) continue;
+      if (lock && end <= lock) {
+        closed.amount = this.round3(closed.amount + amount);
+        closed.from = closed.from || period;
+        closed.to = period;
+      } else {
+        const partial = days < dim ? ` - ${days} of ${dim} days` : '';
+        await post(`${asset.id}-${period}`, end, `Depreciation - ${asset.assetNumber} (${period}${partial})`, amount);
+      }
+      accumulated = this.round3(accumulated + amount);
+      total = this.round3(total + amount);
     }
-    return amount;
+    if (closed.amount > 0 && lock) {
+      const range = closed.from === closed.to ? closed.from : `${closed.from} to ${closed.to}`;
+      await post(
+        `${asset.id}-${closed.from}-${closed.to}`,
+        this.addDays(lock, 1),
+        `Depreciation - ${asset.assetNumber} (${range}, closed period caught up)`,
+        closed.amount,
+      );
+    }
+    asset.accumulatedDepreciation = accumulated;
+    asset.lastDepreciationPeriod = period > lastPeriod ? lastPeriod : period;
+    await manager.save(asset);
+    return total;
   }
 
-  // Runs at 07:00 on the 1st of every month — after recurring-invoice
-  // generation (06:00) and before payment reminders (08:00), same
-  // @nestjs/schedule Cron pattern used by both. Idempotent per asset per
-  // calendar month via lastDepreciationPeriod, so it's safe if the server
-  // restarts and the job fires again, or if it's also triggered manually
-  // the same month via the endpoints below.
-  @Cron('0 7 1 * *')
+  private async depreciateAssetThrough(id: string, through: string, actor: ActorRef) {
+    return this.dataSource.transaction(async (manager) => {
+      const asset = await manager.findOne(FixedAsset, { where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!asset) throw new NotFoundException('Fixed asset not found');
+      return this.depreciateThrough(manager, asset, through, actor);
+    });
+  }
+
+  // Runs every day at 07:00 and posts every completed month that is not
+  // posted yet (normally just last month, on the 1st). Running daily means
+  // a missed run (server asleep on the 1st) is caught up the next day.
+  // Idempotent: lastDepreciationPeriod records the last month posted.
+  @Cron('0 7 * * *')
   async runMonthlyDepreciation() {
     if (String(this.config.get('FIXED_ASSET_DEPRECIATION_ENABLED')).toLowerCase() === 'false') return;
     if (await this.journalPosting.waitingForOpening()) {
-      this.logger.log('Monthly depreciation skipped: opening balances are not finalized yet.');
-      return;
+      this.logger.log('Depreciation skipped: opening balances are not finalized yet.');
+      return { posted: 0, assets: 0 };
     }
-    const period = omanToday().slice(0, 7); // "YYYY-MM"
+    const through = this.lastCompletedMonthEnd();
+    const lastPeriod = through.slice(0, 7);
     const assets = await this.repo.find({ where: { status: FixedAssetStatus.ACTIVE } });
     let posted = 0;
     for (const asset of assets) {
-      if (asset.lastDepreciationPeriod === period) continue;
+      if (asset.lastDepreciationPeriod && asset.lastDepreciationPeriod >= lastPeriod) continue;
       try {
-        const amount = await this.postDepreciationFor(asset, period, {});
-        if (amount) posted++;
+        if (await this.depreciateAssetThrough(asset.id, through, {})) posted++;
       } catch (err) {
-        this.logger.error(`Monthly depreciation failed for asset ${asset.id}:`, err as Error);
+        this.logger.error(`Depreciation failed for asset ${asset.assetNumber}:`, err as Error);
       }
     }
-    this.logger.log(`Monthly depreciation run (${period}): ${posted} of ${assets.length} asset(s) posted.`);
+    if (posted) this.logger.log(`Depreciation through ${lastPeriod}: ${posted} of ${assets.length} asset(s) posted.`);
+    return { posted, assets: assets.length };
   }
 
-  // Manual trigger for a single asset's CURRENT-month depreciation —
-  // useful right after registering an asset mid-testing, or to catch up
-  // one asset without waiting for the 1st. Refuses if already posted for
-  // the current period.
+  // Manual catch-up for one asset: posts every completed month not posted
+  // yet. The current month posts after it ends.
   async depreciateNow(id: string, actor: ActorRef) {
     const asset = await this.findOne(id);
     if (asset.status !== FixedAssetStatus.ACTIVE) {
       throw new BadRequestException('Only an active asset can be depreciated.');
     }
-    const period = omanToday().slice(0, 7);
-    if (asset.lastDepreciationPeriod === period) {
-      throw new BadRequestException(`Depreciation for ${period} has already been posted for this asset.`);
-    }
-    const amount = await this.postDepreciationFor(asset, period, actor);
+    await this.journalPosting.assertBooksStarted('Depreciation');
+    const through = this.lastCompletedMonthEnd();
+    const amount = await this.depreciateAssetThrough(id, through, actor);
     if (!amount) {
-      throw new BadRequestException('This asset is already fully depreciated.');
+      const fresh = await this.findOne(id);
+      if (this.round3(Number(fresh.cost) - Number(fresh.salvageValue) - Number(fresh.accumulatedDepreciation)) <= 0) {
+        throw new BadRequestException('This asset is already fully depreciated.');
+      }
+      throw new BadRequestException(
+        `Nothing to post: depreciation is up to date through ${through}. This month's depreciation posts after the month ends.`,
+      );
     }
     await this.activityLog.log({
       action: 'fixed_asset.depreciated_manually',
@@ -345,107 +420,112 @@ export class FixedAssetService {
       entityId: asset.id,
       userId: actor.userId,
       userEmail: actor.email,
-      details: { assetNumber: asset.assetNumber, period, amount },
+      details: { assetNumber: asset.assetNumber, through, amount },
     });
     return this.findOne(id);
   }
 
-  // Admin-triggered run of the full monthly job on demand (e.g. right
-  // after deploy, to confirm it's wired up without waiting for the 1st).
+  // Admin-triggered run of the full job on demand.
   async runDepreciationNow() {
-    await this.runMonthlyDepreciation();
-    return { ran: true };
+    const r = await this.runMonthlyDepreciation();
+    return { ran: true, ...(r || {}) };
   }
 
-  // Retires an asset: reverses (Cr) its full original cost and (Dr) its
-  // accumulated depreciation off the books, records any sale/scrap
-  // proceeds, and posts the resulting gain or loss. See the inline
-  // comments below for why this always balances.
+  // Retires an asset. First depreciates it up to the disposal date, then
+  // removes its cost (Cr) and accumulated depreciation (Dr), records the
+  // money received and posts the gain or loss. A sale is a taxable supply
+  // under the Oman VAT law: the VAT charged to the buyer (5%) is output VAT
+  // (Cr 2100) and appears on the VAT return. All in one transaction.
   async dispose(id: string, dto: DisposeFixedAssetDto, actor: ActorRef) {
-    const asset = await this.findOne(id);
-    if (asset.status !== FixedAssetStatus.ACTIVE) {
-      throw new BadRequestException('This asset has already been disposed.');
+    const proceeds = this.round3(Number(dto.disposalProceeds || 0));
+    const vat = this.round3(Number(dto.vatAmount || 0));
+    const gross = this.round3(proceeds + vat);
+    if (vat > 0 && proceeds <= 0) throw new BadRequestException('VAT can only be charged on a sale price.');
+    if (vat > 0 && Math.abs(vat - this.round3(proceeds * 0.05)) > 0.001) {
+      throw new BadRequestException(`VAT on a sale price of ${proceeds.toFixed(3)} OMR is ${this.round3(proceeds * 0.05).toFixed(3)} OMR (5%).`);
     }
-    const proceeds = Number(dto.disposalProceeds || 0);
-    if (proceeds > 0 && !dto.bankAccountId) {
+    if (gross > 0 && !dto.bankAccountId) {
       throw new BadRequestException('Select the account disposal proceeds were deposited into.');
+    }
+    if (vat > 0) {
+      const [s] = await this.dataSource.query('SELECT companyVatin FROM settings WHERE id = 1');
+      if (!String(s?.companyVatin || '').trim()) {
+        throw new BadRequestException('Enter the company VATIN in Settings before charging VAT.');
+      }
     }
     const date = dto.disposalDate || omanToday();
     await this.journalPosting.assertDateOpen(date, 'This disposal');
-    const netBookValue = this.round3(Number(asset.cost) - Number(asset.accumulatedDepreciation));
-    const gainLoss = this.round3(proceeds - netBookValue);
+    if (date > omanToday()) throw new BadRequestException('The disposal date cannot be in the future.');
+    const bankJournalAccountId = gross > 0 && dto.bankAccountId ? await this.bankAccountService.ensureJournalAccountId(dto.bankAccountId) : null;
+    const assetAccountId = await this.journalPosting.findAccountIdByCode(CATEGORY_ACCOUNT_CODE[(await this.findOne(id)).category]);
+    const accumAccountId = await this.journalPosting.findAccountIdByCode(ACCUMULATED_DEPRECIATION_CODE);
 
-    const saved = await this.dataSource.transaction(async (manager) => {
-      if (proceeds > 0 && dto.bankAccountId) {
-        const account = await manager.findOne(BankAccount, {
-          where: { id: dto.bankAccountId },
-          lock: { mode: 'pessimistic_write' },
-        });
-        if (!account) throw new NotFoundException('Bank/cash account not found');
-        account.currentBalance = Number(account.currentBalance) + proceeds;
-        await manager.save(account);
-        await manager.save(
-          manager.create(BankTransaction, {
-            bankAccountId: account.id,
-            type: BankTransactionType.DEPOSIT,
-            amount: proceeds,
-            date,
-            note: `Fixed asset disposal proceeds — ${asset.assetNumber}`,
-          }),
+    const result = await this.dataSource.transaction(async (manager) => {
+      const asset = await manager.findOne(FixedAsset, { where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!asset) throw new NotFoundException('Fixed asset not found');
+      if (asset.status !== FixedAssetStatus.ACTIVE) throw new BadRequestException('This asset has already been disposed.');
+      const purchase = this.dateStr(asset.purchaseDate);
+      if (date < purchase) throw new BadRequestException(`The disposal date is before the purchase date (${purchase}).`);
+      if (asset.lastDepreciationPeriod && date < this.monthEnd(asset.lastDepreciationPeriod)) {
+        throw new BadRequestException(
+          `Depreciation is already posted through ${this.monthEnd(asset.lastDepreciationPeriod)}. Use a disposal date on or after it.`,
         );
+      }
+      const depreciated = await this.depreciateThrough(manager, asset, date, actor);
+      const accumulated = this.round3(Number(asset.accumulatedDepreciation));
+      const netBookValue = this.round3(Number(asset.cost) - accumulated);
+      const gainLoss = this.round3(proceeds - netBookValue);
+
+      if (gross > 0 && dto.bankAccountId) {
+        await applyBankMovement(manager, {
+          accountId: dto.bankAccountId,
+          type: BankTransactionType.DEPOSIT,
+          amount: gross,
+          date,
+          note: `Fixed asset sold - ${asset.assetNumber}${vat > 0 ? ` (incl. VAT ${vat.toFixed(3)})` : ''}`,
+        });
       }
       asset.status = FixedAssetStatus.DISPOSED;
       asset.disposalDate = date;
       asset.disposalProceeds = proceeds;
+      asset.disposalVat = vat;
+      asset.disposalBuyer = dto.buyer?.trim() || null;
       if (dto.bankAccountId) asset.bankAccountId = dto.bankAccountId;
-      return manager.save(asset);
+      const saved = await manager.save(asset);
+
+      // Credits: cost + output VAT + gain. Debits: accumulated
+      // depreciation + money received + loss. Balances because
+      // gain/loss = proceeds - (cost - accumulated).
+      const lines: PostingLine[] = [
+        { accountId: assetAccountId, credit: Number(saved.cost), description: 'Asset disposed - remove cost' },
+      ];
+      if (accumulated > 0) lines.push({ accountId: accumAccountId, debit: accumulated, description: 'Asset disposed - remove accumulated depreciation' });
+      if (gross > 0 && bankJournalAccountId) lines.push({ accountId: bankJournalAccountId, debit: gross, description: 'Sale proceeds received' });
+      if (vat > 0) lines.push({ accountId: await this.journalPosting.findAccountIdByCode('2100'), credit: vat, description: 'Output VAT on asset sale' });
+      if (gainLoss > 0) lines.push({ accountId: await this.journalPosting.findAccountIdByCode(GAIN_ON_DISPOSAL_CODE), credit: gainLoss, description: 'Gain on disposal' });
+      else if (gainLoss < 0) lines.push({ accountId: await this.journalPosting.findAccountIdByCode(LOSS_ON_DISPOSAL_CODE), debit: -gainLoss, description: 'Loss on disposal' });
+      await this.journalPosting.postForSource(
+        'fixed_asset_disposal',
+        saved.id,
+        date,
+        `Fixed asset disposal - ${saved.assetNumber}${saved.disposalBuyer ? ` (sold to ${saved.disposalBuyer})` : ''}`,
+        lines,
+        actor,
+        saved.assetNumber,
+        manager,
+      );
+      return { saved, netBookValue, gainLoss, depreciated };
     });
 
     await this.activityLog.log({
       action: 'fixed_asset.disposed',
       entityType: 'fixed_asset',
-      entityId: saved.id,
+      entityId: id,
       userId: actor.userId,
       userEmail: actor.email,
-      details: { assetNumber: saved.assetNumber, proceeds, netBookValue, gainLoss },
+      details: { assetNumber: result.saved.assetNumber, proceeds, vat, netBookValue: result.netBookValue, gainLoss: result.gainLoss, depreciatedToDate: result.depreciated },
     });
-
-    try {
-      const assetAccountId = await this.journalPosting.findAccountIdByCode(CATEGORY_ACCOUNT_CODE[saved.category]);
-      const accumAccountId = await this.journalPosting.findAccountIdByCode(ACCUMULATED_DEPRECIATION_CODE);
-      // Credits: original cost (removes the asset) + a gain, if any.
-      // Debits: accumulated depreciation (removes the contra-asset) +
-      // proceeds received + a loss, if any. These always balance — see
-      // the derivation in this service's module-level design notes.
-      const lines: PostingLine[] = [
-        { accountId: assetAccountId, credit: Number(saved.cost), description: 'Asset disposed — remove cost' },
-        { accountId: accumAccountId, debit: Number(saved.accumulatedDepreciation), description: 'Asset disposed — remove accumulated depreciation' },
-      ];
-      if (proceeds > 0 && dto.bankAccountId) {
-        const bankJournalAccountId = await this.bankAccountService.ensureJournalAccountId(dto.bankAccountId);
-        lines.push({ accountId: bankJournalAccountId, debit: proceeds, description: 'Disposal proceeds received' });
-      }
-      if (gainLoss > 0) {
-        const gainAccountId = await this.journalPosting.findAccountIdByCode(GAIN_ON_DISPOSAL_CODE);
-        lines.push({ accountId: gainAccountId, credit: gainLoss, description: 'Gain on disposal' });
-      } else if (gainLoss < 0) {
-        const lossAccountId = await this.journalPosting.findAccountIdByCode(LOSS_ON_DISPOSAL_CODE);
-        lines.push({ accountId: lossAccountId, debit: -gainLoss, description: 'Loss on disposal' });
-      }
-      await this.journalPosting.postForSource(
-        'fixed_asset_disposal',
-        saved.id,
-        date,
-        `Fixed asset disposal — ${saved.assetNumber}`,
-        lines,
-        actor,
-        saved.assetNumber,
-      );
-    } catch (err) {
-      console.error(`Auto-posting failed for fixed_asset_disposal ${saved.id}:`, err);
-    }
-
-    return saved;
+    return result.saved;
   }
 
   // Supplier bill for an asset bought on credit: a received purchase order

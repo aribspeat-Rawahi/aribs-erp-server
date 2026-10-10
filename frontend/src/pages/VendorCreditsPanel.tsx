@@ -32,6 +32,8 @@ interface VendorCredit {
   amount: number | string;
   date: string;
   reason?: string;
+  vatAmount?: number | string;
+  supplierCreditNoteNumber?: string | null;
   appliedAmount: number | string;
   refundedAmount: number | string;
   applications: VendorCreditApplication[];
@@ -104,6 +106,8 @@ export default function VendorCreditsPanel({
                     <div className="text-sm font-medium text-ink">{supplierName(c.supplierId)}</div>
                     <div className="text-xs text-muted">
                       <span className="whitespace-nowrap">{c.creditNumber}</span> · {c.date}
+                      {c.supplierCreditNoteNumber ? ` · Credit note ${c.supplierCreditNoteNumber}` : ''}
+                      {Number(c.vatAmount || 0) > 0 ? ` · incl. VAT ${money(c.vatAmount || 0)}` : ''}
                       {c.reason ? ` · ${c.reason}` : ''}
                     </div>
                     {(c.applications.length > 0 || c.refunds.length > 0) && (
@@ -188,11 +192,16 @@ function NewCreditModal({
   const [amount, setAmount] = useState('0');
   const [date, setDate] = useState(localISODate());
   const [reason, setReason] = useState('');
+  const [withVat, setWithVat] = useState(false);
+  const [creditNoteNumber, setCreditNoteNumber] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // the amount includes VAT: VAT = 5/105 of it
+  const vat = withVat ? Math.round(((Number(amount) || 0) * 5 * 1000) / 105) / 1000 : 0;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -201,6 +210,8 @@ function NewCreditModal({
         amount: Number(amount),
         date,
         reason: reason || undefined,
+        vatAmount: withVat ? vat : undefined,
+        supplierCreditNoteNumber: withVat ? creditNoteNumber.trim() : undefined,
       });
       onSaved();
     } catch (err: any) {
@@ -221,13 +232,31 @@ function NewCreditModal({
           </select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Amount (OMR)">
+          <Field label={withVat ? 'Amount incl. VAT (OMR)' : 'Amount (OMR)'}>
             <input className={inputClass} type="number" step="0.001" min="0.001" value={amount} onChange={(e) => setAmount(e.target.value)} required />
           </Field>
           <Field label="Date">
             <input className={inputClass} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
           </Field>
         </div>
+        <label className="flex items-center gap-2 text-sm text-ink">
+          <input type="checkbox" checked={withVat} onChange={(e) => setWithVat(e.target.checked)} />
+          Supplier's tax credit note includes 5% VAT
+        </label>
+        {withVat && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Credit note number">
+              <input className={inputClass} value={creditNoteNumber} onChange={(e) => setCreditNoteNumber(e.target.value)} required maxLength={100} />
+            </Field>
+            <Field label="VAT in this credit (OMR)">
+              <input className={inputClass} value={vat.toFixed(3)} readOnly />
+            </Field>
+          </div>
+        )}
+        <p className="text-xs text-muted">
+          For a price reduction or rebate. Goods sent back to the supplier go through a Purchase Return instead, so the stock is taken out too.
+          {withVat ? ' The VAT part reduces the input VAT claimed on the VAT return.' : ''}
+        </p>
         <Field label="Reason (optional)">
           <input className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Goodwill credit, price adjustment, rebate…" />
         </Field>
