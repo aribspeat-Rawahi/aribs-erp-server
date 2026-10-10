@@ -32,6 +32,10 @@ export class PurchaseOrderItem {
   @Column('decimal', { precision: 12, scale: 3, default: 0 })
   receivedQuantity: number;
 
+  // the purchase requisition line this orders (if any)
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  requisitionItemId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

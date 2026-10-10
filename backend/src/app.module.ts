@@ -20,6 +20,8 @@ import { ReportingModule } from './reporting/reporting.module';
 import { DeliveryNoteModule } from './delivery-note/delivery-note.module';
 import { BankAccountModule } from './bank-account/bank-account.module';
 import { ApprovalModule } from './approval/approval.module';
+import { DocumentApprovalModule } from './document-approval/document-approval.module';
+import { ProcurementModule } from './procurement/procurement.module';
 import { RecurringInvoiceModule } from './recurring-invoice/recurring-invoice.module';
 import { ReimbursementModule } from './reimbursement/reimbursement.module';
 import { OpeningBalanceModule } from './opening-balance/opening-balance.module';
@@ -92,6 +94,8 @@ import { ImportModule } from './import/import.module';
     DeliveryNoteModule,
     BankAccountModule,
     ApprovalModule,
+    DocumentApprovalModule,
+    ProcurementModule,
     RecurringInvoiceModule,
     ReimbursementModule,
     OpeningBalanceModule,

@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { VendorCredit } from './vendor-credit.entity';
 import { FixedAsset } from '../fixed-asset/fixed-asset.entity';
@@ -23,6 +23,8 @@ import { SettingsService } from '../settings/settings.service';
 import { generateInvoicePdf, InvoicePdfItem } from '../common/invoice-pdf.util';
 import { RawMaterial } from '../inventory/raw-material.entity';
 import { omanToday, omanDate } from '../common/oman-date';
+import { DocumentApprovalService, ApprovalActor } from '../document-approval/document-approval.service';
+import { assertRequisitionLines } from '../procurement/requisition-util';
 
 interface ActorRef {
   userId?: string;
@@ -42,7 +44,7 @@ const QTY_EPSILON = 0.0005;
 // is owed to the supplier is always the value actually received
 // (receivedTotal), never the ordered total.
 @Injectable()
-export class PurchaseOrderService {
+export class PurchaseOrderService implements OnModuleInit {
   constructor(
     @InjectRepository(PurchaseOrder)
     private orderRepo: Repository<PurchaseOrder>,
@@ -55,7 +57,63 @@ export class PurchaseOrderService {
     private journalPosting: JournalPostingService,
     private units: UnitService,
     private settingsService: SettingsService,
+    private approvals: DocumentApprovalService,
   ) {}
+
+  // Approval of purchase orders (Settings > Approval rules): a new order
+  // waits in "pending_approval" until approved; only then can goods be
+  // received against it (and so, paid). Nothing is posted to the books by
+  // the approval itself - the books move at goods receipt, as before.
+  onModuleInit() {
+    this.approvals.registerHandler('purchase_order', {
+      label: 'Purchase order',
+      onApproved: async (manager, id) => {
+        const order = await manager.findOne(PurchaseOrder, { where: { id }, lock: { mode: 'pessimistic_write' } });
+        if (!order || order.status !== PurchaseOrderStatus.PENDING_APPROVAL) {
+          throw new BadRequestException('This purchase order is no longer waiting for approval.');
+        }
+        order.status = PurchaseOrderStatus.ORDERED;
+        order.approvedAmount = Number(order.total || 0);
+        order.approvedAt = new Date();
+        await manager.save(order);
+      },
+      onRejected: async (manager, id) => {
+        const order = await manager.findOne(PurchaseOrder, { where: { id }, lock: { mode: 'pessimistic_write' } });
+        if (!order || order.status !== PurchaseOrderStatus.PENDING_APPROVAL) {
+          throw new BadRequestException('This purchase order is no longer waiting for approval.');
+        }
+        order.status = PurchaseOrderStatus.REJECTED;
+        await manager.save(order);
+      },
+    });
+  }
+
+  // (Re)starts approval inside the caller's transaction and sets the status.
+  private async requestApproval(manager: EntityManager, order: PurchaseOrder, supplierName: string, itemCount: number, actor: ApprovalActor) {
+    const result = await this.approvals.start(manager, {
+      type: 'purchase_order',
+      documentId: order.id,
+      documentNumber: order.poNumber,
+      amount: Number(order.total || 0),
+      summary: `${supplierName} - ${itemCount} line${itemCount === 1 ? '' : 's'}${order.notes ? ` - ${order.notes}` : ''}`,
+      requestedBy: actor,
+    });
+    if (result === 'approved') {
+      order.status = PurchaseOrderStatus.ORDERED;
+      order.approvedAmount = Number(order.total || 0);
+      order.approvedAt = new Date();
+    } else {
+      order.status = PurchaseOrderStatus.PENDING_APPROVAL;
+      order.approvedAmount = null;
+      order.approvedAt = null;
+    }
+    await manager.save(order);
+    return result;
+  }
+
+  // statuses in which an order has not been received yet and may still be
+  // edited, cancelled or deleted
+  private static readonly OPEN_EDITABLE = [PurchaseOrderStatus.PENDING_APPROVAL, PurchaseOrderStatus.REJECTED, PurchaseOrderStatus.ORDERED];
 
   private round3(n: number) {
     return Math.round(n * 1000) / 1000;
@@ -121,7 +179,11 @@ export class PurchaseOrderService {
   }
 
   async findAll() {
-    return this.withItems(await this.orderRepo.find({ order: { sequenceNumber: 'DESC' } }));
+    const orders = await this.withItems(await this.orderRepo.find({ order: { sequenceNumber: 'DESC' } }));
+    const ids = orders.filter((o) => o.status === PurchaseOrderStatus.PENDING_APPROVAL || o.status === PurchaseOrderStatus.REJECTED || o.approvedAt).map((o) => o.id);
+    const pending = await this.approvals.pendingByDocument('purchase_order', ids);
+    const last = await this.approvals.lastDecisionByDocument('purchase_order', ids);
+    return orders.map((o) => ({ ...o, approvalPending: pending.get(o.id) || null, lastDecision: last.get(o.id) || null }));
   }
 
   // Three-way match: purchase order <-> goods received <-> supplier invoice.
@@ -256,30 +318,61 @@ export class PurchaseOrderService {
       relations: ['items'],
       order: { sequenceNumber: 'ASC' },
     });
-    return { ...order, items, goodsReceipts };
+    const approvalHistory = await this.approvals.history('purchase_order', id);
+    return { ...order, items, goodsReceipts, approvalHistory };
   }
 
-  async create(dto: CreatePurchaseOrderDto) {
+  async create(dto: CreatePurchaseOrderDto, actor: ApprovalActor = {}, opts: { rfqId?: string; manager?: EntityManager } = {}) {
     const supplier = await this.getSupplier(dto.supplierId);
     const lines = await this.resolveLines(dto, supplier);
+    if (!dto.requisitionId && lines.some((l) => l.requisitionItemId)) {
+      throw new BadRequestException('A requisition line was given without its requisition.');
+    }
     const totals = this.calcTotals(lines);
-    const saved = await this.dataSource.transaction(async (manager) => {
+    const run = async (manager: EntityManager) => {
+      if (dto.requisitionId) await assertRequisitionLines(manager, dto.requisitionId, lines);
       const order = await manager.save(
         manager.create(PurchaseOrder, {
           supplierId: dto.supplierId,
           notes: dto.notes,
           expectedDate: dto.expectedDate || null,
-          status: PurchaseOrderStatus.ORDERED,
+          status: PurchaseOrderStatus.PENDING_APPROVAL,
           poNumber: `TMP-${randomUUID().replace(/-/g, '').slice(0, 24)}`, // replaced right after insert, once sequenceNumber is known
+          requisitionId: dto.requisitionId || null,
+          rfqId: opts.rfqId || null,
+          createdByUserId: actor.userId || null,
+          createdByEmail: actor.email || null,
           ...totals,
         }),
       );
       order.poNumber = `PO-${omanToday().slice(0, 4)}-${String(order.sequenceNumber).padStart(4, '0')}`;
       await manager.save(order);
-      const items = await manager.save(lines.map((i) => manager.create(PurchaseOrderItem, { ...i, purchaseOrderId: order.id })));
+      const items = await manager.save(
+        lines.map((i) => manager.create(PurchaseOrderItem, { ...i, requisitionItemId: i.requisitionItemId || null, purchaseOrderId: order.id })),
+      );
+      await this.requestApproval(manager, order, supplier.name, items.length, actor);
       return { ...order, items };
+    };
+    return opts.manager ? run(opts.manager) : this.dataSource.transaction(run);
+  }
+
+  // A rejected order sent for approval again, unchanged.
+  async resubmit(id: string, actor: ApprovalActor) {
+    return this.dataSource.transaction(async (manager) => {
+      const order = await manager.findOne(PurchaseOrder, { where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!order) throw new NotFoundException('Purchase order not found');
+      // rejected, or waiting with no approval step open (e.g. brought back
+      // with Undo after a delete)
+      const stuck = order.status === PurchaseOrderStatus.PENDING_APPROVAL && !(await this.approvals.pendingByDocument('purchase_order', [id])).size;
+      if (order.status !== PurchaseOrderStatus.REJECTED && !stuck) {
+        throw new BadRequestException('Only a rejected purchase order can be sent for approval again.');
+      }
+      const items = await manager.find(PurchaseOrderItem, { where: { purchaseOrderId: id } });
+      if (order.requisitionId) await assertRequisitionLines(manager, order.requisitionId, items, id);
+      const supplier = await manager.findOne(Supplier, { where: { id: order.supplierId } });
+      await this.requestApproval(manager, order, supplier?.name || '', items.length, actor);
+      return order;
     });
-    return saved;
   }
 
   // ---- receiving (Goods Received Note) ------------------------------------
@@ -288,6 +381,9 @@ export class PurchaseOrderService {
     const result = await this.dataSource.transaction(async (manager) => {
       const order = await manager.findOne(PurchaseOrder, { where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!order) throw new NotFoundException('Purchase order not found');
+      if (order.status === PurchaseOrderStatus.PENDING_APPROVAL || order.status === PurchaseOrderStatus.REJECTED) {
+        throw new BadRequestException(`${order.poNumber} is ${order.status === PurchaseOrderStatus.REJECTED ? 'rejected' : 'not approved yet'} - goods can only be received on an approved order.`);
+      }
       if (order.status !== PurchaseOrderStatus.ORDERED && order.status !== PurchaseOrderStatus.PARTIALLY_RECEIVED) {
         throw new BadRequestException(`This order is already ${order.status.replace('_', ' ')} - nothing more to receive.`);
       }
@@ -624,64 +720,100 @@ export class PurchaseOrderService {
   // ---- edit / cancel / delete (only while nothing has arrived) ---------
 
   async cancel(id: string) {
-    const order = await this.orderRepo.findOne({ where: { id } });
-    if (!order) throw new NotFoundException('Purchase order not found');
-    this.assertNotOpening(order, 'cancelled');
-    if (order.status !== PurchaseOrderStatus.ORDERED) {
-      throw new BadRequestException(
-        order.status === PurchaseOrderStatus.PARTIALLY_RECEIVED
-          ? 'Part of this order has arrived - use "Close" instead of cancel.'
-          : `Only ordered POs can be cancelled (this one is ${order.status})`,
-      );
-    }
-    order.status = PurchaseOrderStatus.CANCELLED;
-    return this.orderRepo.save(order);
+    return this.dataSource.transaction(async (manager) => {
+      const order = await manager.findOne(PurchaseOrder, { where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!order) throw new NotFoundException('Purchase order not found');
+      this.assertNotOpening(order, 'cancelled');
+      if (!PurchaseOrderService.OPEN_EDITABLE.includes(order.status)) {
+        throw new BadRequestException(
+          order.status === PurchaseOrderStatus.PARTIALLY_RECEIVED
+            ? 'Part of this order has arrived - use "Close" instead of cancel.'
+            : `Only POs not received yet can be cancelled (this one is ${order.status.replace('_', ' ')})`,
+        );
+      }
+      order.status = PurchaseOrderStatus.CANCELLED;
+      await this.approvals.cancelPending(manager, 'purchase_order', id);
+      await this.releaseRfq(manager, id);
+      return manager.save(order);
+    });
   }
 
-  async update(id: string, dto: Partial<CreatePurchaseOrderDto>) {
-    const order = await this.orderRepo.findOne({ where: { id } });
-    if (!order) throw new NotFoundException('Purchase order not found');
-    this.assertNotOpening(order, 'edited');
-    if (order.status !== PurchaseOrderStatus.ORDERED) {
-      throw new BadRequestException(`Only ordered POs can be edited (this one is ${order.status.replace('_', ' ')})`);
-    }
-    if (dto.supplierId) order.supplierId = dto.supplierId;
-    if (dto.notes !== undefined) order.notes = dto.notes;
-    if (dto.expectedDate !== undefined) order.expectedDate = dto.expectedDate || null;
-    const supplier = await this.getSupplier(order.supplierId);
+  // its RFQ can be awarded again (to this or another quote)
+  private async releaseRfq(manager: EntityManager, orderId: string) {
+    await manager.query(
+      "UPDATE rfqs SET status = 'open', awardedQuoteId = NULL, awardReason = NULL, purchaseOrderId = NULL WHERE purchaseOrderId = ? AND status = 'awarded'",
+      [orderId],
+    );
+  }
 
-    let items = await this.itemRepo.find({ where: { purchaseOrderId: id } });
-    if (dto.items || dto.supplierId) {
-      // re-apply the VAT rule when the supplier changes, too
-      const source = dto.items
-        ? dto.items
-        : items.map((i) => ({ rawMaterialId: i.rawMaterialId, quantity: Number(i.quantity), costPerUnit: Number(i.costPerUnit), vatRate: Number(i.vatRate) }));
-      const lines = await this.resolveLines({ items: source }, supplier);
-      await this.dataSource.transaction(async (manager) => {
-        if (items.length) await manager.remove(items);
-        items = await manager.save(lines.map((i) => manager.create(PurchaseOrderItem, { ...i, purchaseOrderId: id })));
-        Object.assign(order, this.calcTotals(lines));
-        await manager.save(order);
-      });
-    } else {
-      await this.orderRepo.save(order);
+  // Editing an order that is waiting for (or was refused) approval sends it
+  // for approval again; editing an approved order only needs approval again
+  // when it now costs more than was approved, or goes to another supplier.
+  async update(id: string, dto: Partial<CreatePurchaseOrderDto>, actor: ApprovalActor = {}) {
+    const existing = await this.orderRepo.findOne({ where: { id } });
+    if (!existing) throw new NotFoundException('Purchase order not found');
+    this.assertNotOpening(existing, 'edited');
+    if (!PurchaseOrderService.OPEN_EDITABLE.includes(existing.status)) {
+      throw new BadRequestException(`Only POs not received yet can be edited (this one is ${existing.status.replace('_', ' ')})`);
     }
-    return { ...order, items };
+    if (dto.requisitionId !== undefined && dto.requisitionId !== existing.requisitionId) {
+      throw new BadRequestException('The requisition of a purchase order cannot be changed.');
+    }
+    const supplier = await this.getSupplier(dto.supplierId || existing.supplierId);
+    const oldItems = await this.itemRepo.find({ where: { purchaseOrderId: id } });
+    let lines: Awaited<ReturnType<PurchaseOrderService['resolveLines']>> | null = null;
+    if (dto.items || dto.supplierId) {
+      // re-apply the VAT rule when the supplier changes, too; keep each
+      // line's requisition link (matched by material when not sent)
+      const source = dto.items
+        ? dto.items.map((i) => ({ ...i, requisitionItemId: i.requisitionItemId || oldItems.find((o) => o.rawMaterialId === i.rawMaterialId)?.requisitionItemId || undefined }))
+        : oldItems.map((i) => ({ rawMaterialId: i.rawMaterialId, quantity: Number(i.quantity), costPerUnit: Number(i.costPerUnit), vatRate: Number(i.vatRate), requisitionItemId: i.requisitionItemId || undefined }));
+      lines = await this.resolveLines({ items: source }, supplier);
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const order = await manager.findOne(PurchaseOrder, { where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!order || !PurchaseOrderService.OPEN_EDITABLE.includes(order.status)) throw new BadRequestException('This order changed meanwhile - reload and try again.');
+      const before = { supplierId: order.supplierId, total: Number(order.total || 0), approved: order.approvedAmount === null ? Number(order.total || 0) : Number(order.approvedAmount) };
+      if (dto.supplierId) order.supplierId = dto.supplierId;
+      if (dto.notes !== undefined) order.notes = dto.notes;
+      if (dto.expectedDate !== undefined) order.expectedDate = dto.expectedDate || null;
+      let items = oldItems;
+      if (lines) {
+        if (order.requisitionId) await assertRequisitionLines(manager, order.requisitionId, lines, id);
+        if (oldItems.length) await manager.remove(oldItems);
+        items = await manager.save(lines.map((i) => manager.create(PurchaseOrderItem, { ...i, requisitionItemId: i.requisitionItemId || null, purchaseOrderId: id })));
+        Object.assign(order, this.calcTotals(lines));
+      }
+      await manager.save(order);
+      const needsApproval =
+        order.status !== PurchaseOrderStatus.ORDERED ||
+        order.supplierId !== before.supplierId ||
+        Number(order.total || 0) > before.approved + 0.0005;
+      if (lines && needsApproval) {
+        await this.requestApproval(manager, order, supplier.name, items.length, actor);
+      }
+      return { ...order, items };
+    });
   }
 
   async remove(id: string) {
-    const order = await this.orderRepo.findOne({ where: { id } });
-    if (!order) throw new NotFoundException('Purchase order not found');
-    this.assertNotOpening(order, 'deleted');
-    if (order.status !== PurchaseOrderStatus.ORDERED) {
-      throw new BadRequestException(
-        `Only ordered POs can be deleted (this one is ${order.status.replace('_', ' ')}) — received/cancelled orders are kept for the audit trail.`,
-      );
-    }
-    const items = await this.itemRepo.find({ where: { purchaseOrderId: id } });
-    if (items.length > 0) await this.itemRepo.remove(items);
-    await this.orderRepo.remove(order);
-    return { deleted: true };
+    return this.dataSource.transaction(async (manager) => {
+      const order = await manager.findOne(PurchaseOrder, { where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!order) throw new NotFoundException('Purchase order not found');
+      this.assertNotOpening(order, 'deleted');
+      if (!PurchaseOrderService.OPEN_EDITABLE.includes(order.status)) {
+        throw new BadRequestException(
+          `Only POs not received yet can be deleted (this one is ${order.status.replace('_', ' ')}) — received/cancelled orders are kept for the audit trail.`,
+        );
+      }
+      const items = await manager.find(PurchaseOrderItem, { where: { purchaseOrderId: id } });
+      if (items.length > 0) await manager.remove(items);
+      await this.approvals.cancelPending(manager, 'purchase_order', id);
+      await this.releaseRfq(manager, id);
+      await manager.remove(order);
+      return { deleted: true };
+    });
   }
 
   // ---- PDF -------------------------------------------------------------
@@ -690,6 +822,9 @@ export class PurchaseOrderService {
   async generatePdf(id: string) {
     const order = await this.findOne(id);
     if (order.isOpening) throw new NotFoundException('This is an opening balance from the old books - there is no purchase order PDF.');
+    if (order.status === PurchaseOrderStatus.PENDING_APPROVAL || order.status === PurchaseOrderStatus.REJECTED) {
+      throw new BadRequestException(`${order.poNumber} is ${order.status === PurchaseOrderStatus.REJECTED ? 'rejected' : 'not approved yet'} - it can be sent to the supplier once approved.`);
+    }
     const supplier = await this.getSupplier(order.supplierId);
     const settings = await this.settingsService.get();
     const logoBase64 = await this.settingsService.getLogoBase64();

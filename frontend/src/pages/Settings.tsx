@@ -7,6 +7,7 @@ import { viewFile, downloadFile } from '../api/docActions';
 import { useAuth } from '../context/AuthContext';
 import { Can } from '../components/Permission';
 import { localISODate } from '../utils/dates';
+import ApprovalRulesCard from '../components/ApprovalRulesCard';
 
 interface CompanyDocument {
   id: string;
@@ -645,6 +646,8 @@ export default function Settings() {
           </div>
         )}
       </Card>
+
+      <ApprovalRulesCard canEdit={['admin', 'ceo', 'md'].includes(user?.role || '')} />
 
       {isAdmin && (
       <Card className="mt-5">

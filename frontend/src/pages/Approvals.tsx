@@ -1,7 +1,14 @@
-import { useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import api from '../api/client';
-import { PageHeader, Card, EmptyState, IconButton } from '../components/ui';
+import { PageHeader, Card, EmptyState, IconButton, Modal, Field, inputClass, PrimaryButton, SecondaryButton } from '../components/ui';
+import { ApprovalStepView, roleNames } from '../components/approvalInfo';
+
+interface DocumentApprovalRow extends ApprovalStepView {
+  canDecide: boolean;
+  cannotDecideReason?: string | null;
+}
+const DOC_LABEL: Record<string, string> = { purchase_order: 'Purchase Order', purchase_requisition: 'Requisition' };
 
 interface ApprovalRow {
   id: string;
@@ -43,10 +50,15 @@ export default function Approvals() {
   const [rows, setRows] = useState<ApprovalRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [docRows, setDocRows] = useState<DocumentApprovalRow[]>([]);
+  const [deciding, setDeciding] = useState<{ row: DocumentApprovalRow; action: 'approve' | 'reject' } | null>(null);
 
   function load() {
     setLoading(true);
-    api.get('/approvals/pending').then((res) => setRows(res.data)).finally(() => setLoading(false));
+    Promise.all([
+      api.get('/approvals/pending').then((res) => setRows(res.data)),
+      api.get('/document-approvals/pending').then((res) => setDocRows(res.data)).catch(() => setDocRows([])),
+    ]).finally(() => setLoading(false));
   }
 
   useEffect(load, []);
@@ -82,11 +94,45 @@ export default function Approvals() {
     <div>
       <PageHeader
         title="Approvals"
-        subtitle="Credit limit, large discount, VAT-exclude, salary advance, stock-in and quotation price-edit requests waiting on you"
+        subtitle="Purchase orders, requisitions, credit limit, large discount, VAT-exclude, salary advance, stock-in and quotation price-edit requests waiting on you"
       />
+      {!loading && docRows.length > 0 && (
+        <div className="mb-5">
+          <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Purchasing</div>
+          <Card>
+            <div className="divide-y divide-black/5">
+              {docRows.map((row) => (
+                <div key={row.id} className="flex items-start justify-between px-4 py-3 gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-50 text-purple-700">{DOC_LABEL[row.documentType] || row.documentType}</span>
+                      <span className="text-sm font-medium text-ink">{row.documentNumber}</span>
+                      <span className="text-sm text-ink">{row.amount.toFixed(3)} OMR</span>
+                      {row.totalSteps > 1 && <span className="text-xs text-muted">Step {row.step} of {row.totalSteps}</span>}
+                    </div>
+                    {row.summary && <p className="text-sm text-ink/80 mt-1">{row.summary}</p>}
+                    <p className="text-xs text-muted mt-1">
+                      For {roleNames(row.roles)}
+                      {row.requestedByEmail ? ` · requested by ${row.requestedByEmail}` : ''} · {new Date(row.createdAt).toLocaleString()}
+                    </p>
+                    {!row.canDecide && row.cannotDecideReason && <p className="text-xs text-amber-700 mt-0.5">{row.cannotDecideReason}</p>}
+                  </div>
+                  {row.canDecide && (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <IconButton icon={CheckCircle2} tone="success" title="Approve" requires="edit" onClick={() => setDeciding({ row, action: 'approve' })} />
+                      <IconButton icon={XCircle} tone="danger" title="Reject" requires="edit" onClick={() => setDeciding({ row, action: 'reject' })} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+          {rows.length > 0 && <div className="text-xs font-semibold text-muted uppercase tracking-wide mt-5 mb-2">Sales, HR & inventory</div>}
+        </div>
+      )}
       {loading ? (
         <div className="text-sm text-muted">Loading…</div>
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && docRows.length > 0 ? null : rows.length === 0 ? (
         <EmptyState>Nothing pending approval.</EmptyState>
       ) : (
         <Card>
@@ -133,6 +179,55 @@ export default function Approvals() {
           </div>
         </Card>
       )}
+      {deciding && (
+        <DecideModal
+          row={deciding.row}
+          action={deciding.action}
+          onClose={() => setDeciding(null)}
+          onDone={() => {
+            setDeciding(null);
+            load();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function DecideModal({ row, action, onClose, onDone }: { row: DocumentApprovalRow; action: 'approve' | 'reject'; onClose: () => void; onDone: () => void }) {
+  const [comment, setComment] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api.post(`/document-approvals/${row.id}/${action}`, { comment: comment || undefined });
+      onDone();
+    } catch (err: any) {
+      setError(err?.response?.data?.message || `Could not ${action}.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title={`${action === 'approve' ? 'Approve' : 'Reject'} ${row.documentNumber}`} onClose={onClose}>
+      <form onSubmit={onSubmit} className="space-y-3">
+        <p className="text-sm text-ink/80">
+          {DOC_LABEL[row.documentType]} for {row.amount.toFixed(3)} OMR{row.totalSteps > 1 ? ` - step ${row.step} of ${row.totalSteps}` : ''}.
+          {action === 'approve' && row.step < row.totalSteps ? ' It then goes to the next approver.' : ''}
+        </p>
+        <Field label={action === 'reject' ? 'Reason (the requester sees it)' : 'Comment (optional)'}>
+          <textarea className={inputClass} rows={3} value={comment} onChange={(e) => setComment(e.target.value)} required={action === 'reject'} maxLength={1000} />
+        </Field>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : action === 'approve' ? 'Approve' : 'Reject'}</PrimaryButton>
+        </div>
+      </form>
+    </Modal>
   );
 }

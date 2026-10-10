@@ -2,7 +2,9 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateCol
 import { PaymentStatus } from '../common/payment-type.enum';
 
 export enum PurchaseOrderStatus {
-  ORDERED = 'ordered', // sent to supplier, not yet received
+  PENDING_APPROVAL = 'pending_approval', // waiting for approval (Settings > Approval rules)
+  REJECTED = 'rejected', // an approver rejected it - edit and resubmit, or cancel
+  ORDERED = 'ordered', // approved / sent to supplier, not yet received
   PARTIALLY_RECEIVED = 'partially_received', // some goods arrived (one or more GRNs)
   RECEIVED = 'received', // everything arrived (or closed short), stock updated
   CANCELLED = 'cancelled',
@@ -92,6 +94,23 @@ export class PurchaseOrder {
   // goods receipts; edited only through the fixed asset).
   @Column({ type: 'varchar', length: 36, nullable: true })
   fixedAssetId: string | null;
+
+  // made from a purchase requisition / an RFQ's chosen quote
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  requisitionId: string | null;
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  rfqId: string | null;
+
+  // the total that was approved (an edit above it needs approval again)
+  @Column('decimal', { precision: 12, scale: 3, nullable: true })
+  approvedAmount: number | null;
+  @Column({ type: 'datetime', nullable: true })
+  approvedAt: Date | null;
+
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  createdByUserId: string | null;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  createdByEmail: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

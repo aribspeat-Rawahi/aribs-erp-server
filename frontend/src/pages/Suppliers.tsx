@@ -33,6 +33,9 @@ import {
 import VendorPrepaymentsPanel from './VendorPrepaymentsPanel';
 import VendorCreditsPanel from './VendorCreditsPanel';
 import { localISODate } from '../utils/dates';
+import RequisitionsPanel from './RequisitionsPanel';
+import RfqPanel from './RfqPanel';
+import { ApprovalBand, ApprovalHistory, ApprovalStepView, approvalLine, bandFor, describeSteps } from '../components/approvalInfo';
 
 interface Supplier {
   id: string;
@@ -110,6 +113,18 @@ interface PurchaseOrder {
   isOpening?: boolean;
   openingReference?: string | null;
   dueDate?: string | null;
+  requisitionId?: string | null;
+  rfqId?: string | null;
+  approvalPending?: ApprovalStepView | null;
+  lastDecision?: ApprovalStepView | null;
+  approvalHistory?: ApprovalStepView[];
+}
+// prefill for a new purchase order (reorder suggestion, requisition, ...)
+export interface PoDraft {
+  supplierId: string;
+  requisitionId?: string;
+  notes?: string;
+  items: { rawMaterialId: string; quantity: string; costPerUnit: string; requisitionItemId?: string }[];
 }
 interface SupplierPayment {
   id: string;
@@ -165,12 +180,16 @@ interface PurchaseReturn {
 // 'pending' (a mismatch here previously meant the tone/label and the
 // Receive/Cancel buttons never showed for a freshly-created order).
 const statusTone: Record<string, string> = {
+  pending_approval: 'bg-purple-50 text-purple-700',
+  rejected: 'bg-red-50 text-red-600',
   ordered: 'bg-amber-50 text-amber-700',
   partially_received: 'bg-sky-50 text-sky-700',
   received: 'bg-brand-50 text-brand-700',
   cancelled: 'bg-red-50 text-red-600',
 };
 const statusLabel: Record<string, string> = {
+  pending_approval: 'Waiting for approval',
+  rejected: 'Rejected',
   ordered: 'Ordered',
   partially_received: 'Partially received',
   received: 'Received',
@@ -206,8 +225,10 @@ function newItemKey() {
   return Math.random().toString(36).slice(2);
 }
 
-type SuppliersTab = 'po' | 'pending' | 'suppliers' | 'reorder' | 'returns' | 'prepayments' | 'credits';
-const VALID_SUPPLIERS_TABS: SuppliersTab[] = ['po', 'pending', 'suppliers', 'reorder', 'returns', 'prepayments', 'credits'];
+type SuppliersTab = 'requisitions' | 'rfqs' | 'po' | 'pending' | 'suppliers' | 'reorder' | 'returns' | 'prepayments' | 'credits';
+const VALID_SUPPLIERS_TABS: SuppliersTab[] = ['requisitions', 'rfqs', 'po', 'pending', 'suppliers', 'reorder', 'returns', 'prepayments', 'credits'];
+// an order not received yet: can still be edited / cancelled / deleted
+const OPEN_EDITABLE = ['pending_approval', 'rejected', 'ordered'];
 
 export default function Suppliers() {
   const { hasAnyRole } = useAuth();
@@ -237,7 +258,10 @@ export default function Suppliers() {
   const [approvingReturn, setApprovingReturn] = useState<PurchaseReturn | null>(null);
   const [receivingOrder, setReceivingOrder] = useState<PurchaseOrder | null>(null);
   const [pendingOrders, setPendingOrders] = useState<PurchaseOrder[]>([]);
-  const [reorderDraft, setReorderDraft] = useState<{ supplierId: string; items: { rawMaterialId: string; quantity: string; costPerUnit: string }[] } | null>(null);
+  const [reorderDraft, setReorderDraft] = useState<PoDraft | null>(null);
+  // a purchase order started from a requisition
+  const [poDraft, setPoDraft] = useState<PoDraft | null>(null);
+  const [panelKey, setPanelKey] = useState(0);
 
   function loadOrders() {
     setLoading(true);
@@ -301,10 +325,12 @@ export default function Suppliers() {
     loadPending();
   }
 
-  async function act(id: string, action: 'cancel' | 'close') {
+  async function act(id: string, action: 'cancel' | 'close' | 'resubmit') {
     const question =
       action === 'close'
         ? 'Close this order? The rest will not be received. You owe only for what has arrived.'
+        : action === 'resubmit'
+        ? 'Send this purchase order for approval again, unchanged?'
         : 'Cancel this purchase order?';
     if (!window.confirm(question)) return;
     try {
@@ -371,6 +397,8 @@ export default function Suppliers() {
           value={tab}
           onChange={(v) => setTab(v as any)}
           options={[
+            { value: 'requisitions', label: 'Requisitions' },
+            { value: 'rfqs', label: 'RFQs' },
             { value: 'po', label: 'Purchase Orders' },
             { value: 'pending', label: pendingOrders.length ? `Not Received Yet (${pendingOrders.length})` : 'Not Received Yet' },
             { value: 'suppliers', label: 'Suppliers' },
@@ -387,7 +415,22 @@ export default function Suppliers() {
         )}
       </div>
 
-      {tab === 'po' ? (
+      {tab === 'requisitions' ? (
+        <>
+          <PageHeader title="Purchase Requisitions" subtitle="Requests to buy - approved here first, then ordered or sent out for quotes" />
+          <RequisitionsPanel
+            key={panelKey}
+            rawMaterials={rawMaterials}
+            onCreatePo={(d) => setPoDraft(d)}
+            onCreateRfq={() => setTab('rfqs')}
+          />
+        </>
+      ) : tab === 'rfqs' ? (
+        <>
+          <PageHeader title="Requests for Quotation" subtitle="Ask several suppliers for prices, compare them side by side, choose one - it becomes the purchase order" />
+          <RfqPanel suppliers={suppliers} rawMaterials={rawMaterials} onOpenOrders={() => setTab('po')} />
+        </>
+      ) : tab === 'po' ? (
         <>
           <PageHeader
             title="Purchase Orders"
@@ -412,6 +455,7 @@ export default function Suppliers() {
                     onReceive={() => openReceive(o)}
                     onCancel={() => act(o.id, 'cancel')}
                     onClose={() => act(o.id, 'close')}
+                    onResubmit={() => act(o.id, 'resubmit')}
                     onPay={() => setPayingOrder(o)}
                     onReturn={() => openReturn(o)}
                     onEdit={() => setEditingOrder(o)}
@@ -786,6 +830,19 @@ export default function Suppliers() {
           )}
         </>
       )}
+      {poDraft && (
+        <NewPurchaseOrderModal
+          initial={poDraft}
+          suppliers={suppliers}
+          rawMaterials={rawMaterials}
+          onClose={() => setPoDraft(null)}
+          onSaved={() => {
+            setPoDraft(null);
+            setPanelKey((k) => k + 1);
+            loadPending();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1065,6 +1122,8 @@ function PurchaseOrderDetailModal({
     return rawMaterials.find((r) => r.id === id)?.unit;
   }
   const ref = poRef(order);
+  // not approved yet: no PDF to send to the supplier
+  const awaiting = order.status === 'pending_approval' || order.status === 'rejected';
 
   return (
     <Modal title={`${ref} — ${supplierName}`} onClose={onClose} wide>
@@ -1159,9 +1218,14 @@ function PurchaseOrderDetailModal({
             </div>
           )}
         </div>
+        <ApprovalHistory rows={order.approvalHistory} />
         <div className="flex flex-wrap justify-end gap-2 pt-2">
-          <SecondaryButton icon={Eye} onClick={() => viewPdf(`/purchase-orders/${order.id}/pdf`)}>View PDF</SecondaryButton>
-          <SecondaryButton icon={Download} onClick={() => downloadPdf(`/purchase-orders/${order.id}/pdf`, `${ref}.pdf`)}>Download PDF</SecondaryButton>
+          {!awaiting && (
+            <>
+              <SecondaryButton icon={Eye} onClick={() => viewPdf(`/purchase-orders/${order.id}/pdf`)}>View PDF</SecondaryButton>
+              <SecondaryButton icon={Download} onClick={() => downloadPdf(`/purchase-orders/${order.id}/pdf`, `${ref}.pdf`)}>Download PDF</SecondaryButton>
+            </>
+          )}
           <SecondaryButton onClick={onClose}>Close</SecondaryButton>
         </div>
       </div>
@@ -1179,6 +1243,7 @@ function PurchaseOrderRow({
   onReceive,
   onCancel,
   onClose,
+  onResubmit,
   onPay,
   onReturn,
   onEdit,
@@ -1192,12 +1257,15 @@ function PurchaseOrderRow({
   onReceive: () => void;
   onCancel: () => void;
   onClose: () => void;
+  onResubmit: () => void;
   onPay: () => void;
   onReturn: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const received = o.status === 'received' || o.status === 'partially_received';
+  const awaiting = o.status === 'pending_approval' || o.status === 'rejected';
+  const approval = approvalLine(o.approvalPending, o.lastDecision, o.status);
   const overdue = (o.status === 'ordered' || o.status === 'partially_received') && !!o.expectedDate && o.expectedDate < localISODate();
   return (
     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1222,6 +1290,7 @@ function PurchaseOrderRow({
           {o.expectedDate && !received ? ` · Expected ${o.expectedDate}` : ''}
           {o.status === 'partially_received' ? ` · Received ${Number(o.receivedTotal || 0).toFixed(3)} OMR so far` : ''}
         </div>
+        {approval && (o.status === 'pending_approval' || o.status === 'rejected') && <div className={`text-xs ${approval.tone}`}>{approval.text}</div>}
       </div>
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
         {(o.status === 'ordered' || o.status === 'partially_received') && (
@@ -1229,7 +1298,8 @@ function PurchaseOrderRow({
             {o.status === 'ordered' ? 'Receive' : 'Receive more'}
           </SecondaryButton>
         )}
-        {o.status === 'ordered' && <SecondaryButton requires="edit" onClick={onCancel}>Cancel</SecondaryButton>}
+        {o.status === 'rejected' && <SecondaryButton requires="edit" onClick={onResubmit}>Send again</SecondaryButton>}
+        {OPEN_EDITABLE.includes(o.status) && <SecondaryButton requires="edit" onClick={onCancel}>Cancel</SecondaryButton>}
         {o.status === 'partially_received' && <SecondaryButton requires="edit" onClick={onClose}>Close</SecondaryButton>}
         {received && (
           <>
@@ -1249,10 +1319,10 @@ function PurchaseOrderRow({
           {!o.isOpening && (
             <>
               <IconButton icon={Eye} title="View purchase order" onClick={onView} />
-              <IconButton icon={Download} title="Download PO PDF" onClick={() => downloadPdf(`/purchase-orders/${o.id}/pdf`, `${poRef(o)}.pdf`)} />
+              {!awaiting && <IconButton icon={Download} title="Download PO PDF" onClick={() => downloadPdf(`/purchase-orders/${o.id}/pdf`, `${poRef(o)}.pdf`)} />}
             </>
           )}
-          {o.status === 'ordered' && (
+          {OPEN_EDITABLE.includes(o.status) && (
             <>
               <IconButton icon={Pencil} title="Edit" requires="edit" onClick={onEdit} />
               {canDelete && <IconButton icon={Trash2} tone="danger" title="Delete (Admin only)" requires="full" onClick={onDelete} />}
@@ -1588,14 +1658,18 @@ function NewPurchaseOrderModal({
   // Prefill-on-create source (Inventory Reorder Automation — "Create purchase
   // order" from a Reorder Suggestions group). Unlike `order`, this never
   // triggers a PATCH — the form still POSTs a brand-new purchase order.
-  initial?: { supplierId: string; items: { rawMaterialId: string; quantity: string; costPerUnit: string }[] };
+  initial?: PoDraft;
   suppliers: Supplier[];
   rawMaterials: RawMaterial[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [supplierId, setSupplierId] = useState(order?.supplierId || initial?.supplierId || suppliers[0]?.id || '');
-  const [notes, setNotes] = useState(order?.notes || '');
+  const [notes, setNotes] = useState(order?.notes || initial?.notes || '');
+  const [rules, setRules] = useState<ApprovalBand[] | undefined>(undefined);
+  useEffect(() => {
+    api.get('/approval-rules').then((r) => setRules(r.data.purchase_order)).catch(() => undefined);
+  }, []);
   const [expectedDate, setExpectedDate] = useState(order?.expectedDate || '');
   const supplierVat = suppliers.find((s) => s.id === supplierId)?.vatStatus || 'registered';
   // Each line's unit comes from its raw material (fixed in Inventory) — it
@@ -1610,28 +1684,38 @@ function NewPurchaseOrderModal({
           return { _key: newItemKey(), rawMaterialId: it.rawMaterialId, unit, quantity: quantityInputValue(it.quantity, unit), costPerUnit: String(it.costPerUnit) };
         })
       : initial && initial.items.length > 0
-      ? initial.items.map((it) => ({ _key: newItemKey(), rawMaterialId: it.rawMaterialId, unit: materialUnit(it.rawMaterialId), quantity: it.quantity, costPerUnit: it.costPerUnit }))
+      ? initial.items.map((it) => ({ _key: newItemKey(), rawMaterialId: it.rawMaterialId, unit: materialUnit(it.rawMaterialId), quantity: it.quantity, costPerUnit: it.costPerUnit, requisitionItemId: it.requisitionItemId }))
       : [{ _key: newItemKey(), rawMaterialId: rawMaterials[0]?.id || '', unit: materialUnit(rawMaterials[0]?.id || ''), quantity: '1', costPerUnit: '0' }],
   );
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  function updateItem(i: number, patch: Partial<{ rawMaterialId: string; unit: string; quantity: string; costPerUnit: string }>) {
+  function updateItem(i: number, patch: Partial<{ rawMaterialId: string; unit: string; quantity: string; costPerUnit: string; requisitionItemId?: string }>) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   }
+  // what the order will cost (VAT only from a registered supplier) and who approves it
+  const estTotal = items.reduce((t, it) => {
+    const line = Math.round(Number(it.quantity || 0) * Number(it.costPerUnit || 0) * 1000) / 1000;
+    return t + line + (supplierVat === 'registered' ? Math.round(line * 0.05 * 1000) / 1000 : 0);
+  }, 0);
+  const band = bandFor(rules, estTotal);
+  const fromRequisition = !order && !!initial?.requisitionId;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError('');
     const payload = {
       supplierId,
       notes: notes || undefined,
       expectedDate: expectedDate || undefined,
+      requisitionId: fromRequisition ? initial!.requisitionId : undefined,
       items: items.map((it) => ({
         rawMaterialId: it.rawMaterialId,
         quantity: Number(it.quantity),
         costPerUnit: Number(it.costPerUnit),
+        requisitionItemId: fromRequisition ? (it as { requisitionItemId?: string }).requisitionItemId : undefined,
       })),
     };
     try {
@@ -1719,10 +1803,20 @@ function NewPurchaseOrderModal({
             ? 'Foreign supplier: no VAT on this order (import VAT is paid at customs).'
             : 'This supplier is not VAT registered: no VAT on this order.'}
         </p>
+        <div className="rounded-lg bg-black/[0.03] px-3 py-2 text-xs text-ink/80">
+          Order total about <span className="font-semibold">{estTotal.toFixed(3)} OMR</span>
+          {rules === undefined
+            ? ''
+            : band
+            ? ` · needs approval by ${describeSteps(band.steps)} before goods can be received`
+            : ' · no approval needed'}
+          {order && order.status === 'ordered' ? ' (only if it now costs more than was approved)' : ''}
+          {fromRequisition ? ' · ordered against the requisition' : ''}
+        </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : order ? 'Save' : 'Create'}</PrimaryButton>
+          <PrimaryButton type="submit" requires="edit" disabled={busy}>{busy ? 'Saving…' : order ? 'Save' : band ? 'Create & send for approval' : 'Create'}</PrimaryButton>
         </div>
       </form>
     </Modal>

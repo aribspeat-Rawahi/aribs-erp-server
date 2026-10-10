@@ -10,6 +10,8 @@ interface AuthedRequest extends Request {
   user?: { userId: string; email: string; role: string };
 }
 
+const actorOf = (req: AuthedRequest) => ({ userId: req.user?.userId, email: req.user?.email, role: req.user?.role });
+
 @ModuleAccess('suppliers')
 @Controller('purchase-orders')
 export class PurchaseOrderController {
@@ -38,16 +40,23 @@ export class PurchaseOrderController {
     return this.service.findOne(id);
   }
 
+  // Goes for approval when Settings > Approval rules say so.
   @Post()
-  create(@Body() dto: CreatePurchaseOrderDto) {
-    return this.service.create(dto);
+  create(@Body() dto: CreatePurchaseOrderDto, @Req() req: AuthedRequest) {
+    return this.service.create(dto, actorOf(req));
+  }
+
+  // a rejected order, sent for approval again unchanged
+  @Post(':id/resubmit')
+  resubmit(@Param('id') id: string, @Req() req: AuthedRequest) {
+    return this.service.resubmit(id, actorOf(req));
   }
 
   // Only while status is still "ordered" — see PurchaseOrderService.update().
   @Roles(UserRole.ADMIN, UserRole.ACCOUNTANT)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdatePurchaseOrderDto) {
-    return this.service.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdatePurchaseOrderDto, @Req() req: AuthedRequest) {
+    return this.service.update(id, dto, actorOf(req));
   }
 
   // Only while status is still "ordered" — see PurchaseOrderService.remove().

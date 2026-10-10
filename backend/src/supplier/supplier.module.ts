@@ -40,6 +40,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
 import { JournalModule } from '../journal/journal.module';
 import { BankAccountModule } from '../bank-account/bank-account.module';
 import { SettingsModule } from '../settings/settings.module';
+import { DocumentApprovalModule } from '../document-approval/document-approval.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { SettingsModule } from '../settings/settings.module';
     JournalModule,
     BankAccountModule,
     SettingsModule,
+    DocumentApprovalModule,
   ],
   controllers: [
     SupplierController,

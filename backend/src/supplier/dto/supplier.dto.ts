@@ -121,6 +121,11 @@ export class PurchaseOrderItemDto {
   @IsNumber()
   @Min(0)
   vatRate?: number;
+
+  // the purchase requisition line this orders
+  @IsOptional()
+  @IsString()
+  requisitionItemId?: string;
 }
 
 export class CreatePurchaseOrderDto {
@@ -140,6 +145,11 @@ export class CreatePurchaseOrderDto {
   @IsOptional()
   @IsString()
   expectedDate?: string;
+
+  // made from an approved purchase requisition
+  @IsOptional()
+  @IsString()
+  requisitionId?: string;
 }
 
 // One line of a goods receipt: how much of a PO line arrived.
