@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsInt, IsNumber, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsInt, IsNumber, Min, Max, MaxLength } from 'class-validator';
 import { InvoiceTemplate } from '../settings.entity';
 
 export class UpdateSettingsDto {
@@ -17,6 +17,21 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsString()
   companyPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  companyNameArabic?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  companyCrNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  companyEmail?: string;
 
   @IsOptional()
   @IsEnum(InvoiceTemplate)

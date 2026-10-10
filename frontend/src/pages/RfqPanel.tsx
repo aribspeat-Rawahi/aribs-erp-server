@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Award, Eye, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Award, Download, Eye, FileText, Pencil, Plus, Trash2 } from 'lucide-react';
 import api from '../api/client';
+import { downloadPdf, viewPdf } from '../api/docActions';
 import { Card, EmptyState, Field, IconButton, Modal, PrimaryButton, SecondaryButton, inputClass } from '../components/ui';
 import { formatQuantityWithUnit, normalizeUnit, quantityInputMin, quantityInputStep, unitLabel } from '../utils/formatQuantity';
 
@@ -214,9 +215,18 @@ function RfqModal({ id, suppliers, onClose, onOpenOrders }: { id: string; suppli
   const [rfq, setRfq] = useState<RfqView | null>(null);
   const [quoteEdit, setQuoteEdit] = useState<QuoteView | 'new' | null>(null);
   const [awarding, setAwarding] = useState<QuoteView | null>(null);
+  // the RFQ letter for one supplier ("To" box filled in) or blank
+  const [pdfSupplier, setPdfSupplier] = useState('');
 
   function load() {
     api.get(`/rfqs/${id}`).then((r) => setRfq(r.data));
+  }
+  function pdfPath() {
+    return `/rfqs/${id}/pdf${pdfSupplier ? `?supplierId=${encodeURIComponent(pdfSupplier)}` : ''}`;
+  }
+  function pdfName() {
+    const s = suppliers.find((x) => x.id === pdfSupplier);
+    return `${rfq?.rfqNumber || 'RFQ'}${s ? `-${s.name.replace(/[^A-Za-z0-9]+/g, '-')}` : ''}.pdf`;
   }
   useEffect(load, [id]);
 
@@ -248,6 +258,20 @@ function RfqModal({ id, suppliers, onClose, onOpenOrders }: { id: string; suppli
           {rfq.prNumber && <span>For {rfq.prNumber}</span>}
           {rfq.quotesDueBy && <span>· Quotes due {rfq.quotesDueBy}</span>}
         </div>
+        {rfq.status !== 'cancelled' && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-black/10 px-3 py-2">
+            <FileText size={15} className="text-muted" />
+            <span className="text-sm text-ink">RFQ letter for</span>
+            <select className={`${inputClass} w-auto min-w-[160px] flex-1`} value={pdfSupplier} onChange={(e) => setPdfSupplier(e.target.value)}>
+              <option value="">Any supplier (blank)</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <IconButton icon={Eye} title="View PDF" onClick={() => viewPdf(pdfPath(), pdfName())} />
+            <IconButton icon={Download} title="Download PDF" onClick={() => downloadPdf(pdfPath(), pdfName())} />
+          </div>
+        )}
         {rfq.status === 'awarded' && (
           <div className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700">
             Chosen: {rfq.quotes.find((q) => q.id === rfq.awardedQuoteId)?.supplierName}

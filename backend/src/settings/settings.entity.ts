@@ -36,6 +36,14 @@ export class Settings {
   @Column({ nullable: true })
   companyPhone: string;
 
+  // Omani letterhead details (shown on purchasing documents such as RFQs)
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  companyNameArabic: string | null;
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  companyCrNumber: string | null;
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  companyEmail: string | null;
+
   @Column({ type: 'enum', enum: InvoiceTemplate, default: InvoiceTemplate.CLASSIC })
   defaultInvoiceTemplate: InvoiceTemplate;
 

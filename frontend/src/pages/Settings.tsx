@@ -22,6 +22,9 @@ interface SettingsData {
   companyVatin?: string;
   companyAddress?: string;
   companyPhone?: string;
+  companyNameArabic?: string | null;
+  companyCrNumber?: string | null;
+  companyEmail?: string | null;
   defaultInvoiceTemplate: string;
   weeklyOffDays?: string;
   shiftStartTime?: string;
@@ -270,6 +273,9 @@ export default function Settings() {
         companyVatin: settings.companyVatin || undefined,
         companyAddress: settings.companyAddress || undefined,
         companyPhone: settings.companyPhone || undefined,
+        companyNameArabic: settings.companyNameArabic ?? undefined,
+        companyCrNumber: settings.companyCrNumber ?? undefined,
+        companyEmail: settings.companyEmail ?? undefined,
         defaultInvoiceTemplate: settings.defaultInvoiceTemplate,
         weeklyOffDays: settings.weeklyOffDays ?? '',
         shiftStartTime: settings.shiftStartTime || undefined,
@@ -424,8 +430,37 @@ export default function Settings() {
               className={inputClass}
               value={settings.companyAddress || ''}
               onChange={(e) => setSettings({ ...settings, companyAddress: e.target.value })}
+              placeholder="e.g. P.O. Box 123, P.C. 611, Nizwa"
             />
           </Field>
+          <Field label="Company name in Arabic (letterhead of purchasing documents, e.g. RFQ)">
+            <input
+              className={inputClass}
+              dir="rtl"
+              maxLength={200}
+              value={settings.companyNameArabic || ''}
+              onChange={(e) => setSettings({ ...settings, companyNameArabic: e.target.value })}
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="C.R. No.">
+              <input
+                className={inputClass}
+                maxLength={40}
+                value={settings.companyCrNumber || ''}
+                onChange={(e) => setSettings({ ...settings, companyCrNumber: e.target.value })}
+              />
+            </Field>
+            <Field label="Company email">
+              <input
+                className={inputClass}
+                type="email"
+                maxLength={120}
+                value={settings.companyEmail || ''}
+                onChange={(e) => setSettings({ ...settings, companyEmail: e.target.value })}
+              />
+            </Field>
+          </div>
 
           <div>
             <span className="block text-xs font-medium text-muted mb-2">Weekly off days</span>

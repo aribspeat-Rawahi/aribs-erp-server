@@ -13,6 +13,9 @@ import { UnitService } from '../units/unit.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { omanToday } from '../common/oman-date';
 import { orderedByRequisitionItem } from './requisition-util';
+import { SettingsService } from '../settings/settings.service';
+import { generateRfqPdf } from '../common/rfq-pdf.util';
+import { omanDate } from '../common/oman-date';
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 const isDate = (d?: string | null) => !d || /^\d{4}-\d{2}-\d{2}$/.test(d);
@@ -34,7 +37,40 @@ export class RfqService {
     private purchaseOrders: PurchaseOrderService,
     private units: UnitService,
     private activityLog: ActivityLogService,
+    private settingsService: SettingsService,
   ) {}
+
+  // RFQ to send to a supplier (bilingual, Omani layout). With a supplierId
+  // the "To" box is filled in; without, it is left blank for any supplier.
+  async pdf(id: string, supplierId?: string) {
+    const rfq = await this.findOne(id);
+    const supplier = supplierId ? await this.dataSource.manager.findOne(Supplier, { where: { id: supplierId } }) : null;
+    if (supplierId && !supplier) throw new NotFoundException('Supplier not found');
+    const settings = await this.settingsService.get();
+    const logoBase64 = await this.settingsService.getLogoBase64();
+    const buffer = await generateRfqPdf({
+      rfqNumber: rfq.rfqNumber,
+      date: omanDate(rfq.createdAt),
+      quotesDueBy: rfq.quotesDueBy,
+      reference: rfq.prNumber,
+      title: rfq.title,
+      notes: rfq.notes,
+      companyName: settings.companyName,
+      companyNameArabic: settings.companyNameArabic,
+      companyVatin: settings.companyVatin,
+      companyCrNumber: settings.companyCrNumber,
+      companyAddress: settings.companyAddress,
+      companyPhone: settings.companyPhone,
+      companyEmail: settings.companyEmail,
+      logoBase64,
+      supplier: supplier
+        ? { name: supplier.name, contactPerson: supplier.contactPerson, address: supplier.address, phone: supplier.phone, email: supplier.email, vatin: supplier.vatin, paymentTermsDays: supplier.paymentTermsDays }
+        : null,
+      items: rfq.items.map((i) => ({ description: i.materialName, quantity: i.quantity, unit: i.unit })),
+      preparedBy: rfq.createdByEmail,
+    });
+    return { buffer, fileName: `${rfq.rfqNumber}${supplier ? `-${supplier.name.replace(/[^A-Za-z0-9]+/g, '-').slice(0, 40)}` : ''}.pdf` };
+  }
 
   async create(dto: CreateRfqDto, actor: ApprovalActor) {
     if (!isDate(dto.quotesDueBy)) throw new BadRequestException('Quotes-due date must be YYYY-MM-DD.');

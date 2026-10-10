@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
-import type { Request } from 'express';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { PurchaseRequisitionService } from './purchase-requisition.service';
 import { RfqService } from './rfq.service';
 import { AwardRfqDto, CreateRequisitionDto, CreateRfqDto, RfqQuoteDto, UpdateRequisitionDto } from './dto/procurement.dto';
@@ -62,6 +62,14 @@ export class RfqController {
   @Get()
   findAll() {
     return this.service.findAll();
+  }
+
+  // ?supplierId= fills in the "To" box for that supplier
+  @Get(':id/pdf')
+  async pdf(@Param('id') id: string, @Query('supplierId') supplierId: string | undefined, @Res() res: Response) {
+    const { buffer, fileName } = await this.service.pdf(id, supplierId || undefined);
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${fileName}"` });
+    res.send(buffer);
   }
 
   @Get(':id')

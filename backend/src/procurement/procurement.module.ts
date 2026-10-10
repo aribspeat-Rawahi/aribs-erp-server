@@ -8,6 +8,7 @@ import { PurchaseRequisitionController, RfqController } from './procurement.cont
 import { SupplierModule } from '../supplier/supplier.module';
 import { DocumentApprovalModule } from '../document-approval/document-approval.module';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     SupplierModule,
     DocumentApprovalModule,
     ActivityLogModule,
+    SettingsModule,
   ],
   controllers: [PurchaseRequisitionController, RfqController],
   providers: [PurchaseRequisitionService, RfqService],
