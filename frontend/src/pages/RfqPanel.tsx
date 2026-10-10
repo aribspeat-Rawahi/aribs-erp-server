@@ -291,6 +291,10 @@ function RfqModal({ id, suppliers, onClose, onOpenOrders }: { id: string; suppli
             <div className="mt-1">No quotes yet - add each supplier's prices as they come in.</div>
           </div>
         ) : (
+          <>
+          {rfq.quotes.length > 1 && (
+            <p className="text-xs text-muted sm:hidden">Swipe the table sideways to see all {rfq.quotes.length} quotes.</p>
+          )}
           <div className="border border-black/10 rounded-lg overflow-x-auto">
             <table className="w-full text-sm" style={{ minWidth: 220 + rfq.quotes.length * 150 }}>
               <thead className="bg-black/5 text-xs text-muted">
@@ -371,6 +375,7 @@ function RfqModal({ id, suppliers, onClose, onOpenOrders }: { id: string; suppli
               </tfoot>
             </table>
           </div>
+          </>
         )}
         <p className="text-xs text-muted">
           Totals include 5% VAT only for VAT-registered suppliers - quotes are compared on what will actually be paid. The chosen quote becomes a purchase order, which then goes for approval.

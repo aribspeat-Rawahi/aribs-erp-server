@@ -187,13 +187,6 @@ export async function generateRfqPdf(data: RfqPdfData): Promise<Buffer> {
   }
 
   const half = W * 0.42;
-  if (data.logoBase64) {
-    try {
-      doc.image(Buffer.from(data.logoBase64, 'base64'), L + W / 2 - 30, 32, { fit: [60, 60], align: 'center' });
-    } catch {
-      /* unreadable logo - leave it out */
-    }
-  }
   // a long name is made smaller to fit; very long ones wrap to two lines
   doc.font('Helvetica-Bold');
   let nameSize = 15;
@@ -217,6 +210,16 @@ export async function generateRfqPdf(data: RfqPdfData): Promise<Buffer> {
   enLines.forEach((t, i) => en(t, L, enTop + i * lineStep, { size: 8.5, color: GREY, width: half, lineBreak: false, ellipsis: true }));
   arLines.forEach(([label, value], i) => arPair(label, value, arTop + i * lineStep));
   const headBottom = Math.max(enTop + enLines.length * lineStep, hasArabic ? arTop + arLines.length * lineStep + 4 : 0, 96) + 4;
+  // company logo in the middle of the letterhead, centred between the
+  // English and Arabic blocks
+  if (data.logoBase64) {
+    const size = Math.min(78, headBottom - 34, W - 2 * half - 12);
+    try {
+      doc.image(Buffer.from(data.logoBase64, 'base64'), L + W / 2 - size / 2, 30 + (headBottom - 30 - size) / 2, { fit: [size, size], align: 'center', valign: 'center' });
+    } catch {
+      /* unreadable logo - leave it out */
+    }
+  }
   doc.moveTo(L, headBottom).lineTo(R, headBottom).lineWidth(1.5).strokeColor(GREEN).stroke();
   const T = headBottom - 94; // everything below moves down with a taller letterhead
 

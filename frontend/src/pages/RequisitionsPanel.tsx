@@ -339,6 +339,12 @@ function RequisitionModal({
                     <option key={m.id} value={m.id}>{m.name}</option>
                   ))}
                 </select>
+                {/* phone: the column names between the item and its numbers */}
+                {i === 0 && (
+                  <div className="col-span-3 -mb-1 grid grid-cols-[1fr_64px_1fr] gap-2 text-xs text-muted sm:hidden">
+                    <span>Qty</span><span>Unit</span><span>Est. cost/unit</span>
+                  </div>
+                )}
                 <input className={inputClass} type="number" step={quantityInputStep(unit)} min={quantityInputMin(unit)} value={it.quantity} onChange={(e) => update(i, { quantity: e.target.value })} required title="Quantity" />
                 <div className="h-full flex items-center justify-center rounded-lg bg-black/5 px-2 text-sm text-ink/70">{unitLabel(unit)}</div>
                 <input className={inputClass} type="number" step="0.001" min="0" placeholder="Est. cost" value={it.cost} onChange={(e) => update(i, { cost: e.target.value })} />
