@@ -121,6 +121,12 @@ export class Settings {
   @Column({ type: 'int', default: 1 })
   vatPeriodStartMonth: number;
 
+  // Effective date of the company's VAT registration with the Oman Tax
+  // Authority. No date = not registered: no VAT returns are due (a
+  // business under construction with no taxable sales yet).
+  @Column({ type: 'date', nullable: true })
+  vatRegisteredFrom: string | null;
+
   @UpdateDateColumn()
   updatedAt: Date;
 }

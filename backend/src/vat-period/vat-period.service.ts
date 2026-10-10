@@ -132,7 +132,11 @@ export class VatPeriodService {
     const today = this.today();
     const next = periods.filter((p) => p.state === 'due' || p.state === 'overdue').sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] || null;
     return {
-      settings: { vatPeriodMonths: s.vatPeriodMonths, vatPeriodStartMonth: s.vatPeriodStartMonth },
+      settings: {
+        vatPeriodMonths: s.vatPeriodMonths,
+        vatPeriodStartMonth: s.vatPeriodStartMonth,
+        vatRegisteredFrom: s.vatRegisteredFrom ? String(s.vatRegisteredFrom).slice(0, 10) : null,
+      },
       settingsLocked: rows.some((r) => r.status === VatPeriodStatus.FILED),
       lockedThrough: periods.filter((p) => p.state === 'filed').map((p) => p.endDate).sort().pop() || null,
       today,
@@ -146,7 +150,15 @@ export class VatPeriodService {
     const months = s.vatPeriodMonths === 1 ? 1 : 3;
     const startMonth = Math.min(12, Math.max(1, Number(s.vatPeriodStartMonth) || 1));
     const today = this.today();
-    const first = await this.firstDay(s, rows);
+    // Returns are due only from the VAT registration date (Oman VAT Law:
+    // a taxable person files for every tax period after registration,
+    // nil returns included). Not registered and nothing filed -> none.
+    const reg = s.vatRegisteredFrom ? String(s.vatRegisteredFrom).slice(0, 10) : null;
+    const filedStarts = rows.map((r) => String(r.startDate).slice(0, 10)).sort();
+    if (!reg && !filedStarts.length) return [];
+    const books = await this.firstDay(s, []);
+    let first = reg && reg > books ? reg : books;
+    if (filedStarts.length && filedStarts[0] < first) first = filedStarts[0];
     const payments = await this.dataSource.manager.find(TaxPayment);
     const out: ComputedPeriod[] = [];
     let { start, end } = this.periodOf(first, months, startMonth);
@@ -193,11 +205,20 @@ export class VatPeriodService {
       if (filed && (dto.vatPeriodMonths !== s.vatPeriodMonths || dto.vatPeriodStartMonth !== s.vatPeriodStartMonth)) {
         throw new BadRequestException('VAT returns are already filed with these periods. Reopen them first to change the period settings.');
       }
+      if (dto.vatRegisteredFrom !== undefined) {
+        const reg = dto.vatRegisteredFrom ? String(dto.vatRegisteredFrom).slice(0, 10) : null;
+        const earliest = (await m.find(VatPeriod, { order: { startDate: 'ASC' } }))[0];
+        if (earliest && (!reg || reg > String(earliest.startDate).slice(0, 10))) {
+          throw new BadRequestException(`A VAT return is already recorded from ${String(earliest.startDate).slice(0, 10)}; the registration date cannot be after it.`);
+        }
+        if (reg && reg > this.today()) throw new BadRequestException('The VAT registration date cannot be in the future.');
+        s.vatRegisteredFrom = reg;
+      }
       s.vatPeriodMonths = dto.vatPeriodMonths;
       s.vatPeriodStartMonth = dto.vatPeriodStartMonth;
       await m.save(s);
       await this.activityLog.log({ userId: actor.userId, userEmail: actor.email, action: 'vat_period.settings', entityType: 'settings', entityId: '1', details: { ...dto } });
-      return { vatPeriodMonths: s.vatPeriodMonths, vatPeriodStartMonth: s.vatPeriodStartMonth };
+      return { vatPeriodMonths: s.vatPeriodMonths, vatPeriodStartMonth: s.vatPeriodStartMonth, vatRegisteredFrom: s.vatRegisteredFrom };
     });
   }
 

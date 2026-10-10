@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator';
 
 export class FileVatPeriodDto {
   @IsDateString()
@@ -34,4 +34,10 @@ export class VatPeriodSettingsDto {
   @Min(1)
   @Max(12)
   vatPeriodStartMonth: number;
+
+  // effective date of the VAT registration; null = not registered
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsDateString()
+  vatRegisteredFrom?: string | null;
 }

@@ -37,7 +37,7 @@ interface Period {
   history: FiledRow[];
 }
 interface ListResponse {
-  settings: { vatPeriodMonths: number; vatPeriodStartMonth: number };
+  settings: { vatPeriodMonths: number; vatPeriodStartMonth: number; vatRegisteredFrom: string | null };
   settingsLocked: boolean;
   lockedThrough: string | null;
   periods: Period[];
@@ -109,6 +109,13 @@ export default function VatReturnsPanel() {
               File each return with the Oman Tax Authority within 30 days after its period ends (next working day if that is a holiday), then mark it as filed here.
               Filing closes the books for that period: nothing dated in it can be added, changed or deleted.
             </div>
+            <div className="mt-2 text-xs text-ink/80">
+              {data.settings.vatRegisteredFrom ? (
+                <>VAT registered from <span className="font-medium">{fmtDate(data.settings.vatRegisteredFrom)}</span> - returns are due for every period from then on, nil returns included.</>
+              ) : (
+                <span className="text-amber-700">Not VAT registered yet - no returns are due. When the Oman Tax Authority registration is effective, enter its date in Period settings.</span>
+              )}
+            </div>
             {latestFiledEnd && (
               <div className="mt-2 inline-flex items-center gap-1.5 text-xs text-brand-700">
                 <Lock size={13} /> Books closed up to {fmtDate(latestFiledEnd)} (filed returns)
@@ -126,7 +133,7 @@ export default function VatReturnsPanel() {
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>}
 
       {data.periods.length === 0 ? (
-        <EmptyState>No VAT periods yet.</EmptyState>
+        <EmptyState>{data.settings.vatRegisteredFrom ? 'No VAT periods yet.' : 'No VAT returns - the company is not VAT registered yet.'}</EmptyState>
       ) : (
         <Card className="divide-y divide-black/5">
           {data.periods.map((p) => {
@@ -385,6 +392,8 @@ function ViewModal({ row, paid, onClose }: { row: FiledRow; paid: number; onClos
 function SettingsModal({ data, onClose, onDone }: { data: ListResponse; onClose: () => void; onDone: () => void }) {
   const [months, setMonths] = useState(data.settings.vatPeriodMonths);
   const [start, setStart] = useState(data.settings.vatPeriodStartMonth);
+  const [registered, setRegistered] = useState(!!data.settings.vatRegisteredFrom);
+  const [regDate, setRegDate] = useState(data.settings.vatRegisteredFrom || '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   async function submit(e: FormEvent) {
@@ -392,7 +401,7 @@ function SettingsModal({ data, onClose, onDone }: { data: ListResponse; onClose:
     setBusy(true);
     setError('');
     try {
-      await api.put('/vat-periods/settings', { vatPeriodMonths: months, vatPeriodStartMonth: start });
+      await api.put('/vat-periods/settings', { vatPeriodMonths: months, vatPeriodStartMonth: start, vatRegisteredFrom: registered ? regDate : null });
       onDone();
     } catch (err) {
       setError(errText(err, 'Could not save.'));
@@ -405,6 +414,20 @@ function SettingsModal({ data, onClose, onDone }: { data: ListResponse; onClose:
     <Modal title="VAT period settings" onClose={onClose}>
       <form onSubmit={submit} className="space-y-3 text-sm">
         <p className="text-muted">As on your VAT registration with the Oman Tax Authority ("tax period").</p>
+        <label className="flex items-center gap-2 text-ink">
+          <input type="checkbox" checked={registered} onChange={(e) => setRegistered(e.target.checked)} />
+          The company is VAT registered with the Oman Tax Authority
+        </label>
+        {registered && (
+          <Field label="Registered from (effective date on the registration certificate)">
+            <input className={inputClass} type="date" value={regDate} onChange={(e) => setRegDate(e.target.value)} required />
+          </Field>
+        )}
+        {!registered && (
+          <p className="text-xs text-amber-700">
+            Not registered: no VAT returns are listed or due. Registration is required once taxable sales pass OMR 38,500 a year (voluntary from OMR 19,250).
+          </p>
+        )}
         {data.settingsLocked && (
           <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             Returns are already filed with the current settings - they cannot change while those are filed.
@@ -431,7 +454,7 @@ function SettingsModal({ data, onClose, onDone }: { data: ListResponse; onClose:
         {error && <p className="text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-          <PrimaryButton type="submit" disabled={busy || data.settingsLocked}>
+          <PrimaryButton type="submit" disabled={busy}>
             {busy ? 'Saving…' : 'Save'}
           </PrimaryButton>
         </div>
