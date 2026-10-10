@@ -12,6 +12,7 @@ interface Customer {
   name: string;
   // false = not VAT registered/applicable: new documents default to VAT excluded
   vatApplicable?: boolean;
+  paymentTermsDays?: number | null;
 }
 interface FinishedGood {
   id: string;
@@ -441,6 +442,12 @@ export default function NewDocumentModal({
           {docType === 'invoice' && (
             <Field label="Due date">
               <input className={inputClass} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              {!dueDate && !existing && (() => {
+                const t = customers.find((c) => c.id === customerId)?.paymentTermsDays;
+                return t !== null && t !== undefined ? (
+                  <span className="block text-xs text-muted mt-1">Blank = by the customer's terms ({t === 0 ? 'due at once' : `Net ${t} days`}).</span>
+                ) : null;
+              })()}
             </Field>
           )}
           {

@@ -265,6 +265,10 @@ export class ReportingService {
     return { asOfDate: omanToday(), rows: withNames, grandTotal };
   }
 
+  getThreeWayMatch(startDate: string, endDate: string) {
+    return this.purchaseOrderService.getThreeWayMatch(startDate, endDate);
+  }
+
   // Accounts Payable Aging Report - what we still owe each supplier,
   // bucketed like the receivables report (Current / 1-30 / 31-60 / 61-90 /
   // 90+ days past due), with the bills behind each total.

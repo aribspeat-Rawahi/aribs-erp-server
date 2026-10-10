@@ -1,3 +1,4 @@
+import { dueFromTerms } from '../common/payment-terms';
 import { randomUUID } from 'crypto';
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
@@ -543,7 +544,8 @@ export class InvoiceService {
       salesOrderId: dto.salesOrderId,
       quotationNumber: dto.quotationNumber,
       issueDate: this.todayStr(),
-      dueDate: dto.dueDate,
+      // no due date given: the customer's payment terms decide it
+      dueDate: dto.dueDate || dueFromTerms(this.todayStr(), customer.paymentTermsDays),
       deliveryDate: dto.deliveryDate,
       subtotal,
       discountAmount,

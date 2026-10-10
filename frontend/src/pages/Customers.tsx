@@ -1,3 +1,4 @@
+import { PaymentTermsSelect } from '../components/PaymentTermsSelect';
 import { FormEvent, useEffect, useState } from 'react';
 import { ChevronDown, Plus, Eye, Pencil, Trash2, Download, FileText, Upload } from 'lucide-react';
 import ImportModal from '../components/ImportModal';
@@ -29,6 +30,7 @@ interface Customer {
   vatin?: string;
   vatApplicable?: boolean;
   creditLimit?: number;
+  paymentTermsDays?: number | null;
 }
 
 interface HistoryDoc {
@@ -155,6 +157,7 @@ function CustomerModal({
   const [vatin, setVatin] = useState(customer?.vatin || '');
   const [vatApplicable, setVatApplicable] = useState(customer?.vatApplicable ?? true);
   const [creditLimit, setCreditLimit] = useState(customer?.creditLimit ? String(customer.creditLimit) : '');
+  const [paymentTerms, setPaymentTerms] = useState(customer?.paymentTermsDays !== null && customer?.paymentTermsDays !== undefined ? String(customer.paymentTermsDays) : '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -198,6 +201,7 @@ function CustomerModal({
       vatin: vatin || undefined,
       vatApplicable,
       creditLimit: creditLimit ? Number(creditLimit) : undefined,
+      paymentTermsDays: paymentTerms === '' ? null : Number(paymentTerms),
     };
     // set once the record exists: a failing attachment after that must not
     // lead to a second Save creating the record (and moving money) twice
@@ -268,6 +272,9 @@ function CustomerModal({
               value={creditLimit}
               onChange={(e) => setCreditLimit(e.target.value)}
             />
+          </Field>
+          <Field label="Payment terms (sets the invoice due date)">
+            <PaymentTermsSelect value={paymentTerms} onChange={setPaymentTerms} />
           </Field>
         </div>
         {customer && <CustomerCreditStatus customerId={customer.id} creditLimit={creditLimit ? Number(creditLimit) : undefined} />}

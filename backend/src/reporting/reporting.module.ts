@@ -1,3 +1,4 @@
+import { CashFlowService } from './cash-flow.service';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ReportingService } from './reporting.service';
@@ -46,7 +47,7 @@ import { RecurringInvoice } from '../recurring-invoice/recurring-invoice.entity'
     TypeOrmModule.forFeature([RecurringInvoice]),
   ],
   controllers: [ReportingController],
-  providers: [ReportingService, BooksCheckService, JournalGapsService],
+  providers: [ReportingService, BooksCheckService, JournalGapsService, CashFlowService],
   // VatPeriodModule takes its VAT return snapshot from getVatSummary()
   exports: [ReportingService],
 })

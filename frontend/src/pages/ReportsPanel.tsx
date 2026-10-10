@@ -19,6 +19,8 @@ import {
   Boxes,
   Wallet,
   ArrowRight,
+  ArrowLeftRight,
+  GitCompare,
 } from 'lucide-react';
 import api from '../api/client';
 import { Card, StatCard, EmptyState, inputClass } from '../components/ui';
@@ -35,8 +37,10 @@ const REPORT_CARDS: { key: string; title: string; description: string; icon: any
   { key: 'ledger-report', title: 'Ledger Report', description: 'Line-by-line transactions and running balance for one account.', icon: BookOpen },
   { key: 'income-statement', title: 'Income Statement', description: 'Revenue vs Expenses and Net Profit for a chosen date range.', icon: TrendingUp },
   { key: 'sales-tax', title: 'Sales Tax', description: 'Output VAT on invoices (after discounts, less credit notes) and the net VAT payable.', icon: Receipt },
+  { key: 'cash-flow', title: 'Cash Flow Statement', description: 'Money in and out of bank & cash: operating, investing and financing.', icon: ArrowLeftRight },
   { key: 'balance-sheet', title: 'Balance Sheet', description: 'Assets, Liabilities and Equity as of a chosen date.', icon: Landmark },
   { key: 'purchase-vat', title: 'Purchase VAT', description: 'Input VAT on goods received (less debit notes), with supplier VATIN and tax invoice numbers.', icon: FileText },
+  { key: 'three-way-match', title: 'Three-way Match', description: 'Purchase order vs goods received vs supplier invoice - differences flagged.', icon: GitCompare },
   { key: 'purchase-return', title: 'Purchase Return', description: 'Items returned to suppliers, with status and refunds.', icon: RotateCcw },
   { key: 'sales-return', title: 'Sales Return', description: 'Items returned by customers, with status and refunds.', icon: RotateCcw },
   { key: 'product-sales', title: 'Product Sales', description: 'Revenue broken down by product, by date range.', icon: ShoppingCart },

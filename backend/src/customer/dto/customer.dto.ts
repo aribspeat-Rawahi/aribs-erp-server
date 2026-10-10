@@ -1,5 +1,5 @@
 import { PartialType } from '@nestjs/mapped-types';
-import { IsString, IsOptional, IsBoolean, IsIn, IsNumber, Min, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsIn, IsNumber, Min, Max, IsInt, IsEnum } from 'class-validator';
 import { InteractionType } from '../../common/interaction-type.enum';
 
 export class CreateCustomerDto {
@@ -35,6 +35,13 @@ export class CreateCustomerDto {
   @IsNumber()
   @Min(0)
   creditLimit?: number;
+
+  // days after the invoice date; 0 = due at once; null clears it
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(365)
+  paymentTermsDays?: number | null;
 }
 
 // "Bank Details" — a customer can have more than one bank account, added

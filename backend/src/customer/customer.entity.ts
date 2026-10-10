@@ -44,6 +44,11 @@ export class Customer {
   @Column('decimal', { precision: 12, scale: 3, nullable: true })
   creditLimit: number;
 
+  // Payment terms: an invoice without its own due date is due this many
+  // days after it is issued (0 = due at once). Null = no terms set.
+  @Column({ type: 'int', nullable: true })
+  paymentTermsDays: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

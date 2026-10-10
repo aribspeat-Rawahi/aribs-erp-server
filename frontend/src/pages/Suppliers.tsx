@@ -1,3 +1,4 @@
+import { PaymentTermsSelect } from '../components/PaymentTermsSelect';
 import { FormEvent, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ChevronDown, Check, Download, Eye, PackageCheck, Pencil, Plus, RotateCcw, Trash2, Upload, Wallet, X } from 'lucide-react';
@@ -42,6 +43,7 @@ interface Supplier {
   address?: string;
   vatin?: string | null;
   vatStatus?: 'registered' | 'not_registered' | 'foreign';
+  paymentTermsDays?: number | null;
 }
 interface RawMaterial {
   id: string;
@@ -77,6 +79,7 @@ interface GoodsReceipt {
   receivedDate: string;
   supplierInvoiceNumber?: string | null;
   supplierInvoiceDate?: string | null;
+  supplierInvoiceTotal?: number | string | null;
   subtotal: number | string;
   vatAmount: number | string;
   total: number | string;
@@ -886,6 +889,7 @@ function SupplierModal({
   const [email, setEmail] = useState(supplier?.email || '');
   const [address, setAddress] = useState(supplier?.address || '');
   const [vatStatus, setVatStatus] = useState<string>(supplier?.vatStatus || 'registered');
+  const [paymentTerms, setPaymentTerms] = useState(supplier?.paymentTermsDays !== null && supplier?.paymentTermsDays !== undefined ? String(supplier.paymentTermsDays) : '');
   const [vatin, setVatin] = useState(supplier?.vatin || '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -928,6 +932,7 @@ function SupplierModal({
       address: address || undefined,
       vatStatus,
       vatin: vatin.trim() || undefined,
+      paymentTermsDays: paymentTerms === '' ? null : Number(paymentTerms),
     };
     // set once the record exists: a failing attachment after that must not
     // lead to a second Save creating the record (and moving money) twice
@@ -991,6 +996,9 @@ function SupplierModal({
           </Field>
           <Field label={vatStatus === 'registered' ? 'VATIN (needed to claim input VAT)' : 'VATIN'}>
             <input className={inputClass} value={vatin} onChange={(e) => setVatin(e.target.value)} placeholder="OM1100XXXXXX" />
+          </Field>
+          <Field label="Payment terms (sets when a received bill is due)">
+            <PaymentTermsSelect value={paymentTerms} onChange={setPaymentTerms} />
           </Field>
         </div>
 
@@ -1131,6 +1139,11 @@ function PurchaseOrderDetailModal({
                       {g.supplierInvoiceNumber ? `Supplier invoice ${g.supplierInvoiceNumber}${g.supplierInvoiceDate ? ` (${g.supplierInvoiceDate})` : ''}` : 'No supplier invoice'}
                       {g.note ? ` · ${g.note}` : ''}
                     </div>
+                    {g.supplierInvoiceTotal !== null && g.supplierInvoiceTotal !== undefined && Math.abs(Number(g.supplierInvoiceTotal) - Number(g.total)) > 0.0005 && (
+                      <div className="text-xs text-amber-700">
+                        Supplier invoice {Number(g.supplierInvoiceTotal).toFixed(3)} vs order prices {Number(g.total).toFixed(3)} (difference {(Number(g.supplierInvoiceTotal) - Number(g.total)).toFixed(3)})
+                      </div>
+                    )}
                     {!!g.items?.length && (
                       <div className="text-xs text-muted">
                         {g.items.map((i) => `${materialName(i.rawMaterialId)} × ${formatQuantityWithUnit(i.quantity, i.unit || materialUnit(i.rawMaterialId))}`).join(', ')}
@@ -1278,6 +1291,7 @@ function ReceiveGoodsModal({
   const [receivedDate, setReceivedDate] = useState(localISODate());
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [invoiceDate, setInvoiceDate] = useState('');
+  const [invoiceTotal, setInvoiceTotal] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1303,6 +1317,7 @@ function ReceiveGoodsModal({
         receivedDate,
         supplierInvoiceNumber: invoiceNumber || undefined,
         supplierInvoiceDate: invoiceDate || undefined,
+        supplierInvoiceTotal: invoiceTotal.trim() !== '' ? Number(invoiceTotal) : undefined,
         note: note || undefined,
       });
       onSaved();
@@ -1363,6 +1378,14 @@ function ReceiveGoodsModal({
             <input className={inputClass} type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} required={carriesVat} />
           </Field>
         </div>
+        <Field label="Total on the supplier's invoice, OMR incl. VAT (optional - checks it against this delivery)">
+          <input className={inputClass} type="number" min="0" step="0.001" value={invoiceTotal} onChange={(e) => setInvoiceTotal(e.target.value)} placeholder={value.toFixed(3)} />
+          {invoiceTotal.trim() !== '' && Math.abs(Number(invoiceTotal) - Math.round(value * 1000) / 1000) > 0.0005 && (
+            <span className="block text-xs text-amber-700 mt-1">
+              Differs from the order prices by {(Number(invoiceTotal) - Math.round(value * 1000) / 1000).toFixed(3)} OMR - it will be flagged in the Three-way match report. Settle it with a debit note / vendor credit or by correcting the order.
+            </span>
+          )}
+        </Field>
         <Field label="Note (optional)">
           <input className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. truck no., delivered by" />
         </Field>

@@ -24,6 +24,8 @@ const REPORT_TITLES: Record<string, string> = {
   'income-statement': 'Income Statement',
   'sales-tax': 'Sales Tax',
   'balance-sheet': 'Balance Sheet',
+  'cash-flow': 'Cash Flow Statement',
+  'three-way-match': 'Three-way Match',
   'purchase-vat': 'Purchase VAT',
   'purchase-return': 'Purchase Return',
   'sales-return': 'Sales Return',
@@ -38,6 +40,8 @@ const BUILT_REPORTS = new Set([
   'trial-balance',
   'income-statement',
   'balance-sheet',
+  'cash-flow',
+  'three-way-match',
   'sales-tax',
   'purchase-vat',
   'reimbursements',
@@ -83,6 +87,8 @@ export default function ReportDetail() {
       {reportKey === 'trial-balance' && <TrialBalanceReport />}
       {reportKey === 'income-statement' && <IncomeStatementReport />}
       {reportKey === 'balance-sheet' && <BalanceSheetReport />}
+      {reportKey === 'cash-flow' && <CashFlowReport />}
+      {reportKey === 'three-way-match' && <ThreeWayMatchReport />}
       {reportKey === 'sales-tax' && <SalesTaxHub />}
       {reportKey === 'purchase-vat' && <PurchaseVatReport />}
       {reportKey === 'reimbursements' && <ReimbursementsReport />}
@@ -353,6 +359,217 @@ function IncomeStatementReport() {
           </div>
           <p className="text-xs text-muted mt-3">
             Based on Journal Entry postings (manual + auto-posted from Invoice/Expense/Reimbursement) whose date falls in this range.
+          </p>
+        </Card>
+      )}
+    </>
+  );
+}
+
+interface CashFlowLine {
+  accountId: string;
+  code: string;
+  name: string;
+  inflow: number;
+  outflow: number;
+  net: number;
+}
+interface CashFlowData {
+  openingCash: number;
+  closingCash: number;
+  netChange: number;
+  sections: { operating: CashFlowLine[]; investing: CashFlowLine[]; financing: CashFlowLine[] };
+  totals: { operating: number; investing: number; financing: number };
+  checks: { ledgerClosingCash: number; matches: boolean };
+}
+
+const CASH_FLOW_SECTIONS: { key: 'operating' | 'investing' | 'financing'; title: string; hint: string }[] = [
+  { key: 'operating', title: 'Operating activities', hint: 'sales, expenses, salaries, VAT, customers & suppliers' },
+  { key: 'investing', title: 'Investing activities', hint: 'buying / selling long-term assets (machinery, vehicles, construction)' },
+  { key: 'financing', title: 'Financing activities', hint: 'loans received / repaid, capital, drawings' },
+];
+
+// Statement of Cash Flows (direct method): every bank/cash movement in the
+// period, grouped by what it was for.
+function CashFlowReport() {
+  const [range, setRange] = useState(monthRange());
+  const [data, setData] = useState<CashFlowData | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setError('');
+    api
+      .get('/reports/cash-flow', { params: range })
+      .then((res) => setData(res.data))
+      .catch((err) => setError(err?.response?.data?.message || 'Could not load the cash flow.'));
+  }, [range]);
+
+  const signed = (n: number) => (n < 0 ? `(${money(-n)})` : money(n));
+
+  return (
+    <>
+      <DateRangePicker startDate={range.startDate} endDate={range.endDate} onChange={setRange} />
+      {error ? (
+        <div className="text-sm text-red-600">{error}</div>
+      ) : !data ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <Card className="p-4">
+          <PeriodLine startDate={range.startDate} endDate={range.endDate} />
+          <div className="flex items-center justify-between px-1 py-2 text-sm font-medium text-ink border-b border-black/10 mb-3">
+            <span>Cash & bank at the start</span>
+            <span>{money(data.openingCash)} OMR</span>
+          </div>
+          {CASH_FLOW_SECTIONS.map((s) => (
+            <div key={s.key} className="mb-5">
+              <SectionTitle>
+                {s.title} <span className="normal-case font-normal tracking-normal">- {s.hint}</span>
+              </SectionTitle>
+              <ReportTable
+                columns={[{ label: 'Account' }, { label: 'Money in', align: 'right' }, { label: 'Money out', align: 'right' }, { label: 'Net', align: 'right' }]}
+                isEmpty={data.sections[s.key].length === 0}
+                emptyMessage="No money moved for this."
+                footer={
+                  <tr className="border-t border-black/10 font-semibold text-blue-700">
+                    <td className="py-2 pl-3" colSpan={3}>
+                      Net cash from {s.title.toLowerCase()}
+                    </td>
+                    <td className="py-2 px-3 text-right">{signed(data.totals[s.key])}</td>
+                  </tr>
+                }
+              >
+                {data.sections[s.key].map((r) => (
+                  <tr key={r.accountId}>
+                    <td className="py-2 pl-3 text-ink">
+                      <span className="text-muted">{r.code}</span> {r.name}
+                    </td>
+                    <td className="py-2 px-3 text-right">{r.inflow ? money(r.inflow) : '-'}</td>
+                    <td className="py-2 px-3 text-right">{r.outflow ? money(r.outflow) : '-'}</td>
+                    <td className="py-2 px-3 text-right">{signed(r.net)}</td>
+                  </tr>
+                ))}
+              </ReportTable>
+            </div>
+          ))}
+          <div className="flex items-center justify-between px-1 py-2 text-sm border-t border-black/10">
+            <span className="text-ink">Net change in cash</span>
+            <span className={data.netChange < 0 ? 'text-red-600 font-medium' : 'text-ink font-medium'}>{signed(data.netChange)} OMR</span>
+          </div>
+          <div className="flex items-center justify-between mt-1 pt-3 border-t-2 border-black/10 px-1 text-base font-semibold text-brand-700">
+            <span>Cash & bank at the end</span>
+            <span>{money(data.closingCash)} OMR</span>
+          </div>
+          <p className={`text-xs mt-3 ${data.checks.matches ? 'text-muted' : 'text-red-600'}`}>
+            {data.checks.matches
+              ? 'Matches the bank & cash accounts in the ledger on the end date. Moves between your own accounts are left out; opening balances count as the starting cash.'
+              : `Does not match the ledger bank & cash balance on the end date (${money(data.checks.ledgerClosingCash)}) - run the Books Health Check.`}
+          </p>
+        </Card>
+      )}
+    </>
+  );
+}
+
+interface ThreeWayRow {
+  goodsReceiptId: string;
+  grnNumber: string;
+  receivedDate: string;
+  poNumber: string;
+  supplierName: string;
+  orderedQty: number;
+  receivedQty: number;
+  orderTotal: number;
+  grnTotal: number;
+  supplierInvoiceNumber: string | null;
+  supplierInvoiceTotal: number | null;
+  difference: number | null;
+  status: 'matched' | 'mismatch' | 'no_amount' | 'no_invoice';
+}
+const THREE_WAY_STATUS: Record<ThreeWayRow['status'], { label: string; cls: string }> = {
+  matched: { label: 'Matched', cls: 'bg-green-50 text-green-700' },
+  mismatch: { label: 'Amount differs', cls: 'bg-red-50 text-red-700' },
+  no_amount: { label: 'Invoice total not entered', cls: 'bg-amber-50 text-amber-800' },
+  no_invoice: { label: 'No supplier invoice', cls: 'bg-amber-50 text-amber-800' },
+};
+
+// Purchase order <-> goods received <-> supplier invoice, one row per delivery.
+function ThreeWayMatchReport() {
+  const [range, setRange] = useState(monthRange());
+  const [data, setData] = useState<{ rows: ThreeWayRow[]; summary: { total: number; matched: number; mismatch: number; noAmount: number; noInvoice: number } } | null>(null);
+  const [onlyProblems, setOnlyProblems] = useState(false);
+
+  useEffect(() => {
+    api.get('/reports/three-way-match', { params: range }).then((res) => setData(res.data));
+  }, [range]);
+
+  const rows = (data?.rows || []).filter((r) => !onlyProblems || r.status !== 'matched');
+  return (
+    <>
+      <DateRangePicker
+        startDate={range.startDate}
+        endDate={range.endDate}
+        onChange={setRange}
+        right={
+          <label className="flex items-center gap-1.5 text-xs text-ink/80">
+            <input type="checkbox" checked={onlyProblems} onChange={(e) => setOnlyProblems(e.target.checked)} />
+            Only problems
+          </label>
+        }
+      />
+      {!data ? (
+        <div className="text-sm text-muted">Loading…</div>
+      ) : (
+        <Card className="p-4">
+          <PeriodLine startDate={range.startDate} endDate={range.endDate} />
+          <p className="text-xs text-muted mb-3">
+            {data.summary.total} deliveries: {data.summary.matched} matched, {data.summary.mismatch} with a different invoice amount,{' '}
+            {data.summary.noAmount} without the invoice total, {data.summary.noInvoice} without a supplier invoice.
+          </p>
+          <ReportTable
+            columns={[
+              { label: 'Delivery' },
+              { label: 'Supplier / PO' },
+              { label: 'Received / ordered qty', align: 'right' },
+              { label: 'At PO prices', align: 'right' },
+              { label: 'Supplier invoice', align: 'right' },
+              { label: 'Difference', align: 'right' },
+              { label: 'Status' },
+            ]}
+            isEmpty={rows.length === 0}
+            emptyMessage={onlyProblems ? 'No problems in this period.' : 'No deliveries in this period.'}
+          >
+            {rows.map((r) => (
+              <tr key={r.goodsReceiptId}>
+                <td className="py-2 pl-3 text-ink whitespace-nowrap">
+                  {r.grnNumber}
+                  <div className="text-xs text-muted">{r.receivedDate}</div>
+                </td>
+                <td className="py-2 px-3">
+                  {r.supplierName}
+                  <div className="text-xs text-muted">{r.poNumber}</div>
+                </td>
+                <td className="py-2 px-3 text-right">
+                  {r.receivedQty} / {r.orderedQty}
+                </td>
+                <td className="py-2 px-3 text-right">{money(r.grnTotal)}</td>
+                <td className="py-2 px-3 text-right">
+                  {r.supplierInvoiceTotal === null ? '-' : money(r.supplierInvoiceTotal)}
+                  {r.supplierInvoiceNumber && <div className="text-xs text-muted">{r.supplierInvoiceNumber}</div>}
+                </td>
+                <td className={`py-2 px-3 text-right ${r.difference && Math.abs(r.difference) > 0.0005 ? 'text-red-600 font-medium' : ''}`}>
+                  {r.difference === null ? '-' : money(r.difference)}
+                </td>
+                <td className="py-2 px-3">
+                  <span className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${THREE_WAY_STATUS[r.status].cls}`}>
+                    {THREE_WAY_STATUS[r.status].label}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </ReportTable>
+          <p className="text-xs text-muted mt-3">
+            "At PO prices" = what the delivered quantity is worth at the purchase order's prices incl. VAT - that is what was booked. A different
+            supplier invoice amount is settled with a debit note / vendor credit (invoice lower) or by correcting the order (invoice higher).
           </p>
         </Card>
       )}

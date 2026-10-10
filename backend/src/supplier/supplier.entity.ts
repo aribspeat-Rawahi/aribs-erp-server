@@ -42,6 +42,11 @@ export class Supplier {
   @Column({ type: 'enum', enum: SupplierVatStatus, default: SupplierVatStatus.REGISTERED })
   vatStatus: SupplierVatStatus;
 
+  // Payment terms: a received bill is due this many days after the
+  // supplier's invoice date (or the delivery date). Null = no terms set.
+  @Column({ type: 'int', nullable: true })
+  paymentTermsDays: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

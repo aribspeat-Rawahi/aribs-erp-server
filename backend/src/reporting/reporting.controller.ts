@@ -1,3 +1,4 @@
+import { CashFlowService } from './cash-flow.service';
 import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { ReportingService } from './reporting.service';
@@ -20,6 +21,7 @@ export class ReportingController {
     private service: ReportingService,
     private booksCheck: BooksCheckService,
     private journalGaps: JournalGapsService,
+    private cashFlow: CashFlowService,
   ) {}
 
   @Get('low-stock')
@@ -139,6 +141,20 @@ export class ReportingController {
   @Get('income-statement')
   getIncomeStatement(@Query('startDate') startDate: string, @Query('endDate') endDate: string) {
     return this.service.getIncomeStatement(startDate, endDate);
+  }
+
+  // Reports Hub — Statement of Cash Flows (direct method), e.g.
+  // GET /reports/cash-flow?startDate=2026-01-01&endDate=2026-12-31
+  @Get('cash-flow')
+  getCashFlow(@Query('startDate') startDate: string, @Query('endDate') endDate: string) {
+    return this.cashFlow.build(startDate, endDate);
+  }
+
+  // Reports Hub — Three-way match (PO <-> goods received <-> supplier
+  // invoice), e.g. GET /reports/three-way-match?startDate=...&endDate=...
+  @Get('three-way-match')
+  getThreeWayMatch(@Query('startDate') startDate: string, @Query('endDate') endDate: string) {
+    return this.service.getThreeWayMatch(startDate, endDate);
   }
 
   // Reports Hub — e.g. GET /reports/balance-sheet?asOfDate=2026-09-30 (defaults to today)

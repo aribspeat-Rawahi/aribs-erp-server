@@ -17,6 +17,7 @@ import { JournalPostingService, PostingLine } from '../journal/journal-posting.s
 import { UnitService } from '../units/unit.service';
 import { quantityProblem, formatQtyWithUnit } from '../units/units';
 import { computePaymentStatus } from '../invoice/payment-status.util';
+import { dueFromTerms } from '../common/payment-terms';
 import { SettingsService } from '../settings/settings.service';
 import { generateInvoicePdf, InvoicePdfItem } from '../common/invoice-pdf.util';
 import { RawMaterial } from '../inventory/raw-material.entity';
@@ -120,6 +121,65 @@ export class PurchaseOrderService {
 
   async findAll() {
     return this.withItems(await this.orderRepo.find({ order: { sequenceNumber: 'DESC' } }));
+  }
+
+  // Three-way match: purchase order <-> goods received <-> supplier invoice.
+  // One row per delivery (GRN): what was ordered and received on the PO,
+  // what the delivery is worth at PO prices, and what the supplier's
+  // invoice says. Differences are flagged, not blocked - they are settled
+  // with a debit note / vendor credit or by correcting the order.
+  async getThreeWayMatch(startDate: string, endDate: string) {
+    const ok = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
+    if (!ok(startDate) || !ok(endDate)) throw new BadRequestException('Give startDate and endDate as YYYY-MM-DD.');
+    const rows: Record<string, string | null>[] = await this.orderRepo.manager.query(
+      `SELECT gr.id, gr.grnNumber, DATE_FORMAT(gr.receivedDate, '%Y-%m-%d') AS receivedDate, gr.total AS grnTotal,
+              gr.supplierInvoiceNumber, DATE_FORMAT(gr.supplierInvoiceDate, '%Y-%m-%d') AS supplierInvoiceDate, gr.supplierInvoiceTotal,
+              po.id AS purchaseOrderId, po.poNumber, po.status, po.total AS orderTotal, s.name AS supplierName,
+              (SELECT COALESCE(SUM(i.quantity), 0) FROM purchase_order_items i WHERE i.purchaseOrderId = po.id) AS orderedQty,
+              (SELECT COALESCE(SUM(i.receivedQuantity), 0) FROM purchase_order_items i WHERE i.purchaseOrderId = po.id) AS receivedQty
+         FROM goods_receipts gr
+         JOIN purchase_orders po ON po.id = gr.purchaseOrderId
+         LEFT JOIN suppliers s ON s.id = po.supplierId
+        WHERE gr.receivedDate BETWEEN ? AND ?
+        ORDER BY gr.receivedDate DESC, gr.grnNumber DESC`,
+      [startDate, endDate],
+    );
+    const out = rows.map((r) => {
+      const grnTotal = this.round3(Number(r.grnTotal || 0));
+      const invTotal = r.supplierInvoiceTotal === null || r.supplierInvoiceTotal === undefined ? null : this.round3(Number(r.supplierInvoiceTotal));
+      const difference = invTotal === null ? null : this.round3(invTotal - grnTotal);
+      const status = !r.supplierInvoiceNumber
+        ? 'no_invoice'
+        : invTotal === null
+          ? 'no_amount'
+          : Math.abs(difference as number) > 0.0005
+            ? 'mismatch'
+            : 'matched';
+      return {
+        goodsReceiptId: r.id,
+        grnNumber: r.grnNumber,
+        receivedDate: r.receivedDate,
+        purchaseOrderId: r.purchaseOrderId,
+        poNumber: r.poNumber,
+        supplierName: r.supplierName || 'Unknown supplier',
+        orderedQty: this.round3(Number(r.orderedQty || 0)),
+        receivedQty: this.round3(Number(r.receivedQty || 0)),
+        orderTotal: this.round3(Number(r.orderTotal || 0)),
+        grnTotal,
+        supplierInvoiceNumber: r.supplierInvoiceNumber,
+        supplierInvoiceDate: r.supplierInvoiceDate,
+        supplierInvoiceTotal: invTotal,
+        difference,
+        status,
+      };
+    });
+    const count = (s: string) => out.filter((r) => r.status === s).length;
+    return {
+      startDate,
+      endDate,
+      rows: out,
+      summary: { total: out.length, matched: count('matched'), mismatch: count('mismatch'), noAmount: count('no_amount'), noInvoice: count('no_invoice') },
+    };
   }
 
   // Accounts Payable Aging: what is still owed per received bill
@@ -287,6 +347,7 @@ export class PurchaseOrderService {
           receivedDate,
           supplierInvoiceNumber: invoiceNo || null,
           supplierInvoiceDate: dto.supplierInvoiceDate || null,
+          supplierInvoiceTotal: dto.supplierInvoiceTotal !== undefined && dto.supplierInvoiceTotal !== null ? this.round3(Number(dto.supplierInvoiceTotal)) : null,
           subtotal,
           vatAmount,
           total,
@@ -331,6 +392,10 @@ export class PurchaseOrderService {
       order.receivedSubtotal = this.round3(Number(order.receivedSubtotal || 0) + subtotal);
       order.receivedVat = this.round3(Number(order.receivedVat || 0) + vatAmount);
       order.receivedTotal = this.round3(Number(order.receivedTotal || 0) + total);
+      // first delivery: the supplier's payment terms set when the bill is due
+      if (!order.dueDate && supplier?.paymentTermsDays !== null && supplier?.paymentTermsDays !== undefined) {
+        order.dueDate = dueFromTerms(dto.supplierInvoiceDate || receivedDate, supplier.paymentTermsDays) || null;
+      }
       const allIn = items.every((i) => remainingOf(i) <= QTY_EPSILON);
       order.status = allIn ? PurchaseOrderStatus.RECEIVED : PurchaseOrderStatus.PARTIALLY_RECEIVED;
       if (allIn) order.receivedAt = new Date();

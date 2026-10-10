@@ -1,5 +1,5 @@
 import { PartialType } from '@nestjs/mapped-types';
-import { IsString, IsNumber, IsOptional, IsArray, IsIn, IsEnum, ValidateNested, Min, IsNotEmpty } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsArray, IsIn, IsEnum, ValidateNested, Min, Max, IsInt, IsNotEmpty } from 'class-validator';
 import { Type } from 'class-transformer';
 import { InteractionType } from '../../common/interaction-type.enum';
 import { SupplierVatStatus } from '../supplier.entity';
@@ -34,6 +34,13 @@ export class CreateSupplierDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  // days after the supplier's invoice date; 0 = due at once; null clears it
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(365)
+  paymentTermsDays?: number | null;
 }
 
 // "Bank Details" — a supplier can have more than one bank account, added
@@ -166,6 +173,13 @@ export class ReceivePurchaseOrderDto {
   @IsOptional()
   @IsString()
   supplierInvoiceDate?: string;
+
+  // total on the supplier's invoice (incl. VAT) - checked against the
+  // delivery's value at PO prices (three-way match)
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  supplierInvoiceTotal?: number;
 
   @IsOptional()
   @IsString()

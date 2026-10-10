@@ -36,6 +36,11 @@ export class GoodsReceipt {
   @Column({ type: 'date', nullable: true })
   supplierInvoiceDate: string | null;
 
+  // Three-way match: the total printed on the supplier's invoice, compared
+  // with what this delivery is worth at the purchase-order prices (total).
+  @Column('decimal', { precision: 12, scale: 3, nullable: true })
+  supplierInvoiceTotal: number | null;
+
   @Column('decimal', { precision: 12, scale: 3, default: 0 })
   subtotal: number;
   @Column('decimal', { precision: 12, scale: 3, default: 0 })
